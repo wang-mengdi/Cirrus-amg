@@ -85,7 +85,7 @@ def get_color_range_from_vti(vti_file_path, array_name):
     else:
         raise TypeError(f"The file '{vti_file_path}' is not a valid VTI file.")
         
-def render_vti_to_png(frame_number, vti_file_path, png_file_path, array_name, color_range, info=True):
+def render_vti_to_png(frame_number, vti_file_path, png_file_path, array_name, color_range, info, cam_pos, cam_focal, cam_up):
     paraview.simple._DisableFirstRenderCameraReset()
 
     try:
@@ -118,9 +118,12 @@ def render_vti_to_png(frame_number, vti_file_path, png_file_path, array_name, co
         # 调整相机位置（只需调整一次，但为了安全每帧设置）
         render_view = GetActiveViewOrCreate('RenderView')
         camera = render_view.GetActiveCamera()
-        camera.SetPosition(-0.5206968888777139, 1.185731530874039, 3.2695103418850517)
-        camera.SetFocalPoint(0.965593201751042, 0.42536166799965003, 0.5020286511739026)
-        camera.SetViewUp(0.10359017000732675, 0.9718954402396329, -0.2113961445231755)
+        camera.SetPosition(cam_pos)
+        camera.SetFocalPoint(cam_focal)
+        camera.SetViewUp(cam_up)
+        #camera.SetPosition(-0.5206968888777139, 1.185731530874039, 3.2695103418850517)
+        #camera.SetFocalPoint(0.965593201751042, 0.42536166799965003, 0.5020286511739026)
+        #camera.SetViewUp(0.10359017000732675, 0.9718954402396329, -0.2113961445231755)
 
         # 添加注释信息（可选）
         if info:
@@ -168,7 +171,7 @@ def parse_slice(slice_spec):
     parts = [int(part) if part else None for part in slice_spec.split(':')]
     return slice(*parts)
 
-def render_all_vti_files(input_path, array_name, slice_spec=None, particles=False, info=True):
+def render_all_vti_files(input_path, array_name, slice_spec, info, cam_pos, cam_focal, cam_up):
     """
     Render selected fluid*.vti files in the specified directory and save them as PNG images,
     optionally with particles rendered from corresponding .vtu files.
@@ -177,7 +180,6 @@ def render_all_vti_files(input_path, array_name, slice_spec=None, particles=Fals
     input_path (str): Path to the directory containing .vti files.
     array_name (str): Name of the data array to visualize.
     slice_spec (str): Slice notation to select files, e.g., '0:5' or '1:10:2'.
-    particles (bool): Whether to render particles from .vtu files.
     info (bool): Whether to display additional information (particle and cell counts).
     """
     output_dir = os.path.join(input_path, f'render_{array_name}')
@@ -204,7 +206,7 @@ def render_all_vti_files(input_path, array_name, slice_spec=None, particles=Fals
         png_file_name = f'frame.{frame_number}.png'
         png_file_path = os.path.join(output_dir, png_file_name)
 
-        render_vti_to_png(frame_number, vti_file, png_file_path, array_name, first_frame_color_range, info)
+        render_vti_to_png(frame_number, vti_file, png_file_path, array_name, first_frame_color_range, info, cam_pos, cam_focal, cam_up)
 
 if __name__ == '__main__':
     # Set up command-line argument parsing
@@ -212,11 +214,17 @@ if __name__ == '__main__':
     parser.add_argument('input_path', type=str, help='Path to the directory containing .vti files.')
     parser.add_argument('--name', type=str, default='dye_density', help='Name of the data array to visualize (default: dye_density).')
     parser.add_argument('--slice', type=str, default=None, help='Slice notation to select files (e.g., "0:5" or "1:10:2").')
-    parser.add_argument('--particles', action='store_true', help='If set, render particles from .vtu files.')
     parser.add_argument('--noinfo', action='store_true', help='If set, disable display of additional information (default: enabled).')
 
     # Parse the arguments
     args = parser.parse_args()
+
+            #camera.SetPosition(-0.5206968888777139, 1.185731530874039, 3.2695103418850517)
+        #camera.SetFocalPoint(0.965593201751042, 0.42536166799965003, 0.5020286511739026)
+        #camera.SetViewUp(0.10359017000732675, 0.9718954402396329, -0.2113961445231755)
+    cam_pos = [-0.5206968888777139, 1.185731530874039, 3.2695103418850517]
+    cam_focal = [0.965593201751042, 0.42536166799965003, 0.5020286511739026]
+    cam_up = [0.10359017000732675, 0.9718954402396329, -0.2113961445231755]
     
     # Call the render function
-    render_all_vti_files(args.input_path, args.name, slice_spec=args.slice, particles=args.particles, info=not args.noinfo)
+    render_all_vti_files(args.input_path, args.name, slice_spec=args.slice, info=not args.noinfo, cam_pos=cam_pos, cam_focal=cam_focal, cam_up=cam_up)
