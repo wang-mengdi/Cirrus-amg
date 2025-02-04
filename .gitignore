@@ -1,0 +1,15 @@
+proj/*/build/
+build/
+bin/
+output/
+.vs/
+*.swp
+*.vshistory/
+*.xmake/
+*.exe
+.vscode/
+__pycache__
+*.ini
+data/
+output/
+*.pdb
