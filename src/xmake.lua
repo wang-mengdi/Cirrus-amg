@@ -1,7 +1,7 @@
 add_rules("mode.debug", "mode.release", "mode.releasedbg")
 set_languages("c++17")
 
-includes("./common/xmake.lua")
+includes("../common/xmake.lua")
 
 add_requires("eigen >=3.4.0")
 add_requires("cuda", {system = true})
@@ -20,6 +20,8 @@ target("src")
 
     add_cugencodes("native")
     add_cuflags("-extended-lambda --std=c++17 -lineinfo")
+    add_cuflags("-rdc=true")
+
 
     add_packages("cuda", {public = true})
     add_packages("eigen", {public = true})
