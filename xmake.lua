@@ -8,8 +8,9 @@ set_rundir("$(projectdir)")
 
 target("cirrus")
     set_kind("binary")
-    add_files("main.cpp")
-    add_includedirs(".", {public = true})
+    add_headerfiles("fluid/*.h")
+    add_files("fluid/*.cpp", "fluid/*.cu")
+    add_includedirs("fluid", {public = true})
     if is_plat("windows") then
         set_values("build.vcxproj.includes", "$(CUDA_PATH)/include")
     end
