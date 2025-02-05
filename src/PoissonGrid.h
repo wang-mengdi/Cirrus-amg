@@ -37,7 +37,7 @@ __host__ std::vector<int> RefineLeafsOneStep(HADeviceGrid<Tile>& grid, ABFunc le
     //this may need to be called multiple times to reach the target level
     Assert(grid.mDeviceSyncFlag, "Grid must be synced before refine step");
 
-    std::vector<int> level_refine_cnts(grid.mNumLayers, 0);
+    std::vector<int> level_refine_cnts(grid.mNumLevels, 0);
 
     for (int i = grid.mMaxLevel; i >= 0; i--) {
         thrust::host_vector<int> refine_host(grid.hNumTiles[i]);
@@ -78,7 +78,7 @@ __host__ std::vector<int> RefineLeafsOneStep(HADeviceGrid<Tile>& grid, ABFunc le
             }
 
             //we will not refine if the maximum capacity of levels is reached
-            if (i + 1 >= acc.mNumLayers) to_refine = false;
+            if (i + 1 >= acc.mNumLevels) to_refine = false;
             tile.setMask(REFINE_FLAG, to_refine);
             refine_flg_dev_ptr[tile_idx] = to_refine;
         },
@@ -167,7 +167,7 @@ std::vector<int> CoarsenStep(HADeviceGrid<Tile>& grid, ABFunc level_target, bool
     //DELETE_FLAG means you can delete the tile itself
 
     //upstroke from fine to coarse, calculate COARSEN flags based on DELETE flags
-    for (int level = grid.mNumLayers - 1; level >= 0; level--) {
+    for (int level = grid.mNumLevels - 1; level >= 0; level--) {
         //mark DELETE flag for leaf tiles and COARSEN flag for non-leaf tiles
         //we're not launching GHOST here
         //if there is a same-level neighbor NONLEAF tile that can't be coarsen, we can't delete a LEAF
@@ -224,7 +224,7 @@ std::vector<int> CoarsenStep(HADeviceGrid<Tile>& grid, ABFunc level_target, bool
     }
 
     //downstroke from coarse to fine, propagate DELETE flags from COARSEN flags
-    for (int level = 0; level < grid.mNumLayers; level++) {
+    for (int level = 0; level < grid.mNumLevels; level++) {
         //3: propagate DELETE flags for LEAF and GHOST based on COASREN flags
         //in the upstroke pass, COARSEN flag is calculated on all NONLEAF tiles and unset on all LEAF tiles
         //if a tile is marked as COARSEN, we can delete its children and mark it as LEAF
@@ -274,8 +274,8 @@ std::vector<int> CoarsenStep(HADeviceGrid<Tile>& grid, ABFunc level_target, bool
     }
 
     //delete tiles with DELETE flag and mark existing COARSEN tiles as leaf
-    std::vector<int> deleted_tiles(grid.mNumLayers, 0);
-    for (int level = 0; level < grid.mNumLayers; level++) {
+    std::vector<int> deleted_tiles(grid.mNumLevels, 0);
+    for (int level = 0; level < grid.mNumLevels; level++) {
         thrust::host_vector<int> stat_h(grid.hNumTiles[level]);
         thrust::device_vector<int> stat_d = stat_h;
         auto stat_d_ptr = thrust::raw_pointer_cast(stat_d.data());

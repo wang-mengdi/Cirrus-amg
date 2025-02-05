@@ -191,7 +191,7 @@ public:
 	using Vec = typename Tile::VecType;
 	using T = typename Tile::T;
 
-	int mNumLayers;
+	int mNumLevels;
 	int mMaxLevel;
 
 	uint32_t* mLayerNumTiles;
@@ -203,7 +203,7 @@ public:
 	__hostdev__ HATileAccessor(T h0, uint32_t num_layers, int max_level, uint32_t* layer_num_tiles, uint32_t* layer_log2_hashs,
 		HATileInfo<Tile>** layer_hash_table_ptrs)://, HATileInfo<Tile>** layer_tile_array_ptrs) :
 		HACoordAccessor<Tile>(h0),
-		mNumLayers(num_layers),
+		mNumLevels(num_layers),
 		mMaxLevel(max_level),
 		mLayerNumTiles(layer_num_tiles),
 		mLayerLog2Hashs(layer_log2_hashs),
@@ -223,7 +223,7 @@ public:
 	}
 
 	__hostdev__ int tileIdx(const int level, const Coord& b_ijk) const {
-		if (level < 0 || level >= mNumLayers) return -1;//invalid
+		if (level < 0 || level >= mNumLevels) return -1;//invalid
 		auto Log2Hash = mLayerLog2Hashs[level];
 		const uint32_t HASH_MASK = (1u << Log2Hash) - 1u;
 
@@ -243,7 +243,7 @@ public:
 
 	////if doesn't exist, the returned tile info is empty, but with correct level and coord
 	//__hostdev__ HATileInfo<Tile> tileInfo(const uint32_t level, const Coord& b_ijk) const {
-	//	if (level < 0 || level >= mNumLayers) return HATileInfo<Tile>();//return an empty tile info for non-exist level
+	//	if (level < 0 || level >= mNumLevels) return HATileInfo<Tile>();//return an empty tile info for non-exist level
 	//	auto idx = tileIdx(level, b_ijk);
 	//	if (idx == -1) return HATileInfo<Tile>();//return an empty tile info for non-exist tile
 	//	return mLayerHashTablePtrs[level][idx];
@@ -257,7 +257,7 @@ public:
 
 	//perform valid check, return an empty tile info for non-exist level
 	__hostdev__ HATileInfo<Tile> tileInfoCopy(const int level, const Coord& b_ijk) const {
-		if (0 <= level && level < mNumLayers) {
+		if (0 <= level && level < mNumLevels) {
 			auto idx = tileIdx(level, b_ijk);
 			return mLayerHashTablePtrs[level][idx];
 		}
@@ -272,7 +272,7 @@ public:
 	}
 
 	__hostdev__ bool findVoxel(const int level, const Coord& g_ijk, HATileInfo<Tile>& tile_info, Coord& l_ijk) const {
-		if (level < 0 || level >= mNumLayers) {
+		if (level < 0 || level >= mNumLevels) {
 			tile_info = HATileInfo<Tile>();//return an empty tile info for non-exist level
 			return false;
 		}

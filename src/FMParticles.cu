@@ -240,7 +240,7 @@ void CountParticleNumberInLeafCells(HADeviceGrid<Tile>& grid, const thrust::devi
 void CalcInterestAreaFlagsWithParticlesOnLeafs(const thrust::device_vector<Particle>& particles, HADeviceGrid<Tile>& grid, int tmp_channel) {
 	CountParticleNumberInLeafCells(grid, particles, tmp_channel);
 
-	for (int i = 0; i < grid.mNumLayers; i++) {
+	for (int i = 0; i < grid.mNumLevels; i++) {
 		if (grid.hNumTiles[i] == 0) continue;
 		auto info_ptr = thrust::raw_pointer_cast(grid.dTileArrays[i].data());
 		MarkInterestAreaKernel << <grid.hNumTiles[i], dim3(Tile::DIM, Tile::DIM, Tile::DIM) >> > (grid.deviceAccessor(), info_ptr, tmp_channel, -1, LEAF);

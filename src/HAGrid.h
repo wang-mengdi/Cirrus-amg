@@ -78,7 +78,7 @@ public:
 	using T = typename Tile::T;
 
 	T mH0;
-	int mNumLayers;
+	int mNumLevels;
 	int mMaxLevel;
 
 	std::vector<Tile> mHostTiles;
@@ -86,7 +86,7 @@ public:
 
 	HAHostTileHolder() {}
 	HAHostTileHolder(const T h0, const int num_layers, const int max_level) :
-		mH0(h0), mNumLayers(num_layers), mMaxLevel(max_level)
+		mH0(h0), mNumLevels(num_layers), mMaxLevel(max_level)
 	{
 		mHostLevels.resize(num_layers);
 	}
@@ -211,7 +211,7 @@ public:
 
 	cudaStream_t mStream;
 	T mH0;
-	uint32_t mNumLayers = 0;
+	uint32_t mNumLevels = 0;
 	int mMaxLevel;
 
 	bool mCompressedFlag = true;
@@ -256,7 +256,7 @@ public:
 
 	HADeviceGrid() :
 		mH0(0),
-		mNumLayers(0),
+		mNumLevels(0),
 		mMaxLevel(-1),
 		mCompressedFlag(true)
 	{
@@ -270,19 +270,19 @@ public:
 	{
 		cudaStreamCreate(&mStream);
 
-		mNumLayers = levels_log2_hash.size();
+		mNumLevels = levels_log2_hash.size();
 
-		hNumTiles.resize(mNumLayers);
-		hLog2Hashes.resize(mNumLayers);
-		hHashTables.resize(mNumLayers);
-		hTileArrays.resize(mNumLayers);
-		hHashTablePtrs.resize(mNumLayers);
-		//hTileArrayPtrs.resize(mNumLayers);
+		hNumTiles.resize(mNumLevels);
+		hLog2Hashes.resize(mNumLevels);
+		hHashTables.resize(mNumLevels);
+		hTileArrays.resize(mNumLevels);
+		hHashTablePtrs.resize(mNumLevels);
+		//hTileArrayPtrs.resize(mNumLevels);
 
 		//hLog2Hashes = std::vector<uint32_t>(levels_log2_hash);
 		hLog2Hashes = levels_log2_hash;
 
-		for (int i = 0; i < mNumLayers; i++) {
+		for (int i = 0; i < mNumLevels; i++) {
 			hNumTiles[i] = 0;
 			hHashTables[i].resize(1u << hLog2Hashes[i]);
 			hTileArrays[i].resize(1u << hLog2Hashes[i]);
@@ -301,7 +301,7 @@ public:
 
 	~HADeviceGrid() {
 		Assert(mCompressedFlag, "Grid must be compressed before destruction");
-		for (int i = 0; i < mNumLayers; i++) {
+		for (int i = 0; i < mNumLevels; i++) {
 			for (int j = 0; j < hNumTiles[i]; j++) {
 				auto info = hTileArrays[i][j];
 				if (!info.empty()) {
@@ -315,12 +315,12 @@ public:
 
 	void setTilesFromHolder(const HAHostTileHolder<Tile>& holder) {
 		Assert(mCompressedFlag, "setTilesFromHolder requires compressed grid");
-		Assert(holder.mNumLayers == mNumLayers, "setTilesFromHolder: num layers mismatch");
+		Assert(holder.mNumLevels == mNumLevels, "setTilesFromHolder: num layers mismatch");
 		mH0 = holder.mH0;
-		mNumLayers = holder.mNumLayers;
+		mNumLevels = holder.mNumLevels;
 		mMaxLevel = holder.mMaxLevel;
 		mCompressedFlag = false;
-		for (int i = 0; i < mNumLayers; i++) {
+		for (int i = 0; i < mNumLevels; i++) {
 			hNumTiles[i] = holder.mHostLevels[i].size();
 			for (int j = 0; j < hNumTiles[i]; j++) {
 				auto& info = holder.mHostLevels[i][j];
@@ -365,7 +365,7 @@ public:
 	int numTotalTiles(void) const {
 		Assert(mCompressedFlag, "numTotalTiles requires compressed grid");
 		int num = 0;
-		for (int i = 0; i < mNumLayers; i++) {
+		for (int i = 0; i < mNumLevels; i++) {
 			num += hNumTiles[i];
 		}
 		return num;
@@ -373,7 +373,7 @@ public:
 	int numTotalLeafTiles(void) const {
 		Assert(mCompressedFlag, "numTotalLeafs requires compressed grid");
 		int num = 0;
-		for (int i = 0; i < mNumLayers; i++) {
+		for (int i = 0; i < mNumLevels; i++) {
 			for (int j = 0; j < hNumTiles[i]; j++) {
 				if (hTileArrays[i][j].isLeaf()) num++;
 			}
@@ -432,7 +432,7 @@ public:
 
 	std::shared_ptr<HAHostTileHolder<Tile>> getHostTileHolder(const uint8_t tile_types, int max_level = -1) {
 		if (max_level == -1) max_level = mMaxLevel;
-		auto holder = std::make_shared<HAHostTileHolder<Tile>>(mH0, mNumLayers, mMaxLevel);
+		auto holder = std::make_shared<HAHostTileHolder<Tile>>(mH0, mNumLevels, mMaxLevel);
 		holder->mHostTiles.clear();
 		int num_leafs = 0;
 		for (int i = 0; i <= max_level; i++) {
@@ -468,7 +468,7 @@ public:
 	int maxProbeLength(void) {
 		auto h_acc = hostAccessor();
 		int max_len = 0;
-		for (int i = 0; i < mNumLayers; i++) {
+		for (int i = 0; i < mNumLevels; i++) {
 			for (int j = 0; j < hNumTiles[i]; j++) {
 				auto info = hTileArrays[i][j];
 				auto hash_idx = h_acc.hash(info.mTileCoord, hLog2Hashes[i]);
@@ -482,7 +482,7 @@ public:
 
 	int hashTableDeviceBytes(void) {
 		int total_bytes = 0;
-		for (int i = 0; i < mNumLayers; i++) {
+		for (int i = 0; i < mNumLevels; i++) {
 			total_bytes += dHashTables[i].size() * sizeof(HATileInfo<Tile>);
 		}
 		return total_bytes;
@@ -491,7 +491,7 @@ public:
 	void compressHost(bool verbose = true) {
 		std::vector<int> load_rate;
 		mMaxLevel = -1;
-		for (int i = 0; i < mNumLayers; i++) {
+		for (int i = 0; i < mNumLevels; i++) {
 			hNumTiles[i] = thrust::copy_if(
 				hHashTables[i].begin(), hHashTables[i].end(),
 				hTileArrays[i].begin(),
@@ -503,7 +503,7 @@ public:
 		}
 		mCompressedFlag = true;
 		if (verbose) {
-			Info("Grid compressed {} layers, with each {} tiles and load rate {}/%", mNumLayers, hNumTiles, load_rate);
+			Info("Grid compressed {} layers, with each {} tiles and load rate {}/%", mNumLevels, hNumTiles, load_rate);
 			Info("Max probe length: {}", maxProbeLength());
 		}
 	}
@@ -512,16 +512,16 @@ public:
 
 		dNumTiles = hNumTiles;
 		dLog2Hashes = hLog2Hashes;
-		dHashTables.resize(mNumLayers);
-		dTileArrays.resize(mNumLayers);
-		for (int i = 0; i < mNumLayers; i++) {
+		dHashTables.resize(mNumLevels);
+		dTileArrays.resize(mNumLevels);
+		for (int i = 0; i < mNumLevels; i++) {
 			dHashTables[i] = hHashTables[i];
 			dTileArrays[i] = hTileArrays[i];
 		}
 
 		thrust::host_vector<HATileInfo<Tile>*> host_layer_hash_table_ptrs;
 		//thrust::host_vector<HATileInfo<Tile>*> host_layer_tile_array_ptrs;
-		for (int i = 0; i < mNumLayers; i++) {
+		for (int i = 0; i < mNumLevels; i++) {
 			host_layer_hash_table_ptrs.push_back(thrust::raw_pointer_cast(dHashTables[i].data()));
 			//host_layer_tile_array_ptrs.push_back(thrust::raw_pointer_cast(dTileArrays[i].data()));
 		}
@@ -536,7 +536,7 @@ public:
 		//thrust::host_vector<HATileInfo<Tile>> hAllTiles;
 
 		hAllTiles.clear();
-		for (int layer = 0; layer < mNumLayers; layer++) {
+		for (int layer = 0; layer < mNumLevels; layer++) {
 			for (int j = 0; j < hNumTiles[layer]; j++) {
 				const HATileInfo<Tile>& info = hTileArrays[layer][j];
 				//push leaf tiles
@@ -600,7 +600,7 @@ public:
 				Info("launchVoxelFunc level=-1, overwrite mode=LAUNCH_SUBTREE");
 			}
 			mode = LAUNCH_SUBTREE;
-			level = mNumLayers - 1;
+			level = mNumLevels - 1;
 		}
 		int start, end, step;
 		if (mode == LAUNCH_LEVEL) start = level, end = level + 1, step = 1;
@@ -657,7 +657,7 @@ public:
 				Info("launchVoxelFunc level=-1, overwrite mode=LAUNCH_SUBTREE");
 			}
 			mode = LAUNCH_SUBTREE;
-			level = mNumLayers - 1;
+			level = mNumLevels - 1;
 		}
 		int start, end, step;
 		if (mode == LAUNCH_LEVEL) start = level, end = level + 1, step = 1;
@@ -695,7 +695,7 @@ public:
 
 		if (level == -1) {
 			mode = LAUNCH_SUBTREE;
-			level = mNumLayers - 1;
+			level = mNumLevels - 1;
 		}
 		int start, end, step;
 		if (mode == LAUNCH_LEVEL) start = level, end = level + 1, step = 1;
@@ -721,7 +721,7 @@ public:
 	HATileAccessor<Tile> hostAccessor(void) {
 		return HATileAccessor<Tile>(
 			mH0,
-			mNumLayers,
+			mNumLevels,
 			mMaxLevel,
 			thrust::raw_pointer_cast(hNumTiles.data()),
 			thrust::raw_pointer_cast(hLog2Hashes.data()),
@@ -734,7 +734,7 @@ public:
 	HATileAccessor<Tile> deviceAccessor(void) {
 		return HATileAccessor<Tile>(
 			mH0,
-			mNumLayers,
+			mNumLevels,
 			mMaxLevel,
 			thrust::raw_pointer_cast(dNumTiles.data()),
 			thrust::raw_pointer_cast(dLog2Hashes.data()),

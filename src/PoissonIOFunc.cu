@@ -59,7 +59,7 @@ namespace IOFunc {
 
         // 写入简单成员变量
         out.write(reinterpret_cast<const char*>(&holder.mH0), sizeof(holder.mH0));
-        out.write(reinterpret_cast<const char*>(&holder.mNumLayers), sizeof(holder.mNumLayers));
+        out.write(reinterpret_cast<const char*>(&holder.mNumLevels), sizeof(holder.mNumLevels));
         out.write(reinterpret_cast<const char*>(&holder.mMaxLevel), sizeof(holder.mMaxLevel));
 
         // 写入 mHostTiles
@@ -102,7 +102,7 @@ namespace IOFunc {
 
         // 读取简单成员变量
         in.read(reinterpret_cast<char*>(&holder.mH0), sizeof(holder.mH0));
-        in.read(reinterpret_cast<char*>(&holder.mNumLayers), sizeof(holder.mNumLayers));
+        in.read(reinterpret_cast<char*>(&holder.mNumLevels), sizeof(holder.mNumLevels));
         in.read(reinterpret_cast<char*>(&holder.mMaxLevel), sizeof(holder.mMaxLevel));
 
         // 读取 mHostTiles
@@ -558,7 +558,7 @@ namespace IOFunc {
 
         auto acc = grid.hostAccessor();
 
-        for (int level = 0; level < grid.mNumLayers; level++) {
+        for (int level = 0; level < grid.mNumLevels; level++) {
             for (int i = 0; i < grid.hNumTiles[level]; i++) {
                 auto& info = grid.hTileArrays[level][i];
                 if (info.mType & types) {

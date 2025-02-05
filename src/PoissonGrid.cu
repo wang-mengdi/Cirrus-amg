@@ -358,7 +358,7 @@ void MeanAsync(HADeviceGrid<Tile>& grid, const int in_channel, const uint8_t lau
 //    //static thrust::device_vector<double> device_sum(1, 0);
 //    if (level == -1) {
 //        mode = LAUNCH_SUBTREE;
-//        level = grid.mNumLayers - 1;
+//        level = grid.mNumLevels - 1;
 //    }
 //    int start, end, step;
 //    if (mode == LAUNCH_LEVEL) start = level, end = level + 1, step = 1;
@@ -368,7 +368,7 @@ void MeanAsync(HADeviceGrid<Tile>& grid, const int in_channel, const uint8_t lau
 //    double linf = 0;
 //    //thrust::device_vector<double> device_mx;
 //    for (int i = start; i != end; i += step) {
-//        Assert(0 <= i && i < grid.mNumLayers, "Dot invalid level {}", i);
+//        Assert(0 <= i && i < grid.mNumLevels, "Dot invalid level {}", i);
 //
 //        if (grid.hNumTiles[i] > 0) {
 //			//somehow, if we use a thrust::device_vector here, it will cause a crash
@@ -519,7 +519,7 @@ __global__ void VolumeWeightedNormKernel(HATileAccessor<Tile> acc, HATileInfo<Ti
 std::tuple<double, double> VolumeWeightedSumAndVolume(HADeviceGrid<Tile>& grid, const int order, const int in_channel, int level, const uint8_t launch_types, LaunchMode mode) {
     if (level == -1) {
         mode = LAUNCH_SUBTREE;
-        level = grid.mNumLayers - 1;
+        level = grid.mNumLevels - 1;
     }
     int start, end, step;
     if (mode == LAUNCH_LEVEL) start = level, end = level + 1, step = 1;
@@ -528,7 +528,7 @@ std::tuple<double, double> VolumeWeightedSumAndVolume(HADeviceGrid<Tile>& grid, 
 
     double ws_sum = 0, w_sum = 0;
     for (int i = start; i != end; i += step) {
-        Assert(0 <= i && i < grid.mNumLayers, "Dot invalid level {}", i);
+        Assert(0 <= i && i < grid.mNumLevels, "Dot invalid level {}", i);
 
         if (grid.hNumTiles[i] > 0) {
             double* ws_d;
