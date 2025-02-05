@@ -40,10 +40,10 @@ public:
 		ijk[2] = offset & MASK;
 		return ijk;
 	}
-	__hostdev__ const int localNodeCoordToOffset(const Coord& l_ijk) const {
+	__hostdev__ int localNodeCoordToOffset(const Coord& l_ijk) const {
 		return l_ijk[0] * (DIM + 1) * (DIM + 1) + l_ijk[1] * (DIM + 1) + l_ijk[2];
 	}
-	__hostdev__ const Coord localNodeOffsetToCoord(const int offset) const {
+	__hostdev__ Coord localNodeOffsetToCoord(const int offset) const {
 		return Coord(offset / ((DIM + 1) * (DIM + 1)), (offset % ((DIM + 1) * (DIM + 1))) / (DIM + 1), offset % (DIM + 1));
 	}
 
@@ -222,7 +222,7 @@ public:
 		return result & HASH_MASK;
 	}
 
-	__hostdev__ uint32_t tileIdx(const uint32_t level, const Coord& b_ijk) const {
+	__hostdev__ int tileIdx(const int level, const Coord& b_ijk) const {
 		if (level < 0 || level >= mNumLayers) return -1;//invalid
 		auto Log2Hash = mLayerLog2Hashs[level];
 		const uint32_t HASH_MASK = (1u << Log2Hash) - 1u;
@@ -250,13 +250,13 @@ public:
 	//}
 
 	//doesn't perform valid check
-	__hostdev__ HATileInfo<Tile>& tileInfo(const uint32_t level, const Coord& b_ijk) const {
+	__hostdev__ HATileInfo<Tile>& tileInfo(const int level, const Coord& b_ijk) const {
 		auto idx = tileIdx(level, b_ijk);
 		return mLayerHashTablePtrs[level][idx];
 	}
 
 	//perform valid check, return an empty tile info for non-exist level
-	__hostdev__ HATileInfo<Tile> tileInfoCopy(const uint32_t level, const Coord& b_ijk) const {
+	__hostdev__ HATileInfo<Tile> tileInfoCopy(const int level, const Coord& b_ijk) const {
 		if (0 <= level && level < mNumLayers) {
 			auto idx = tileIdx(level, b_ijk);
 			return mLayerHashTablePtrs[level][idx];
@@ -266,12 +266,12 @@ public:
 		}
 	}
 
-	__hostdev__ bool probeTile(const uint32_t layer, const Coord& b_ijk) const {
-		HATileInfo<Tile> info = tileInfo(layer, b_ijk);
+	__hostdev__ bool probeTile(const int level, const Coord& b_ijk) const {
+		HATileInfo<Tile> info = tileInfo(level, b_ijk);
 		return !info.empty();
 	}
 
-	__hostdev__ bool findVoxel(const uint32_t level, const Coord& g_ijk, HATileInfo<Tile>& tile_info, Coord& l_ijk) const {
+	__hostdev__ bool findVoxel(const int level, const Coord& g_ijk, HATileInfo<Tile>& tile_info, Coord& l_ijk) const {
 		if (level < 0 || level >= mNumLayers) {
 			tile_info = HATileInfo<Tile>();//return an empty tile info for non-exist level
 			return false;
