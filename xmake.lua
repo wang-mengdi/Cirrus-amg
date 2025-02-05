@@ -14,8 +14,27 @@ set_rundir("$(projectdir)")
 target("cirrus")
     set_kind("binary")
     add_headerfiles("src/*.h", "ext/*.h")
-    add_files("src/*.cpp", "src/*.cu")
+    add_files("src/*.cpp", "src/*.cu","main.cpp")
     add_includedirs("src", "ext", {public = true})
+    if is_plat("windows") then
+        set_values("build.vcxproj.includes", "$(CUDA_PATH)/include")
+    end
+
+    add_cugencodes("native")
+    add_cuflags("-extended-lambda --std=c++17 -lineinfo")
+
+    add_packages("cuda", {public = true})
+    add_packages("eigen", {public = true})
+    add_packages("vtk", {public = true})
+    add_packages("polyscope", {public = true})
+
+    add_deps("common")
+
+target("tests")
+    set_kind("binary")
+    add_headerfiles("src/*.h", "ext/*.h", "tests/*.h")
+    add_files("src/*.cpp", "src/*.cu","tests/*.cpp", "tests/*.cu")
+    add_includedirs("src", "ext", "tests", {public = true})
     if is_plat("windows") then
         set_values("build.vcxproj.includes", "$(CUDA_PATH)/include")
     end

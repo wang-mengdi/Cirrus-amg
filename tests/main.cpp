@@ -1,0 +1,12 @@
+#include "Common.h"
+#include "SolverTests.h"
+
+int main(int argc, char** argv) {
+	// Run all tests
+
+	for (int i : {0, 1, 2, 3}) {
+
+		SolverTests::TestNeumannBC(i);
+	}
+	return 0;
+}
