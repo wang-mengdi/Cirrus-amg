@@ -102,41 +102,33 @@ __device__ void LoadCMGLaplacianTileData(const HATileAccessor<Tile>& acc, const 
 
     Coord b_ijk = info.mTileCoord;
 
-    // Load boundaries for x-, y-, z- (negative) boundaries
+	//we use [0, 64) for negative boundaries and [64, 128) for positive boundaries
+    int fi, sgn;
     if (ti < 64) {
-        int fi = ti;
-        for (int axis : {0, 1, 2}) {
-            Coord fl_ijk = FaceNeighborLocalCoord(axis, -1, fi);
-
-            Coord nb_ijk = b_ijk; nb_ijk[axis]--;
-            Coord nl_ijk = fl_ijk; nl_ijk[axis] = 7;
-
-            //HATileInfo<Tile> ninfo = acc.tileInfo(info.mLevel, nb_ijk);
-            HATileInfo<Tile> ninfo = tile.mNeighbors[axis];
-            bool empty = ninfo.empty();
-
-            shared_data.xValueT(fl_ijk) = empty ? 0 : ninfo.tile()(x_channel, nl_ijk);
-            shared_data.ttypeValue(fl_ijk) = empty ? info.subtreeType(subtree_level) : ninfo.subtreeType(subtree_level);
-			shared_data.ctypeValue(fl_ijk) = empty ? CellType::DIRICHLET : ninfo.tile().type(nl_ijk);
-        }
+        fi = ti;
+        sgn = -1;
     }
     else {
-        // Load boundaries for x+, y+, z+ (positive) boundaries
-        int fi = ti - 64;
-        for (int axis : {0, 1, 2}) {
-            Coord fl_ijk = FaceNeighborLocalCoord(axis, 1, fi);
+		fi = ti - 64;
+		sgn = 1;
+    }
 
-            Coord nb_ijk = b_ijk; nb_ijk[axis]++;
-            Coord nl_ijk = fl_ijk; nl_ijk[axis] = 0;
+    for (int axis : {0, 1, 2}) {
+        Coord fl_ijk = FaceNeighborLocalCoord(axis, sgn, fi);
 
-            //HATileInfo<Tile> ninfo = acc.tileInfo(info.mLevel, nb_ijk);
-            HATileInfo<Tile> ninfo = tile.mNeighbors[axis + 3];
-            bool empty = ninfo.empty();
+        Coord nb_ijk = b_ijk; nb_ijk[axis] += sgn;
+        //for sgn==-1 (load negative boundaries), the local coord in the neighboring tile is 7
+		//for sgn==1 (load positive boundaries), the local coord in the neighboring tile is 0
+		Coord nl_ijk = fl_ijk; nl_ijk[axis] = (sgn == -1) ? 7 : 0;
 
-            shared_data.xValueT(fl_ijk) = empty ? 0 : ninfo.tile()(x_channel, nl_ijk);
-            shared_data.ttypeValue(fl_ijk) = empty ? info.subtreeType(subtree_level) : ninfo.subtreeType(subtree_level);
-            shared_data.ctypeValue(fl_ijk) = empty ? CellType::DIRICHLET : ninfo.tile().type(nl_ijk);
-        }
+        //HATileInfo<Tile> ninfo = acc.tileInfo(info.mLevel, nb_ijk);
+		HATileInfo<Tile> ninfo = (sgn == -1) ? tile.mNeighbors[axis] : tile.mNeighbors[axis + 3];
+            
+        bool empty = ninfo.empty();
+
+        shared_data.xValueT(fl_ijk) = empty ? 0 : ninfo.tile()(x_channel, nl_ijk);
+        shared_data.ttypeValue(fl_ijk) = empty ? info.subtreeType(subtree_level) : ninfo.subtreeType(subtree_level);
+        shared_data.ctypeValue(fl_ijk) = empty ? CellType::DIRICHLET : ninfo.tile().type(nl_ijk);
     }
 }
 
@@ -163,31 +155,6 @@ __global__ void ConservativeNegativeLaplacianSameLevel128Kernel(HATileAccessor<T
         Coord l_ijk = acc.localOffsetToCoord(vi);
         //info.tile()(Ax_channel, vi) = info.tile().type(vi) == INTERIOR ? shared_data.negativeLap(h, l_ijk, false) : 0;
 		info.tile()(Ax_channel, vi) = shared_data.negativeLap(h, l_ijk, calc_diag);
-
-        //{
-        //    
-        //    auto g_ijk = acc.localToGlobalCoord(info, l_ijk);
-        //    //printf("D is zero!!!!!!!!!!!!!!! at g_ijk %d %d %d level %d\n", g_ijk[0], g_ijk[1], g_ijk[2], info.mLevel);
-        //    
-        //    if (info.mLevel == 5 && g_ijk == Coord(119, 123, 137)) {
-
-        //        auto ttype0 = shared_data.ttypeValue(l_ijk);
-        //        auto ctype0 = shared_data.ctypeValue(l_ijk);
-        //        T x0 = shared_data.xValueT(l_ijk);
-        //        for (int axis : {0, 1, 2}) {
-        //            for (int sgn : {-1, 1}) {
-        //                Coord nl_ijk = l_ijk;
-        //                nl_ijk[axis] += sgn;
-
-        //                auto ttype1 = shared_data.ttypeValue(nl_ijk);
-        //                auto ctype1 = shared_data.ctypeValue(nl_ijk);
-        //                T x1 = shared_data.xValueT(nl_ijk);
-        //                T coeff = NegativeLaplacianCoeff(1 / h, ttype0, ttype1, ctype0, ctype1);
-        //                printf("axis %d sgn %d ttype0 %d ttype1 %d ctype0 %d ctype1 %d x0 %f x1 %f coeff %f\n", axis, sgn, ttype0, ttype1, ctype0, ctype1, x0, x1, coeff);
-        //            }
-        //        }
-        //    }
-        //}
     }
 }
 
@@ -241,22 +208,6 @@ __global__ void ConservativeNegativeLaplacianAndGaussSeidelSameLevel128Kernel(HA
             if (D == 0 && (ctype & INTERIOR)) {
 				auto g_ijk = acc.localToGlobalCoord(info, l_ijk);
                 printf("D is zero!!!!!!!!!!!!!!! at g_ijk %d %d %d level %d\n", g_ijk[0], g_ijk[1], g_ijk[2], info.mLevel);
-
-      //          auto ttype0 = shared_data.ttypeValue(l_ijk);
-      //          auto ctype0 = shared_data.ctypeValue(l_ijk);
-      //          T x0 = shared_data.xValueT(l_ijk);
-      //          for (int axis : {0, 1, 2}) {
-      //              for (int sgn : {-1, 1}) {
-      //                  Coord nl_ijk = l_ijk;
-      //                  nl_ijk[axis] += sgn;
-
-      //                  auto ttype1 = shared_data.ttypeValue(nl_ijk);
-      //                  auto ctype1 = shared_data.ctypeValue(nl_ijk);
-      //                  T x1 = shared_data.xValueT(nl_ijk);
-      //                  T coeff = NegativeLaplacianCoeff(1 / h, ttype0, ttype1, ctype0, ctype1);
-						//printf("axis %d sgn %d ttype0 %d ttype1 %d ctype0 %d ctype1 %d x0 %f x1 %f coeff %f\n", axis, sgn, ttype0, ttype1, ctype0, ctype1, x0, x1, coeff);
-      //              }
-      //          }
             }
 
 			T delta_x = (ctype & INTERIOR) ? (b - Ax) / D : 0;
