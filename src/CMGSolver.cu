@@ -7,34 +7,38 @@
 //    return { _idx / 64  , (_idx / 8) % 8, _idx % 8 };
 //}
 
-__forceinline__ __device__ T NegativeLaplacianCoeff(T one_over_h, uint8_t ttype0, uint8_t ttype1, uint8_t ctype0, const uint8_t ctype1) {
-    ////tile types check
-    ////we only calculate LEAF-GHOST and LEAF-LEAF terms
-    ////and we set delta_h correspondingly
-    //T delta_h = h;
-    //if (ttype & LEAF && nttype & LEAF) delta_h = h;
-    //else if (ttype & LEAF && nttype & GHOST) delta_h = 1.5 * h;
-    //else if (ttype & GHOST && nttype & LEAF) delta_h = 1.5 * h;
-    //else continue;
+__forceinline__ __device__ T NegativeLaplacianCoeff(T h, uint8_t ttype0, uint8_t ttype1, uint8_t ctype0, const uint8_t ctype1) {
+    //   ////tile types check
+    //   ////we only calculate LEAF-GHOST and LEAF-LEAF terms
+    //   ////and we set delta_h correspondingly
+    //   //T delta_h = h;
+    //   //if (ttype & LEAF && nttype & LEAF) delta_h = h;
+    //   //else if (ttype & LEAF && nttype & GHOST) delta_h = 1.5 * h;
+    //   //else if (ttype & GHOST && nttype & LEAF) delta_h = 1.5 * h;
+    //   //else continue;
 
-    ////if one of them are NEUMANN we will not count this flux
-    //if (ctype & NEUMANN || nctype & NEUMANN) continue;
-    //sum += (x0 - x1) / (delta_h * h);
+    //   ////if one of them are NEUMANN we will not count this flux
+    //   //if (ctype & NEUMANN || nctype & NEUMANN) continue;
+    //   //sum += (x0 - x1) / (delta_h * h);
 
-    int both_leafs = int((ttype0 & LEAF) && (ttype1 & LEAF));
-    int one_leaf_one_ghost = int((ttype0 & LEAF && ttype1 & GHOST) || (ttype0 & GHOST && ttype1 & LEAF));
-    //dh=h if 2 LEAFS
-    //dh=1.5h if 1 LEAF 1 GHOST
-    //ignore for all others
-    //1.5f is important because FP64 operations will slow down the kernel
-	//1/(1.5h)=1/h*1/(3/2)=1/h*2/3=2/3*one_over_h
+    //   int both_leafs = int((ttype0 & LEAF) && (ttype1 & LEAF));
+    //   int one_leaf_one_ghost = int((ttype0 & LEAF && ttype1 & GHOST) || (ttype0 & GHOST && ttype1 & LEAF));
+    //   //dh=h if 2 LEAFS
+    //   //dh=1.5h if 1 LEAF 1 GHOST
+    //   //ignore for all others
+    //   //1.5f is important because FP64 operations will slow down the kernel
+       ////1/(1.5h)=1/h*1/(3/2)=1/h*2/3=2/3*one_over_h
 
-    T one_over_delta_h = one_over_h * both_leafs + (2 * one_over_h / 3) * one_leaf_one_ghost;
-    //T one_over_delta_h = ((1 / h) * (both_leafs)+(1.5f / h) * (1 - both_leafs)) * (1 - both_ghosts);
-    //ignore if one of them is NEUMANN
+    //   T one_over_delta_h = one_over_h * both_leafs + (2 * one_over_h / 3) * one_leaf_one_ghost;
+    //   //T one_over_delta_h = ((1 / h) * (both_leafs)+(1.5f / h) * (1 - both_leafs)) * (1 - both_ghosts);
+    //   //ignore if one of them is NEUMANN
+    //   int has_neumann = int(ctype0 & NEUMANN || ctype1 & NEUMANN);
+    //   //T coeff = one_over_delta_h / h * (1 - has_neumann);
+    //   return has_neumann ? 0 : one_over_delta_h * one_over_h;
+
     int has_neumann = int(ctype0 & NEUMANN || ctype1 & NEUMANN);
-    //T coeff = one_over_delta_h / h * (1 - has_neumann);
-    return has_neumann ? 0 : one_over_delta_h * one_over_h;
+    //   //T coeff = one_over_delta_h / h * (1 - has_neumann);
+    return has_neumann ? 0 : h;
 }
 
 class CMGLaplacianTileData {
@@ -65,12 +69,12 @@ public:
 				auto ttype1 = ttypeValue(nl_ijk);
 				auto ctype1 = ctypeValue(nl_ijk);
 				T x1 = xValueT(nl_ijk);
-				T coeff = NegativeLaplacianCoeff(1/h, ttype0, ttype1, ctype0, ctype1);
+                T coeff = NegativeLaplacianCoeff(h, ttype0, ttype1, ctype0, ctype1);
 				sum += diag ? coeff : coeff * (x0 - x1);
             }
         }
 
-        return ctype0 & INTERIOR ? sum * h * h * h : 0;
+        return ctype0 & INTERIOR ? sum : 0;
     }
 };
 
@@ -99,6 +103,7 @@ __device__ void LoadCMGLaplacianTileData(const HATileAccessor<Tile>& acc, const 
 		shared_data.ctypeValue(l_ijk) = tile.type(vi);
     }
 
+    __syncthreads();
 
     Coord b_ijk = info.mTileCoord;
 
@@ -131,7 +136,21 @@ __device__ void LoadCMGLaplacianTileData(const HATileAccessor<Tile>& acc, const 
 			shared_data.ctypeValue(fl_ijk) = CellType::DIRICHLET;
 		}
         else {
-            shared_data.xValueT(fl_ijk) = ninfo.tile()(x_channel, nl_ijk);
+			T vH = ninfo.tile()(x_channel, nl_ijk);//larger cell center, which is a corner of the ghost cell
+
+            //next we extrapolate the opposite corner of the ghost cell
+            //Afivo: a framework for quadtree/octree AMR with shared-memory parallelization and geometric multigrid methods
+             
+            //for example, for positive boundary, fl_ijk may be (8,j,k), and the cell inside the center tile is (7,j,k)
+            Coord cl_ijk = fl_ijk; cl_ijk[axis] -= sgn;
+            T vh = shared_data.xValueT(cl_ijk);
+			Coord cl0_ijk = cl_ijk; cl0_ijk[0] ^= 1; T vh0 = shared_data.xValueT(cl0_ijk);
+			Coord cl1_ijk = cl_ijk; cl1_ijk[1] ^= 1; T vh1 = shared_data.xValueT(cl1_ijk);
+			Coord cl2_ijk = cl_ijk; cl2_ijk[2] ^= 1; T vh2 = shared_data.xValueT(cl2_ijk);
+            //vh - 0.5 * (vh0 - vh) - 0.5 * (vh1 - vh) - 0.5 * (vh2 - vh);
+            T v1 = 2.5 * vh - 0.5 * (vh0 + vh1 + vh2);
+
+            shared_data.xValueT(fl_ijk) = (vH + v1) / 2;
             shared_data.ttypeValue(fl_ijk) = ninfo.subtreeType(subtree_level);
             shared_data.ctypeValue(fl_ijk) = ninfo.tile().type(nl_ijk);
         }
@@ -176,14 +195,17 @@ void ConservativeNegativeLaplacianSameLevel128(HADeviceGrid<Tile>& grid, thrust:
 //on all leafs of the tree
 void ConservativeFullNegativeLaplacian(HADeviceGrid<Tile>& grid, const int x_channel, const int Ax_channel, bool calc_diag) {
     //PropagateValues(grid, x_channel, x_channel, -1, GHOST, LAUNCH_SUBTREE);
-    PropagateValuesToGhostTiles(grid, x_channel, x_channel);
+    //PropagateValuesToGhostTiles(grid, x_channel, x_channel);
+    PropagateToChildren(grid, x_channel, x_channel, -1, GHOST, LAUNCH_SUBTREE, INTERIOR | DIRICHLET | NEUMANN);
+    AccumulateToParents128(grid, x_channel, x_channel, LEAF, 1. / 8, false, INTERIOR | DIRICHLET | NEUMANN);
 
-    ConservativeNegativeLaplacianSameLevel128(grid, grid.dAllTiles, grid.dAllTiles.size(), -1, LEAF | GHOST, x_channel, Ax_channel, calc_diag);
+    ConservativeNegativeLaplacianSameLevel128(grid, grid.dAllTiles, grid.dAllTiles.size(), -1, LEAF, x_channel, Ax_channel, calc_diag);
+
     //NegativeLaplacianSameLevel(grid, x_channel, Ax_channel, -1, LEAF | GHOST, LAUNCH_SUBTREE, false);
     //add fine terms stored in ghost cells to parents
     //AccumulateValues(grid, Ax_channel, Ax_channel, -1, LEAF, LAUNCH_SUBTREE, true);
     //AccumulateValuesToLeafTiles(grid, Ax_channel, Ax_channel, true);
-    AccumulateToParents128(grid, Ax_channel, Ax_channel, GHOST, 1., true, INTERIOR | DIRICHLET | NEUMANN);
+    //AccumulateToParents128(grid, Ax_channel, Ax_channel, GHOST, 1., true, INTERIOR | DIRICHLET | NEUMANN);
 }
 
 
@@ -234,8 +256,8 @@ void ConservativeNegativeLaplacianAndGaussSeidelSameLevel128(HADeviceGrid<Tile>&
 
 void GaussSeidelCMG(int iters, int order, HADeviceGrid<Tile>& grid, int level, int x_channel, int rhs_channel) {
     for (int i = 0; i < iters; i++) {
-		ConservativeNegativeLaplacianAndGaussSeidelSameLevel128(grid, grid.dTileArrays[level], grid.hNumTiles[level], level, LEAF | NONLEAF, x_channel, rhs_channel, order);
-        ConservativeNegativeLaplacianAndGaussSeidelSameLevel128(grid, grid.dTileArrays[level], grid.hNumTiles[level], level, LEAF | NONLEAF, x_channel, rhs_channel, 1 - order);
+		ConservativeNegativeLaplacianAndGaussSeidelSameLevel128(grid, grid.dTileArrays[level], grid.hNumTiles[level], level, LEAF, x_channel, rhs_channel, order);
+        ConservativeNegativeLaplacianAndGaussSeidelSameLevel128(grid, grid.dTileArrays[level], grid.hNumTiles[level], level, LEAF, x_channel, rhs_channel, 1 - order);
 	}
 }
 
@@ -286,7 +308,7 @@ __global__ void ConservativeResidualAndRestrict128Kernel(HATileAccessor<Tile> ac
             }
             //ghost accumulate
             if (finfo.subtreeType(level) & GHOST) {
-                cinfo.tile()(coarse_residual_channel, cl_ijk) += sum;
+                //cinfo.tile()(coarse_residual_channel, cl_ijk) += sum;
 			}
 			else {
 				cinfo.tile()(coarse_residual_channel, cl_ijk) = sum * one_over_alpha;
@@ -376,7 +398,7 @@ void CMGSolver::VCycle(HADeviceGrid<Tile>& grid, int x_channel, int f_channel, c
         //including ghost cells
         //NegativeLaplacianSameLevel128(grid, grid.dTileArrays[i], grid.hNumTiles[i], i, LEAF | NONLEAF | GHOST, x_channel, tmp_channel);
         //BinaryTransform(grid, rhs_channel, tmp_channel, tmp_channel, []__device__(Tile::T rhs, Tile::T tmp) { return rhs - tmp; }, i, LEAF | NONLEAF | GHOST, LAUNCH_LEVEL);
-        ConservativeResidualAndRestrict(grid, x_channel, rhs_channel, rhs_channel, i, LEAF | NONLEAF | GHOST, one_over_alpha);
+        ConservativeResidualAndRestrict(grid, x_channel, rhs_channel, rhs_channel, i, LEAF, one_over_alpha);
 
         //restrict residual to the next level
         //that fills NONLEAF cells of the next level
