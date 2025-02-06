@@ -135,22 +135,27 @@ __device__ void LoadCMGLaplacianTileData(const HATileAccessor<Tile>& acc, const 
 			shared_data.ttypeValue(fl_ijk) = info.subtreeType(subtree_level);
 			shared_data.ctypeValue(fl_ijk) = CellType::DIRICHLET;
 		}
-        else {
-			T vH = ninfo.tile()(x_channel, nl_ijk);//larger cell center, which is a corner of the ghost cell
+        else if (ninfo.subtreeType(subtree_level) == GHOST) {
+            T vH = ninfo.tile()(x_channel, nl_ijk);//larger cell center, which is a corner of the ghost cell
 
             //next we extrapolate the opposite corner of the ghost cell
             //Afivo: a framework for quadtree/octree AMR with shared-memory parallelization and geometric multigrid methods
-             
+
             //for example, for positive boundary, fl_ijk may be (8,j,k), and the cell inside the center tile is (7,j,k)
             Coord cl_ijk = fl_ijk; cl_ijk[axis] -= sgn;
             T vh = shared_data.xValueT(cl_ijk);
-			Coord cl0_ijk = cl_ijk; cl0_ijk[0] ^= 1; T vh0 = shared_data.xValueT(cl0_ijk);
-			Coord cl1_ijk = cl_ijk; cl1_ijk[1] ^= 1; T vh1 = shared_data.xValueT(cl1_ijk);
-			Coord cl2_ijk = cl_ijk; cl2_ijk[2] ^= 1; T vh2 = shared_data.xValueT(cl2_ijk);
+            Coord cl0_ijk = cl_ijk; cl0_ijk[0] ^= 1; T vh0 = shared_data.xValueT(cl0_ijk);
+            Coord cl1_ijk = cl_ijk; cl1_ijk[1] ^= 1; T vh1 = shared_data.xValueT(cl1_ijk);
+            Coord cl2_ijk = cl_ijk; cl2_ijk[2] ^= 1; T vh2 = shared_data.xValueT(cl2_ijk);
             //vh - 0.5 * (vh0 - vh) - 0.5 * (vh1 - vh) - 0.5 * (vh2 - vh);
             T v1 = 2.5 * vh - 0.5 * (vh0 + vh1 + vh2);
 
             shared_data.xValueT(fl_ijk) = (vH + v1) / 2;
+            shared_data.ttypeValue(fl_ijk) = ninfo.subtreeType(subtree_level);
+            shared_data.ctypeValue(fl_ijk) = ninfo.tile().type(nl_ijk);
+        }
+        else {
+            shared_data.xValueT(fl_ijk) = ninfo.tile()(x_channel, nl_ijk);
             shared_data.ttypeValue(fl_ijk) = ninfo.subtreeType(subtree_level);
             shared_data.ctypeValue(fl_ijk) = ninfo.tile().type(nl_ijk);
         }
