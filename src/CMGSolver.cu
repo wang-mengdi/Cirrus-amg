@@ -125,10 +125,20 @@ __device__ void LoadCMGLaplacianTileData(const HATileAccessor<Tile>& acc, const 
 		HATileInfo<Tile> ninfo = (sgn == -1) ? tile.mNeighbors[axis] : tile.mNeighbors[axis + 3];
             
         bool empty = ninfo.empty();
+        if (empty) {
+			shared_data.xValueT(fl_ijk) = 0;
+			shared_data.ttypeValue(fl_ijk) = info.subtreeType(subtree_level);
+			shared_data.ctypeValue(fl_ijk) = CellType::DIRICHLET;
+		}
+        else {
+            shared_data.xValueT(fl_ijk) = ninfo.tile()(x_channel, nl_ijk);
+            shared_data.ttypeValue(fl_ijk) = ninfo.subtreeType(subtree_level);
+            shared_data.ctypeValue(fl_ijk) = ninfo.tile().type(nl_ijk);
+        }
 
-        shared_data.xValueT(fl_ijk) = empty ? 0 : ninfo.tile()(x_channel, nl_ijk);
-        shared_data.ttypeValue(fl_ijk) = empty ? info.subtreeType(subtree_level) : ninfo.subtreeType(subtree_level);
-        shared_data.ctypeValue(fl_ijk) = empty ? CellType::DIRICHLET : ninfo.tile().type(nl_ijk);
+        //shared_data.xValueT(fl_ijk) = empty ? 0 : ninfo.tile()(x_channel, nl_ijk);
+        //shared_data.ttypeValue(fl_ijk) = empty ? info.subtreeType(subtree_level) : ninfo.subtreeType(subtree_level);
+        //shared_data.ctypeValue(fl_ijk) = empty ? CellType::DIRICHLET : ninfo.tile().type(nl_ijk);
     }
 }
 
