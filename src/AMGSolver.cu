@@ -78,7 +78,7 @@ void CoarsenTypesAndAMGCoeffs(HADeviceGrid<Tile>& grid, const int coeff_channel,
 	//step 2: calculate coefficients for LEAF and GHOST cells
     CalculateAMGCoefficients(grid, coeff_channel, LEAF | GHOST | NONLEAF);
 
-    return;
+    //return;
 	//step 3: update types and coefficients for NONLEAF cells
     grid.launchVoxelFunc(
         [=] __device__(HATileAccessor<Tile>&acc, HATileInfo<Tile>&info, const Coord & l_ijk) {
