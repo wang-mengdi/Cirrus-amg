@@ -566,7 +566,7 @@ std::tuple<int, double> AMGSolver::solve(HADeviceGrid<Tile>& grid, bool verbose,
     for (i = 0; i < max_iters; i++) {
         //Ap_k=A*p_k
         //here A=-lap
-        FullNegativeLaplacian(grid, Tile::p_channel, Tile::Ap_channel);
+        FullNegativeLaplacianAMG(grid, Tile::p_channel, coeff_channel, Tile::Ap_channel);
         //FullNegativeLaplacianAMG(grid, Tile::p_channel, coeff_channel, Tile::Ap_channel);
 
         //alpha_k=gamma_k/(p_k^T*A*p_k)
