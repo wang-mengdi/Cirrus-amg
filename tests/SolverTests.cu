@@ -73,8 +73,11 @@ namespace SolverTests {
 
 
     __host__ void TestNeumannDirichletRecovery(TestGrids grid_name, const std::string algorithm) {
-        //algorithm: "gmg"/"cmg"/"amg"
+        //algorithm: "cmg"/"amg"
+        fmt::print("==========================================================\n");
         Info("Test Poisson Solver on Neumann/Dirichlet BC on grid {} with given function for {}", ToString(grid_name), algorithm);
+        Assert(algorithm == "cmg" || algorithm == "amg", "algorithm should be cmg or amg");
+        
 
         uint32_t scale = 8;
         float h = 1.0 / scale;
@@ -128,6 +131,7 @@ namespace SolverTests {
         }, -1, LEAF, LAUNCH_SUBTREE
         );
         CalcCellTypesFromLeafs(grid);
+        CalculateNeighborTiles(grid);
         ConservativeFullNegativeLaplacian(grid, grdt_channel, Tile::b_channel);
 
         _sleep(200);
@@ -150,7 +154,7 @@ namespace SolverTests {
         else if (algorithm == "amg") {
             CalculateNeighborTiles(grid);
 
-            AMGSolver solver(Tile::u_channel, 0.5, 1, 1);
+            AMGSolver solver(coeff_channel, 0.5, 1, 1);
             solver.prepareTypesAndCoeffs(grid);
 
             CPUTimer<std::chrono::microseconds> timer;
@@ -179,7 +183,7 @@ namespace SolverTests {
         }, LEAF
         );
 		auto linf_norm = SingleChannelLinfSync(grid, Tile::r_channel, LEAF);
-		Info("Linf norm of grdt-x: {}", linf_norm);
+		Info("Linf norm of grdt-x: {}\n\n", linf_norm);
     }
 
 }

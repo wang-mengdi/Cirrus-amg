@@ -14,6 +14,7 @@ int main(int argc, char** argv) {
 		}) {
 
 		SolverTests::TestNeumannDirichletRecovery(grid_name, "cmg");
+		SolverTests::TestNeumannDirichletRecovery(grid_name, "amg");
 	}
 	return 0;
 }
