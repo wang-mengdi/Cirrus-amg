@@ -336,47 +336,6 @@ void BinaryTransform(HADeviceGrid<Tile>& grid, const int in1_channel, const int 
     );
 }
 
-//apply d[i]=f(a[i],b[i],c[i]) on all interior voxels
-template<class BinaryOP>
-void TernaryTransform(HADeviceGrid<Tile>& grid, const int in1_channel, const int in2_channel, const int in3_channel, const int out_channel, BinaryOP f, const int level, const uint8_t launch_types, const LaunchMode mode, const uint8_t cell_types = INTERIOR) {
-    grid.launchVoxelFunc(
-        [=]__device__(HATileAccessor<Tile>&acc, HATileInfo<Tile>&info, const Coord & l_ijk) {
-        auto& tile = info.tile();
-        if (tile.type(l_ijk) & cell_types) {
-            tile(out_channel, l_ijk) = f(tile(in1_channel, l_ijk), tile(in2_channel, l_ijk), f(in3_channel, l_ijk));
-        }
-    },
-        level, launch_types, mode
-    );
-}
-
-template<class OP2>
-void ApplyElementWiseFunc2(HADeviceGrid<Tile>& grid, const int chn0, const int chn1, OP2 f, const int level, const uint8_t launch_types, const LaunchMode mode, const uint8_t cell_types = INTERIOR) {
-    grid.launchVoxelFunc(
-        [=]__device__(HATileAccessor<Tile>&acc, HATileInfo<Tile>&info, const Coord & l_ijk) {
-        auto& tile = info.tile();
-        if (tile.type(l_ijk) & cell_types) {
-            f(tile(chn0, l_ijk), tile(chn1, l_ijk));
-        }
-    },
-        level, launch_types, mode
-    );
-}
-
-
-template<class OP4>
-void ApplyElementWiseFunc4(HADeviceGrid<Tile>& grid, const int chn0, const int chn1, const int chn2, const int chn3, OP4 f, const int level, const uint8_t launch_types, const LaunchMode mode, const uint8_t cell_types = INTERIOR) {
-    grid.launchVoxelFunc(
-        [=]__device__(HATileAccessor<Tile>&acc, HATileInfo<Tile>&info, const Coord & l_ijk) {
-        auto& tile = info.tile();
-        if (tile.type(l_ijk) & cell_types) {
-            f(tile(chn0, l_ijk), tile(chn1, l_ijk), tile(chn2, l_ijk), tile(chn3, l_ijk));
-        }
-    },
-        level, launch_types, mode
-    );
-}
-
 void CalculateNeighborTiles(HADeviceGrid<Tile>& grid);
 
 void Copy(HADeviceGrid<Tile>& grid, const int in_channel, const int out_channel, const int level, const uint8_t launch_types, const LaunchMode mode, const uint8_t cell_types = INTERIOR);
@@ -387,17 +346,17 @@ void Axpy(HADeviceGrid<Tile>& grid, const Tile::T alpha, const uint8_t in_channe
 
 void DotAsync(double* d_result, HADeviceGrid<Tile>& grid, const uint8_t in1_channel, const uint8_t in2_channel, const uint8_t launch_tile_types);
 double Dot(HADeviceGrid<Tile>& grid, const uint8_t in1_channel, const uint8_t in2_channel, const uint8_t launch_tile_types);
-//double VelocityLinf(HADeviceGrid<Tile>& grid, const uint8_t u_channel, int level, const uint8_t launch_types, LaunchMode mode);
 double VelocityLinfSync(HADeviceGrid<Tile>& grid, const int u_channel, const uint8_t launch_tile_types);
 std::tuple<double, double> VolumeWeightedSumAndVolume(HADeviceGrid<Tile>& grid, const int order, const int in_channel, int level, const uint8_t launch_types, LaunchMode mode);
 double VolumeWeightedNorm(HADeviceGrid<Tile>& grid, const int order, const int in_channel, int level = -1, const uint8_t launch_types = LEAF, LaunchMode mode = LAUNCH_SUBTREE);
 
 void MeanAsync(HADeviceGrid<Tile>& grid, const int in_channel, const uint8_t launch_tile_types, double* d_mean, double* d_count);
 
+//THIS FUNCTION SHOULD BE DEPRECATED
 //In general, cell values can be propagated and accumulated casually
 //however, we have to take caution when propagating and accumulating face values
 //because 
-//void PropagateValues(HADeviceGrid<Tile>& grid, const int coarse_channel, const int fine_channel, const int fine_level, const uint8_t propagated_tile_types, const LaunchMode mode);
+void PropagateValues(HADeviceGrid<Tile>& grid, const int coarse_channel, const int fine_channel, const int fine_level, const uint8_t propagated_tile_types, const LaunchMode mode);
 
 //copy values from parents for tiles specified by propagate_tile_types
 //for example, GHOST will propagate ghost values from parents

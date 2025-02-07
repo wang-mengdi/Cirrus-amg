@@ -3,32 +3,6 @@
 
 int laplacian_total_tile_counts = 0;
 
-//void PropagateValuesToGhostTiles(HADeviceGrid<Tile>& grid, const int coarse_channel, const int fine_channel) {
-//    grid.launchVoxelFuncOnAllTiles(
-//        [=]__device__(HATileAccessor<Tile> &acc, HATileInfo<Tile> &info, const Coord & l_ijk) {
-//        auto& tile = info.tile();
-//        if (!tile.isInterior(l_ijk)) {
-//            tile(fine_channel, l_ijk) = Tile::BACKGROUND_VALUE;
-//            return;
-//        }
-//        auto fine_g_ijk = acc.localToGlobalCoord(info, l_ijk);
-//        auto coarse_g_ijk = acc.parentCoord(fine_g_ijk);
-//        HATileInfo<Tile> coarse_info; Coord coarse_l_ijk;
-//        acc.findVoxel(info.mLevel - 1, coarse_g_ijk, coarse_info, coarse_l_ijk);
-//        if (!coarse_info.empty()) {
-//            auto& coarse_tile = coarse_info.tile();
-//            tile(fine_channel, l_ijk) = coarse_tile.interiorValue(coarse_channel, coarse_l_ijk);
-//        }
-//        else tile(fine_channel, l_ijk) = Tile::BACKGROUND_VALUE;
-//    },
-//        GHOST
-//    );
-//}
-
-//__hostdev__ __forceinline__ int3 localIdxToInt3(int _idx)
-//{
-//    return { _idx / 64  , (_idx / 8) % 8, _idx % 8 };
-//}
 
 __forceinline__ __device__ T NegativeLaplacianCoeff(T one_over_h, uint8_t ttype0, uint8_t ttype1, uint8_t ctype0, const uint8_t ctype1) {
     ////tile types check
@@ -184,33 +158,7 @@ __global__ void NegativeLaplacianSameLevel128Kernel(HATileAccessor<Tile> acc, HA
         //voxel idx
         int vi = i * 128 + ti;
         Coord l_ijk = acc.localOffsetToCoord(vi);
-        //info.tile()(Ax_channel, vi) = info.tile().type(vi) == INTERIOR ? shared_data.negativeLap(h, l_ijk, false) : 0;
 		info.tile()(Ax_channel, vi) = shared_data.negativeLap(h, l_ijk, calc_diag);
-
-        //{
-        //    
-        //    auto g_ijk = acc.localToGlobalCoord(info, l_ijk);
-        //    //printf("D is zero!!!!!!!!!!!!!!! at g_ijk %d %d %d level %d\n", g_ijk[0], g_ijk[1], g_ijk[2], info.mLevel);
-        //    
-        //    if (info.mLevel == 5 && g_ijk == Coord(119, 123, 137)) {
-
-        //        auto ttype0 = shared_data.ttypeValue(l_ijk);
-        //        auto ctype0 = shared_data.ctypeValue(l_ijk);
-        //        T x0 = shared_data.xValueT(l_ijk);
-        //        for (int axis : {0, 1, 2}) {
-        //            for (int sgn : {-1, 1}) {
-        //                Coord nl_ijk = l_ijk;
-        //                nl_ijk[axis] += sgn;
-
-        //                auto ttype1 = shared_data.ttypeValue(nl_ijk);
-        //                auto ctype1 = shared_data.ctypeValue(nl_ijk);
-        //                T x1 = shared_data.xValueT(nl_ijk);
-        //                T coeff = NegativeLaplacianCoeff(1 / h, ttype0, ttype1, ctype0, ctype1);
-        //                printf("axis %d sgn %d ttype0 %d ttype1 %d ctype0 %d ctype1 %d x0 %f x1 %f coeff %f\n", axis, sgn, ttype0, ttype1, ctype0, ctype1, x0, x1, coeff);
-        //            }
-        //        }
-        //    }
-        //}
     }
 }
 
@@ -222,15 +170,8 @@ void NegativeLaplacianSameLevel128(HADeviceGrid<Tile>& grid, thrust::device_vect
 
 //on all leafs of the tree
 void FullNegativeLaplacian(HADeviceGrid<Tile>& grid, const int x_channel, const int Ax_channel, bool calc_diag) {
-    //PropagateValues(grid, x_channel, x_channel, -1, GHOST, LAUNCH_SUBTREE);
-    //PropagateValuesToGhostTiles(grid, x_channel, x_channel);
     PropagateToChildren(grid, x_channel, x_channel, -1, GHOST, LAUNCH_SUBTREE, INTERIOR | DIRICHLET | NEUMANN);
-
     NegativeLaplacianSameLevel128(grid, grid.dAllTiles, grid.dAllTiles.size(), -1, LEAF | GHOST, x_channel, Ax_channel, calc_diag);
-    //NegativeLaplacianSameLevel(grid, x_channel, Ax_channel, -1, LEAF | GHOST, LAUNCH_SUBTREE, false);
-    //add fine terms stored in ghost cells to parents
-    //AccumulateValues(grid, Ax_channel, Ax_channel, -1, LEAF, LAUNCH_SUBTREE, true);
-    //AccumulateValuesToLeafTiles(grid, Ax_channel, Ax_channel, true);
     AccumulateToParents128(grid, Ax_channel, Ax_channel, GHOST, 1., true, INTERIOR | DIRICHLET | NEUMANN);
 }
 
@@ -266,22 +207,6 @@ __global__ void NegativeLaplacianAndGaussSeidelSameLevel128Kernel(HATileAccessor
             if (D == 0 && (ctype & INTERIOR)) {
 				auto g_ijk = acc.localToGlobalCoord(info, l_ijk);
                 printf("D is zero!!!!!!!!!!!!!!! at g_ijk %d %d %d level %d\n", g_ijk[0], g_ijk[1], g_ijk[2], info.mLevel);
-
-      //          auto ttype0 = shared_data.ttypeValue(l_ijk);
-      //          auto ctype0 = shared_data.ctypeValue(l_ijk);
-      //          T x0 = shared_data.xValueT(l_ijk);
-      //          for (int axis : {0, 1, 2}) {
-      //              for (int sgn : {-1, 1}) {
-      //                  Coord nl_ijk = l_ijk;
-      //                  nl_ijk[axis] += sgn;
-
-      //                  auto ttype1 = shared_data.ttypeValue(nl_ijk);
-      //                  auto ctype1 = shared_data.ctypeValue(nl_ijk);
-      //                  T x1 = shared_data.xValueT(nl_ijk);
-      //                  T coeff = NegativeLaplacianCoeff(1 / h, ttype0, ttype1, ctype0, ctype1);
-						//printf("axis %d sgn %d ttype0 %d ttype1 %d ctype0 %d ctype1 %d x0 %f x1 %f coeff %f\n", axis, sgn, ttype0, ttype1, ctype0, ctype1, x0, x1, coeff);
-      //              }
-      //          }
             }
 
 			T delta_x = (ctype & INTERIOR) ? (b - Ax) / D : 0;

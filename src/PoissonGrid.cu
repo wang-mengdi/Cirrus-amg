@@ -133,33 +133,6 @@ void CalculateNeighborTiles(HADeviceGrid<Tile>& grid) {
     }, -1, LEAF | GHOST | NONLEAF, LAUNCH_SUBTREE);
 }
 
-////follow the same launch convention as launchVoxelFunc
-//template<class T>
-//__global__ void DotKernel(HATileAccessor<PoissonTile<T>> acc, HATileInfo<PoissonTile<T>>* infos, const uint8_t in1_channel, const uint8_t in2_channel, double* sum, int subtree_level, uint8_t launch_types) {
-//    const HATileInfo<PoissonTile<T>>& info = infos[blockIdx.x];
-//    Coord l_ijk = Coord(threadIdx.x, threadIdx.y, threadIdx.z);
-//
-//    if (!(info.subtreeType(subtree_level) & launch_types)) {
-//        if (l_ijk == Coord(0, 0, 0)) sum[blockIdx.x] = 0;
-//        return;
-//    }
-//
-//    auto& tile = info.tile();
-//    double thread_dot = tile.interiorValue(in1_channel, l_ijk) * tile.interiorValue(in2_channel, l_ijk);
-//
-//    //printf("l_ijk=%d %d %d thread_dot=%f\n", l_ijk[0], l_ijk[1], l_ijk[2], thread_dot);
-//
-//    typedef cub::BlockReduce<double, Tile::DIM, cub::BLOCK_REDUCE_WARP_REDUCTIONS, Tile::DIM, Tile::DIM> BlockReduce;
-//    __shared__ typename BlockReduce::TempStorage temp_storage;
-//    double block_sum = BlockReduce(temp_storage).Sum(thread_dot);
-//
-//    if (l_ijk == Coord(0, 0, 0)) {
-//        sum[blockIdx.x] = block_sum;
-//
-//        //auto b_ijk = info.mTileCoord;
-//        //printf("launch dotkernel tile bijk %d %d %d sum %f value %f type %d interiorValue %f\n", b_ijk[0], b_ijk[1], b_ijk[2], block_sum, tile(in1_channel, l_ijk), tile.type(l_ijk), tile.interiorValue(in1_channel, l_ijk));
-//    }
-//}
 
 //follow the same launch convention as launchVoxelFunc
 __global__ void Dot128Kernel(HATileAccessor<PoissonTile<T>> acc, HATileInfo<PoissonTile<T>>* infos, const uint8_t in1_channel, const uint8_t in2_channel, double* sum, int subtree_level, uint8_t launch_types) {
@@ -323,73 +296,6 @@ void MeanAsync(HADeviceGrid<Tile>& grid, const int in_channel, const uint8_t lau
     
     CheckCudaError("DotAsync end");
 }
-
-
-////follow the same launch convention as launchVoxelFunc
-//__global__ void VelocityLinfKernel(HATileAccessor<PoissonTile<T>> acc, HATileInfo<PoissonTile<T>>* infos, const uint8_t u_channel, double* blk_max, int subtree_level, uint8_t launch_types) {
-//    const HATileInfo<PoissonTile<T>>& info = infos[blockIdx.x];
-//    Coord l_ijk = Coord(threadIdx.x, threadIdx.y, threadIdx.z);
-//
-//    if (!(info.subtreeType(subtree_level) & launch_types)) {
-//        if (l_ijk == Coord(0, 0, 0)) blk_max[blockIdx.x] = 0;
-//        return;
-//    }
-//
-//    auto& tile = info.tile();
-//    double v1 = abs(tile(u_channel + 0, l_ijk));
-//    double v2 = abs(tile(u_channel + 1, l_ijk));
-//    double v3 = abs(tile(u_channel + 2, l_ijk));
-//    double thread_val = max(v1, max(v2, v3));
-//
-//    typedef cub::BlockReduce<double, Tile::DIM, cub::BLOCK_REDUCE_WARP_REDUCTIONS, Tile::DIM, Tile::DIM> BlockReduce;
-//    __shared__ typename BlockReduce::TempStorage temp_storage;
-//    double block_max = BlockReduce(temp_storage).Reduce(thread_val, cub::Max());
-//
-//    if (l_ijk == Coord(0, 0, 0)) {
-//        blk_max[blockIdx.x] = block_max;
-//
-//        //auto b_ijk = info.mTileCoord;
-//        //printf("launch dotkernel tile bijk %d %d %d sum %f value %f type %d interiorValue %f\n", b_ijk[0], b_ijk[1], b_ijk[2], block_sum, tile(in1_channel, l_ijk), tile.type(l_ijk), tile.interiorValue(in1_channel, l_ijk));
-//    }
-//}
-//
-////follow the launch convention of launchVoxelFunc
-//double VelocityLinf(HADeviceGrid<Tile>& grid, const uint8_t u_channel, int level, const uint8_t launch_types, LaunchMode mode) {
-//    //static thrust::device_vector<double> device_sum(1, 0);
-//    if (level == -1) {
-//        mode = LAUNCH_SUBTREE;
-//        level = grid.mNumLevels - 1;
-//    }
-//    int start, end, step;
-//    if (mode == LAUNCH_LEVEL) start = level, end = level + 1, step = 1;
-//    else start = 0, end = level + 1, step = 1;
-//    int subtree_level = (mode == LAUNCH_LEVEL) ? -1 : level;
-//
-//    double linf = 0;
-//    //thrust::device_vector<double> device_mx;
-//    for (int i = start; i != end; i += step) {
-//        Assert(0 <= i && i < grid.mNumLevels, "Dot invalid level {}", i);
-//
-//        if (grid.hNumTiles[i] > 0) {
-//			//somehow, if we use a thrust::device_vector here, it will cause a crash
-//            //I don't know why
-//            //seems thrust::device_vector has some bugs
-//            double* device_mx_ptr;
-//            cudaMalloc(&device_mx_ptr, grid.hNumTiles[i] * sizeof(double));
-//            VelocityLinfKernel << <grid.hNumTiles[i], dim3(Tile::DIM, Tile::DIM, Tile::DIM) >> > (
-//                grid.deviceAccessor(),
-//                thrust::raw_pointer_cast(grid.dTileArrays[i].data()),
-//                u_channel,
-//                device_mx_ptr,
-//                subtree_level, launch_types
-//                );
-//			double level_linf = CUBDeviceArrayMax(device_mx_ptr, grid.hNumTiles[i]);
-//            linf = std::max(linf, level_linf);
-//            cudaFree(device_mx_ptr);
-//        }
-//    }
-//    return linf;
-//}
 
 // Kernel to compute the maximum absolute value (Linf norm) across three channels
 __global__ void VelocityLinfKernel(HATileAccessor<PoissonTile<T>> acc, HATileInfo<PoissonTile<T>>* infos, const int u_channel, double* max_values, int subtree_level, uint8_t launch_types) {
