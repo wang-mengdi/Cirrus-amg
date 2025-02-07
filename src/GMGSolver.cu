@@ -376,7 +376,7 @@ __global__ void ProlongateAndUpdate128Kernel(HATileAccessor<Tile> acc, HATileInf
 }
 
 void ProlongateAndUpdate128(HADeviceGrid<Tile>& grid, int coarse_x_channel, int fine_x_channel, int fine_level, T prolong_coeff) {
-    ProlongateAndUpdate128Kernel << <grid.hNumTiles[fine_level], 128 >> > (grid.deviceAccessor(), thrust::raw_pointer_cast(grid.dTileArrays[fine_level].data()), fine_level, LEAF | NONLEAF | GHOST, coarse_x_channel, fine_x_channel, prolong_coeff);
+    ProlongateAndUpdate128Kernel << <grid.hNumTiles[fine_level], 128 >> > (grid.deviceAccessor(), thrust::raw_pointer_cast(grid.dTileArrays[fine_level].data()), fine_level, LEAF | GHOST, coarse_x_channel, fine_x_channel, prolong_coeff);
 }
 
 //must initialize to zero 
