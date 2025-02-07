@@ -79,9 +79,7 @@ namespace SolverTests {
         //0:8, 1:16, 2:32, 3:64, 4:128, 5:256, 6:512, 7:1024
         HADeviceGrid<Tile> grid(h, { 16,16,16,16,16,16,18,16,16,16 });
         grid.setTileHost(0, nanovdb::Coord(0, 0, 0), Tile(), LEAF);
-        grid.compressHost(false);
-        grid.syncHostAndDevice();
-        grid.spawnGhostTiles(false);
+        grid.rebuild();
         IterativeRefine(grid, [=]__device__(const HATileAccessor<Tile>&acc, HATileInfo<Tile>&info) { return SolverTestsLevelTarget(acc, info, grid_name); }, false);
         int num_cells = grid.numTotalLeafTiles() * Tile::SIZE;
         int total_hash_bytes = grid.hashTableDeviceBytes();
@@ -140,9 +138,7 @@ namespace SolverTests {
         //0:8, 1:16, 2:32, 3:64, 4:128, 5:256, 6:512, 7:1024
         HADeviceGrid<Tile> grid(h, { 16,16,16,16,16,16,18,16,16,16 });
         grid.setTileHost(0, nanovdb::Coord(0, 0, 0), Tile(), LEAF);
-        grid.compressHost(false);
-        grid.syncHostAndDevice();
-        grid.spawnGhostTiles(false);
+        grid.rebuild();
 
         IterativeRefine(grid, [=]__device__(const HATileAccessor<Tile>&acc, HATileInfo<Tile>&info) { return SolverTestsLevelTarget(acc, info, grid_name); }, false);
 		int num_cells = grid.numTotalLeafTiles() * Tile::SIZE;

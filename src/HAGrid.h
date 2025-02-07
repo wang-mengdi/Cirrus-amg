@@ -593,6 +593,13 @@ public:
 		syncHostAndDevice();
 	}
 
+	//should be called after each topology change
+	void rebuild(bool verbose = false) {
+		compressHost(verbose);
+		syncHostAndDevice();
+		spawnGhostTiles(verbose);
+	}
+
 	template<class FuncABC>
 	void launchVoxelFunc(FuncABC f, int level, const uint8_t launch_types, LaunchMode mode = LAUNCH_LEVEL, const LaunchOrder order = COARSE_FIRST, const int num_groups = 1) {
 		//launch a voxel function f(Accessor, TileInfo, l_ijk) on specified tiles
