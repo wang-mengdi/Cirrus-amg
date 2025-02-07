@@ -412,10 +412,6 @@ public:
 
 			applyVelocityBC(grid, 0.0);
 			CalcCellTypesFromLeafs(grid);
-
-			//std::swap(grid_ptr, last_grid_ptr);
-			auto holder_ptr = grid.getHostTileHolderForLeafs();
-			GenerateParticlesWithDyeDensity(holder_ptr, Tile::dye_channel, mParams.mRefineThreshold, mNumParticlesPerCell, particles);
 		}
 		CalculateVorticityMagnitudeOnLeafs(*grid_ptr, mParams.mFineLevel, mParams.mCoarseLevel, Tile::u_channel, 0, Tile::vor_channel);
 

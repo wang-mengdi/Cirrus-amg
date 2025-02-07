@@ -347,20 +347,7 @@ public:
 		grid1.compressHost();
 		grid1.syncHostAndDevice();
 		grid1.spawnGhostTiles();
-		//SpawnGhostTiles(grid1);
 		return ptr;
-
-
-		//double h = 1.0 / 8;
-		//auto grid_ptr = std::make_shared<HADeviceGrid<Tile> >(h, std::initializer_list<uint32_t>({ 16, 16, 16, 16, 16, 16, 18, 16, 16, 16 }));
-		//auto& grid = *grid_ptr;
-
-		//	grid.setTileHost(0, nanovdb::Coord(0, 0, 0), Tile(), LEAF);
-		//	grid.setTileHost(0, nanovdb::Coord(1, 0, 0), Tile(), LEAF);
-		//grid.compressHost();
-		//grid.syncHostAndDevice();
-		//SpawnGhostTiles(grid);
-		//return grid_ptr;
 	}
 
 	int numTotalTiles(void) const {
@@ -596,8 +583,9 @@ public:
 	//should be called after each topology change
 	void rebuild(bool verbose = false) {
 		compressHost(verbose);
-		syncHostAndDevice();
+		//syncHostAndDevice();
 		spawnGhostTiles(verbose);
+
 	}
 
 	template<class FuncABC>
