@@ -28,7 +28,7 @@ void TernaryOnArray(T* d_a, T* d_b, T* d_c, Func3 f, int n = 1, int block_size =
     TernaryOnArrayKernel << <numBlocks, block_size >> > (d_a, d_b, d_c, f, n);
 }
 
-__host__ void SpawnGhostTiles(HADeviceGrid<Tile>& grid, bool verbose = true);
+//__host__ void SpawnGhostTiles(HADeviceGrid<Tile>& grid, bool verbose = true);
 
 template<class ABFunc>
 __host__ std::vector<int> RefineLeafsOneStep(HADeviceGrid<Tile>& grid, ABFunc level_target, bool verbose) {
@@ -296,7 +296,8 @@ template<class ABFunc>
 void IterativeRefine(HADeviceGrid<Tile>& grid, ABFunc level_target, bool verbose = true) {
     while (true) {
         auto refine_cnts = RefineLeafsOneStep(grid, level_target, verbose);
-        SpawnGhostTiles(grid, verbose);
+        //SpawnGhostTiles(grid, verbose);
+        grid.spawnGhostTiles(verbose);
         if (verbose) Info("Refine {} tiles on each layer", refine_cnts);
         auto cnt = std::accumulate(refine_cnts.begin(), refine_cnts.end(), 0);
         if (cnt == 0) break;
@@ -425,5 +426,5 @@ __hostdev__ void IterateFaceNeighborCellTypes(const HATileAccessor<Tile>& acc, c
 
 void ExtrapolateVelocity(HADeviceGrid<Tile>& grid, const int u_channel, const int num_iters);
 
-int RefineWithValuesOneStep(HADeviceGrid<Tile>& grid, int channel, T threshold, int coarse_level, int fine_level, bool verbose);
-int CoarsenWithValueneStep(HADeviceGrid<Tile>& grid, int channel, T threshold, int coarse_level, int fine_level, bool verbose);
+//int RefineWithValuesOneStep(HADeviceGrid<Tile>& grid, int channel, T threshold, int coarse_level, int fine_level, bool verbose);
+//int CoarsenWithValueneStep(HADeviceGrid<Tile>& grid, int channel, T threshold, int coarse_level, int fine_level, bool verbose);

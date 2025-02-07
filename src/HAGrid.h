@@ -346,7 +346,8 @@ public:
 		}
 		grid1.compressHost();
 		grid1.syncHostAndDevice();
-		SpawnGhostTiles(grid1);
+		grid1.spawnGhostTiles();
+		//SpawnGhostTiles(grid1);
 		return ptr;
 
 
@@ -560,18 +561,37 @@ public:
 		mDeviceSyncFlag = true;
 	}
 
-	//template<class FuncB>
-	//void iterateLeafTiles(FuncB f) {
-	//	Assert(mCompressedFlag, "iterateLeafTiles requires compressed grid");
-	//	for (int level = 0; level <= mMaxLevel; level++) {
-	//		for (int i = 0; i < hNumTiles[level]; i++) {
-	//			HATileInfo<Tile>& info = hTileArrays[level][i];
-	//			if (info.mType & LEAF) {
-	//				f(info);
-	//			}
-	//		}
-	//	}
-	//}
+	void spawnGhostTiles(bool verbose = false) {
+		using Acc = HACoordAccessor<Tile>;
+		//note that we will NOT spawn ghost tiles on level 0
+		//because it's the root level, and they will not have parents
+		Assert(mCompressedFlag, "Grid must be compressed and synced before spawn ghost tiles");
+		auto h_acc = hostAccessor();
+		for (int level = mMaxLevel; level > 0; level--) {
+			for (int i = 0; i < hNumTiles[level]; i++) {
+				auto& info = hTileArrays[level][i];
+				if (info.isActive()) {
+					Coord b_ijk = info.mTileCoord;
+					Acc::iterateNeighborCoords(b_ijk, [&](const Coord& n_ijk) {
+						auto& n_info = h_acc.tileInfo(level, n_ijk);
+						//auto& n_info = grid.mHostLayers[level].tileInfo(n_ijk);
+						if (n_info.empty()) {
+							Coord p_ijk = Acc::parentCoord(n_ijk);
+							auto& p_info = h_acc.tileInfo(level - 1, p_ijk);
+							//auto& p_info = grid.mHostLayers[level - 1].tileInfo(p_ijk);
+							if (p_info.isLeaf()) {
+								setTileHost(level, n_ijk, Tile(), GHOST);
+								//grid.mHostLayers[level].setTile(n_ijk, Tile(), level, GHOST);
+							}
+						}
+						}
+					);
+				}
+			}
+		}
+		compressHost(verbose);
+		syncHostAndDevice();
+	}
 
 	template<class FuncABC>
 	void launchVoxelFunc(FuncABC f, int level, const uint8_t launch_types, LaunchMode mode = LAUNCH_LEVEL, const LaunchOrder order = COARSE_FIRST, const int num_groups = 1) {

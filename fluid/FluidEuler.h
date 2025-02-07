@@ -372,7 +372,7 @@ public:
 		}
 		grid.compressHost();
 		grid.syncHostAndDevice();
-		SpawnGhostTiles(grid);
+		grid.spawnGhostTiles();
 
 		{
 
@@ -405,9 +405,9 @@ public:
 					params.setInitialCondition(acc, info, l_ijk);
 				}, -1, LEAF
 				);
-				int cnt = RefineWithValuesOneStep(grid, Tile::dye_channel, params.mRefineThreshold, params.mCoarseLevel, params.mFineLevel, false);
+				//int cnt = RefineWithValuesOneStep(grid, Tile::dye_channel, params.mRefineThreshold, params.mCoarseLevel, params.mFineLevel, false);
 				int cnt1 = LockedRefineWithNonBoundaryNeumannCellsOneStep(0.0, grid, params, 0, false);
-				if (cnt + cnt1 == 0) break;
+				if (cnt1 == 0) break;
 			}
 
 			applyVelocityBC(grid, 0.0);

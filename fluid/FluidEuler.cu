@@ -425,7 +425,8 @@ int LockedRefineWithNonBoundaryNeumannCellsOneStep(const T current_time, HADevic
 	}
 
 	auto refine_cnts = RefineLeafsOneStep(grid, levelTarget, verbose);
-	SpawnGhostTiles(grid, verbose);
+	grid.spawnGhostTiles(verbose);
+	//SpawnGhostTiles(grid, verbose);
 	if (verbose) Info("Refine {} tiles on each layer", refine_cnts);
 	auto cnt = std::accumulate(refine_cnts.begin(), refine_cnts.end(), 0);
 

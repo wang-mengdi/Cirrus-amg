@@ -262,7 +262,8 @@ void CoarsenWithParticles(HADeviceGrid<Tile>& grid, const thrust::device_vector<
 		auto cnt = std::accumulate(coarsen_cnts.begin(), coarsen_cnts.end(), 0);
 		if (cnt == 0) break;
 	}
-	SpawnGhostTiles(grid, verbose);
+	//SpawnGhostTiles(grid, verbose);
+	grid.spawnGhostTiles(verbose);
 }
 
 void RefineWithParticles(HADeviceGrid<Tile>& grid, const thrust::device_vector<Particle>& particles, const int coarse_levels, const int fine_levels, const int counter_channel, bool verbose) {
@@ -280,7 +281,8 @@ void RefineWithParticles(HADeviceGrid<Tile>& grid, const thrust::device_vector<P
 		//polyscope::show();
 
 		auto refine_cnts = RefineLeafsOneStep(grid, levelTarget, verbose);
-		SpawnGhostTiles(grid, verbose);
+		//SpawnGhostTiles(grid, verbose);
+		grid.spawnGhostTiles(verbose);
 		if (verbose) Info("Refine {} tiles on each layer", refine_cnts);
 		auto cnt = std::accumulate(refine_cnts.begin(), refine_cnts.end(), 0);
 

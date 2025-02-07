@@ -27,37 +27,37 @@ void FillArray(T* d_array, const int n, const T val, const int block_size = 512)
 
 
 
-__host__ void SpawnGhostTiles(HADeviceGrid<Tile>& grid, bool verbose) {
-    using Acc = HACoordAccessor<Tile>;
-    //note that we will NOT spawn ghost tiles on level 0
-    //because it's the root level, and they will not have parents
-    Assert(grid.mCompressedFlag, "Grid must be compressed and synced before spawn ghost tiles");
-    auto h_acc = grid.hostAccessor();
-    for (int level = grid.mMaxLevel; level > 0; level--) {
-        for (int i = 0; i < grid.hNumTiles[level]; i++) {
-            auto& info = grid.hTileArrays[level][i];
-            if (info.isActive()) {
-                Coord b_ijk = info.mTileCoord;
-                Acc::iterateNeighborCoords(b_ijk, [&](const Coord& n_ijk) {
-                    auto& n_info = h_acc.tileInfo(level, n_ijk);
-                    //auto& n_info = grid.mHostLayers[level].tileInfo(n_ijk);
-                    if (n_info.empty()) {
-                        Coord p_ijk = Acc::parentCoord(n_ijk);
-                        auto& p_info = h_acc.tileInfo(level - 1, p_ijk);
-                        //auto& p_info = grid.mHostLayers[level - 1].tileInfo(p_ijk);
-                        if (p_info.isLeaf()) {
-                            grid.setTileHost(level, n_ijk, Tile(), GHOST);
-                            //grid.mHostLayers[level].setTile(n_ijk, Tile(), level, GHOST);
-                        }
-                    }
-                    }
-                );
-            }
-        }
-    }
-    grid.compressHost(verbose);
-    grid.syncHostAndDevice();
-}
+//__host__ void SpawnGhostTiles(HADeviceGrid<Tile>& grid, bool verbose) {
+//    using Acc = HACoordAccessor<Tile>;
+//    //note that we will NOT spawn ghost tiles on level 0
+//    //because it's the root level, and they will not have parents
+//    Assert(grid.mCompressedFlag, "Grid must be compressed and synced before spawn ghost tiles");
+//    auto h_acc = grid.hostAccessor();
+//    for (int level = grid.mMaxLevel; level > 0; level--) {
+//        for (int i = 0; i < grid.hNumTiles[level]; i++) {
+//            auto& info = grid.hTileArrays[level][i];
+//            if (info.isActive()) {
+//                Coord b_ijk = info.mTileCoord;
+//                Acc::iterateNeighborCoords(b_ijk, [&](const Coord& n_ijk) {
+//                    auto& n_info = h_acc.tileInfo(level, n_ijk);
+//                    //auto& n_info = grid.mHostLayers[level].tileInfo(n_ijk);
+//                    if (n_info.empty()) {
+//                        Coord p_ijk = Acc::parentCoord(n_ijk);
+//                        auto& p_info = h_acc.tileInfo(level - 1, p_ijk);
+//                        //auto& p_info = grid.mHostLayers[level - 1].tileInfo(p_ijk);
+//                        if (p_info.isLeaf()) {
+//                            grid.setTileHost(level, n_ijk, Tile(), GHOST);
+//                            //grid.mHostLayers[level].setTile(n_ijk, Tile(), level, GHOST);
+//                        }
+//                    }
+//                    }
+//                );
+//            }
+//        }
+//    }
+//    grid.compressHost(verbose);
+//    grid.syncHostAndDevice();
+//}
 
 void Copy(HADeviceGrid<Tile>& grid, const int in_channel, const int out_channel, const int level, const uint8_t launch_types, const LaunchMode mode, const uint8_t cell_types) {
     UnaryTransform(grid, in_channel, out_channel, []__device__(Tile::T x) { return x; }, level, launch_types, mode, cell_types);
@@ -983,65 +983,66 @@ void ExtrapolateVelocity(HADeviceGrid<Tile>& grid, const int u_channel, const in
     );
 }
 
-__global__ void MarkInterestAreaWithValue128Kernel(HATileAccessor<PoissonTile<T>> acc, HATileInfo<PoissonTile<T>>* infos, int channel, T threshold, int subtree_level, uint8_t launch_types) {
-    int bi = blockIdx.x;
-    int ti = threadIdx.x;
-    const HATileInfo<PoissonTile<T>>& info = infos[bi];
-
-    auto& tile = info.tile();
-    if (!(info.subtreeType(subtree_level) & launch_types)) {
-        if (ti == 0) tile.mIsInterestArea = false;
-        return;
-    }
-
-    auto data1AsFloat4 = reinterpret_cast<float4*>(tile.mData[channel]);
-    float4 data1 = data1AsFloat4[ti];
-    float max_data = fmaxf(fmaxf(data1.x, data1.y), fmaxf(data1.z, data1.w));
-
-    typedef cub::BlockReduce<T, 128> BlockReduce;
-    __shared__ typename BlockReduce::TempStorage temp_storage;
-    T block_max = BlockReduce(temp_storage).Reduce(max_data, cub::Max());
-
-    if (ti == 0) {
-        if (block_max > threshold) {
-            tile.mIsInterestArea = true;
-        }
-        else
-        {
-            tile.mIsInterestArea = false;
-        }
-
-    }
-}
-
-int RefineWithValuesOneStep(HADeviceGrid<Tile>& grid, int channel, T threshold, int coarse_level, int fine_level, bool verbose) {
-    auto levelTarget = [fine_level, coarse_level]__device__(const HATileAccessor<Tile> &acc, const HATileInfo<Tile> &info) ->int {
-        auto& tile = info.tile();
-        if (tile.mIsInterestArea) return fine_level;
-        return coarse_level;
-    };
-    auto info_ptr = thrust::raw_pointer_cast(grid.dAllTiles.data());
-    //calculate interest area flags on leafs
-    MarkInterestAreaWithValue128Kernel << <grid.dAllTiles.size(), 128 >> > (grid.deviceAccessor(), info_ptr, channel, threshold, -1, LEAF);
-    auto refine_cnts = RefineLeafsOneStep(grid, levelTarget, verbose);
-    SpawnGhostTiles(grid, verbose);
-    if (verbose) Info("Refine {} tiles on each layer", refine_cnts);
-    int cnt = std::accumulate(refine_cnts.begin(), refine_cnts.end(), 0);
-    return cnt;
-}
-
-int CoarsenWithValueneStep(HADeviceGrid<Tile>& grid, int channel, T threshold, int coarse_level, int fine_level, bool verbose) {
-    auto levelTarget = [fine_level, coarse_level]__device__(const HATileAccessor<Tile> &acc, const HATileInfo<Tile> &info) ->int {
-        auto& tile = info.tile();
-        if (tile.mIsInterestArea) return fine_level;
-        return coarse_level;
-    };
-    auto info_ptr = thrust::raw_pointer_cast(grid.dAllTiles.data());
-    //calculate interest area flags on leafs
-    MarkInterestAreaWithValue128Kernel << <grid.dAllTiles.size(), 128 >> > (grid.deviceAccessor(), info_ptr, channel, threshold, -1, LEAF);
-    auto coarsen_cnts = CoarsenStep(grid, levelTarget, verbose);
-
-    if (verbose) Info("Coarsen {} tiles on each layer", coarsen_cnts);
-    int cnt = std::accumulate(coarsen_cnts.begin(), coarsen_cnts.end(), 0);
-    return cnt;
-}
+//__global__ void MarkInterestAreaWithValue128Kernel(HATileAccessor<PoissonTile<T>> acc, HATileInfo<PoissonTile<T>>* infos, int channel, T threshold, int subtree_level, uint8_t launch_types) {
+//    int bi = blockIdx.x;
+//    int ti = threadIdx.x;
+//    const HATileInfo<PoissonTile<T>>& info = infos[bi];
+//
+//    auto& tile = info.tile();
+//    if (!(info.subtreeType(subtree_level) & launch_types)) {
+//        if (ti == 0) tile.mIsInterestArea = false;
+//        return;
+//    }
+//
+//    auto data1AsFloat4 = reinterpret_cast<float4*>(tile.mData[channel]);
+//    float4 data1 = data1AsFloat4[ti];
+//    float max_data = fmaxf(fmaxf(data1.x, data1.y), fmaxf(data1.z, data1.w));
+//
+//    typedef cub::BlockReduce<T, 128> BlockReduce;
+//    __shared__ typename BlockReduce::TempStorage temp_storage;
+//    T block_max = BlockReduce(temp_storage).Reduce(max_data, cub::Max());
+//
+//    if (ti == 0) {
+//        if (block_max > threshold) {
+//            tile.mIsInterestArea = true;
+//        }
+//        else
+//        {
+//            tile.mIsInterestArea = false;
+//        }
+//
+//    }
+//}
+//
+//int RefineWithValuesOneStep(HADeviceGrid<Tile>& grid, int channel, T threshold, int coarse_level, int fine_level, bool verbose) {
+//    auto levelTarget = [fine_level, coarse_level]__device__(const HATileAccessor<Tile> &acc, const HATileInfo<Tile> &info) ->int {
+//        auto& tile = info.tile();
+//        if (tile.mIsInterestArea) return fine_level;
+//        return coarse_level;
+//    };
+//    auto info_ptr = thrust::raw_pointer_cast(grid.dAllTiles.data());
+//    //calculate interest area flags on leafs
+//    MarkInterestAreaWithValue128Kernel << <grid.dAllTiles.size(), 128 >> > (grid.deviceAccessor(), info_ptr, channel, threshold, -1, LEAF);
+//    auto refine_cnts = RefineLeafsOneStep(grid, levelTarget, verbose);
+//    //SpawnGhostTiles(grid, verbose);
+//    grid.spawnGhostTiles(verbose);
+//    if (verbose) Info("Refine {} tiles on each layer", refine_cnts);
+//    int cnt = std::accumulate(refine_cnts.begin(), refine_cnts.end(), 0);
+//    return cnt;
+//}
+//
+//int CoarsenWithValueneStep(HADeviceGrid<Tile>& grid, int channel, T threshold, int coarse_level, int fine_level, bool verbose) {
+//    auto levelTarget = [fine_level, coarse_level]__device__(const HATileAccessor<Tile> &acc, const HATileInfo<Tile> &info) ->int {
+//        auto& tile = info.tile();
+//        if (tile.mIsInterestArea) return fine_level;
+//        return coarse_level;
+//    };
+//    auto info_ptr = thrust::raw_pointer_cast(grid.dAllTiles.data());
+//    //calculate interest area flags on leafs
+//    MarkInterestAreaWithValue128Kernel << <grid.dAllTiles.size(), 128 >> > (grid.deviceAccessor(), info_ptr, channel, threshold, -1, LEAF);
+//    auto coarsen_cnts = CoarsenStep(grid, levelTarget, verbose);
+//
+//    if (verbose) Info("Coarsen {} tiles on each layer", coarsen_cnts);
+//    int cnt = std::accumulate(coarsen_cnts.begin(), coarsen_cnts.end(), 0);
+//    return cnt;
+//}

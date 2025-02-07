@@ -70,7 +70,63 @@ namespace SolverTests {
         }
     }
 
+    void TestLaplacianCMGAndAMG(TestGrids grid_name) {
+        fmt::print("==========================================================\n");
+		Info("Test Laplacian Solver on grid {}", ToString(grid_name));
 
+        uint32_t scale = 8;
+        float h = 1.0 / scale;
+        //0:8, 1:16, 2:32, 3:64, 4:128, 5:256, 6:512, 7:1024
+        HADeviceGrid<Tile> grid(h, { 16,16,16,16,16,16,18,16,16,16 });
+        grid.setTileHost(0, nanovdb::Coord(0, 0, 0), Tile(), LEAF);
+        grid.compressHost(false);
+        grid.syncHostAndDevice();
+        grid.spawnGhostTiles(false);
+        IterativeRefine(grid, [=]__device__(const HATileAccessor<Tile>&acc, HATileInfo<Tile>&info) { return SolverTestsLevelTarget(acc, info, grid_name); }, false);
+        int num_cells = grid.numTotalLeafTiles() * Tile::SIZE;
+        int total_hash_bytes = grid.hashTableDeviceBytes();
+        Info("Total {}M cells, hash table {}GB", num_cells / (1024.0 * 1024), total_hash_bytes / (1024.0 * 1024 * 1024));
+
+        int x_channel = 0;
+        int l1_channel = 1;
+        int l2_channel = 2;
+        int diff_channel = 3;
+
+        //load cell types, load solution to grdt_channel
+        auto cell_type = [=]__device__(const HATileAccessor<Tile> &acc, const HATileInfo<Tile> &info, const nanovdb::Coord & l_ijk)->uint8_t {
+            bool is_dirichlet = false;
+            bool is_neumann = false;
+            acc.iterateSameLevelNeighborVoxels(info, l_ijk,
+                [&]__device__(const HATileInfo<Tile>&n_info, const Coord & n_l_ijk, const int axis, const int sgn) {
+                if (n_info.empty()) {
+                    if (axis == 0 && sgn == -1) is_neumann = true;
+                    else is_dirichlet = true;
+                }
+            });
+            if (is_neumann) return CellType::NEUMANN;
+            else if (is_dirichlet) return CellType::DIRICHLET;
+            else return CellType::INTERIOR;
+        };
+        //solution f(x)
+        auto f = [=]__device__(const Vec & pos) {
+            return sin(pos[1] * 7 + pos[2] * pos[2] * 32.5 + pos[3] + 4);
+        };
+        grid.launchVoxelFunc(
+            [=] __device__(HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const Coord& l_ijk) {
+            auto& tile = info.tile();
+            tile.type(l_ijk) = cell_type(acc, info, l_ijk);
+            if (tile.type(l_ijk) & INTERIOR) tile(x_channel, l_ijk) = f(acc.cellCenter(info, l_ijk));
+            else tile(x_channel, l_ijk) = 0;
+        }, -1, LEAF, LAUNCH_SUBTREE
+        );
+        CalcCellTypesFromLeafs(grid);
+
+        //use CMG to calculate laplacian from x channel to l1 channel
+        {
+            CalculateNeighborTiles(grid);
+
+        }
+    }
 
     __host__ void TestNeumannDirichletRecovery(TestGrids grid_name, const std::string algorithm) {
         //algorithm: "cmg"/"amg"
@@ -86,7 +142,8 @@ namespace SolverTests {
         grid.setTileHost(0, nanovdb::Coord(0, 0, 0), Tile(), LEAF);
         grid.compressHost(false);
         grid.syncHostAndDevice();
-        SpawnGhostTiles(grid, false);
+        grid.spawnGhostTiles(false);
+
         IterativeRefine(grid, [=]__device__(const HATileAccessor<Tile>&acc, HATileInfo<Tile>&info) { return SolverTestsLevelTarget(acc, info, grid_name); }, false);
 		int num_cells = grid.numTotalLeafTiles() * Tile::SIZE;
         int total_hash_bytes = grid.hashTableDeviceBytes();
@@ -183,7 +240,12 @@ namespace SolverTests {
         }, LEAF
         );
 		auto linf_norm = SingleChannelLinfSync(grid, Tile::r_channel, LEAF);
-		Info("Linf norm of grdt-x: {}\n\n", linf_norm);
+        if (linf_norm < 1e-5) {
+			Pass("Test passed with Linf norm of grdt-x: {}\n\n", linf_norm);
+		}
+        else {
+			Error("Test failed with Linf norm of grdt-x: {}\n\n", linf_norm);
+        }
     }
 
 }
