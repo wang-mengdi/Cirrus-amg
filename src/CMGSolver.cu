@@ -1,7 +1,7 @@
 #include "CMGSolver.h"
 #include "PoissonSolver.h"
 
-__forceinline__ __device__ T NegativeLaplacianCoeff(T h, uint8_t ttype0, uint8_t ttype1, uint8_t ctype0, const uint8_t ctype1) {
+__forceinline__ __device__ T NegativeLaplacianCoeff(T h, uint8_t ctype0, const uint8_t ctype1) {
     int has_neumann = int(ctype0 & NEUMANN || ctype1 & NEUMANN);
     //   //T coeff = one_over_delta_h / h * (1 - has_neumann);
     return has_neumann ? 0 : h;
@@ -12,17 +12,17 @@ public:
     static constexpr int halo = 1;
     static constexpr int SN = 8 + halo * 2;
     T x[SN][SN][SN];               // x channel
-    uint8_t ttype[SN][SN][SN];     // tile type
+    //uint8_t ttype[SN][SN][SN];     // tile type
 	uint8_t ctype[SN][SN][SN];     // cell types
         
     //they will take actual tile local coords
     __device__ T& xValueT(Coord l_ijk) { return x[l_ijk[0] + halo][l_ijk[1] + halo][l_ijk[2] + halo]; }
-    __device__ uint8_t& ttypeValue(Coord l_ijk) { return ttype[l_ijk[0] + halo][l_ijk[1] + halo][l_ijk[2] + halo]; }
+    //__device__ uint8_t& ttypeValue(Coord l_ijk) { return ttype[l_ijk[0] + halo][l_ijk[1] + halo][l_ijk[2] + halo]; }
 	__device__ uint8_t& ctypeValue(Coord l_ijk) { return ctype[l_ijk[0] + halo][l_ijk[1] + halo][l_ijk[2] + halo]; }
 
     //for single-level usage, does not consider ttype
     __device__ T negativeLap(const T h, Coord l_ijk, bool diag) {
-        auto ttype0 = ttypeValue(l_ijk);
+        //auto ttype0 = ttypeValue(l_ijk);
         auto ctype0 = ctypeValue(l_ijk);
         T x0 = xValueT(l_ijk);
         T sum = 0;
@@ -32,10 +32,10 @@ public:
                 Coord nl_ijk = l_ijk;
                 nl_ijk[axis] += sgn;
                 
-				auto ttype1 = ttypeValue(nl_ijk);
+				//auto ttype1 = ttypeValue(nl_ijk);
 				auto ctype1 = ctypeValue(nl_ijk);
 				T x1 = xValueT(nl_ijk);
-                T coeff = NegativeLaplacianCoeff(h, ttype0, ttype1, ctype0, ctype1);
+                T coeff = NegativeLaplacianCoeff(h, ctype0, ctype1);
 				sum += diag ? coeff : coeff * (x0 - x1);
             }
         }
@@ -65,7 +65,7 @@ __device__ void LoadCMGLaplacianTileData(const HATileAccessor<Tile>& acc, const 
         Coord l_ijk = acc.localOffsetToCoord(vi);
         
         shared_data.xValueT(l_ijk) = info.tile()(x_channel, vi);
-        shared_data.ttypeValue(l_ijk) = info.subtreeType(subtree_level);
+        //shared_data.ttypeValue(l_ijk) = info.subtreeType(subtree_level);
 		shared_data.ctypeValue(l_ijk) = tile.type(vi);
     }
 
@@ -98,7 +98,7 @@ __device__ void LoadCMGLaplacianTileData(const HATileAccessor<Tile>& acc, const 
         bool empty = ninfo.empty();
         if (empty) {
 			shared_data.xValueT(fl_ijk) = 0;
-			shared_data.ttypeValue(fl_ijk) = info.subtreeType(subtree_level);
+			//shared_data.ttypeValue(fl_ijk) = info.subtreeType(subtree_level);
 			shared_data.ctypeValue(fl_ijk) = CellType::DIRICHLET;
 		}
         else if (ninfo.subtreeType(subtree_level) == GHOST) {
@@ -117,12 +117,12 @@ __device__ void LoadCMGLaplacianTileData(const HATileAccessor<Tile>& acc, const 
             T v1 = 2.5 * vh - 0.5 * (vh0 + vh1 + vh2);
 
             shared_data.xValueT(fl_ijk) = (vH + v1) / 2;
-            shared_data.ttypeValue(fl_ijk) = ninfo.subtreeType(subtree_level);
+            //shared_data.ttypeValue(fl_ijk) = ninfo.subtreeType(subtree_level);
             shared_data.ctypeValue(fl_ijk) = ninfo.tile().type(nl_ijk);
         }
         else {
             shared_data.xValueT(fl_ijk) = ninfo.tile()(x_channel, nl_ijk);
-            shared_data.ttypeValue(fl_ijk) = ninfo.subtreeType(subtree_level);
+            //shared_data.ttypeValue(fl_ijk) = ninfo.subtreeType(subtree_level);
             shared_data.ctypeValue(fl_ijk) = ninfo.tile().type(nl_ijk);
         }
 
