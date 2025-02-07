@@ -1,1 +1,4 @@
-//#include "PoissonTile.h"
+#include "PoissonTile.h"
+
+
+template class HADeviceGrid<Tile>;

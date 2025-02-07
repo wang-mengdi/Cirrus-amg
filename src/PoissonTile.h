@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Common.h"
+#include "HAGrid.h"
 
 
 enum CellType { DIRICHLET = 0b001, INTERIOR = 0b010, NEUMANN = 0b100, SURFACE = 0b1000 };
@@ -190,3 +191,9 @@ public:
         return child;
     }
 };
+
+using Tile = PoissonTile<float>;
+using T = Tile::T;
+using Coord = typename Tile::Coord;
+using Vec = Tile::VecType;
+constexpr T NODATA = FLT_MAX;

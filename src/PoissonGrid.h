@@ -1,13 +1,9 @@
 #pragma once
 
-#include "HAGrid.h"
+//#include "HAGrid.h"
 #include "PoissonTile.h"
 
-using Tile = PoissonTile<float>;
-using T = Tile::T;
-using Coord = typename Tile::Coord;
-using Vec = Tile::VecType;
-constexpr T NODATA = FLT_MAX;
+
 
 
 template <class T, typename Func3>
