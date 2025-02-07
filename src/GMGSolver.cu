@@ -172,7 +172,7 @@ void NegativeLaplacianSameLevel128(HADeviceGrid<Tile>& grid, thrust::device_vect
 void FullNegativeLaplacian(HADeviceGrid<Tile>& grid, const int x_channel, const int Ax_channel, bool calc_diag) {
     PropagateToChildren(grid, x_channel, x_channel, -1, GHOST, LAUNCH_SUBTREE, INTERIOR | DIRICHLET | NEUMANN);
     NegativeLaplacianSameLevel128(grid, grid.dAllTiles, grid.dAllTiles.size(), -1, LEAF | GHOST, x_channel, Ax_channel, calc_diag);
-    AccumulateToParents128(grid, Ax_channel, Ax_channel, GHOST, 1., true, INTERIOR | DIRICHLET | NEUMANN);
+    AccumulateToParentsOneStep(grid, Ax_channel, Ax_channel, GHOST, 1., true, INTERIOR | DIRICHLET | NEUMANN);
 }
 
 

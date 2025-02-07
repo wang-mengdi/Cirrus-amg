@@ -568,7 +568,7 @@ void ParticleImpulseToGridMACIntp(HADeviceGrid<Tile>& grid, const thrust::device
 	);
 
 	//for (int axis : {0, 1, 2}) {
-	//	AccumulateToParents128(grid, u_channel + axis, u_channel + axis, GHOST, 1., true, INTERIOR | DIRICHLET | NEUMANN);
+	//	AccumulateToParentsOneStep(grid, u_channel + axis, u_channel + axis, GHOST, 1., true, INTERIOR | DIRICHLET | NEUMANN);
 	//}
 	//
 }

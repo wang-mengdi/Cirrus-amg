@@ -168,7 +168,7 @@ void ConservativeFullNegativeLaplacian(HADeviceGrid<Tile>& grid, const int x_cha
     //PropagateValues(grid, x_channel, x_channel, -1, GHOST, LAUNCH_SUBTREE);
     //PropagateValuesToGhostTiles(grid, x_channel, x_channel);
     PropagateToChildren(grid, x_channel, x_channel, -1, GHOST, LAUNCH_SUBTREE, INTERIOR | DIRICHLET | NEUMANN);
-    AccumulateToParents128(grid, x_channel, x_channel, LEAF, 1. / 8, false, INTERIOR | DIRICHLET | NEUMANN);
+    AccumulateToParentsOneStep(grid, x_channel, x_channel, LEAF, 1. / 8, false, INTERIOR | DIRICHLET | NEUMANN);
 
     ConservativeNegativeLaplacianSameLevel128(grid, grid.dAllTiles, grid.dAllTiles.size(), -1, LEAF, x_channel, Ax_channel, calc_diag);
 
@@ -176,7 +176,7 @@ void ConservativeFullNegativeLaplacian(HADeviceGrid<Tile>& grid, const int x_cha
     //add fine terms stored in ghost cells to parents
     //AccumulateValues(grid, Ax_channel, Ax_channel, -1, LEAF, LAUNCH_SUBTREE, true);
     //AccumulateValuesToLeafTiles(grid, Ax_channel, Ax_channel, true);
-    //AccumulateToParents128(grid, Ax_channel, Ax_channel, GHOST, 1., true, INTERIOR | DIRICHLET | NEUMANN);
+    //AccumulateToParentsOneStep(grid, Ax_channel, Ax_channel, GHOST, 1., true, INTERIOR | DIRICHLET | NEUMANN);
 }
 
 

@@ -545,7 +545,7 @@ void PropagateToChildren(HADeviceGrid<Tile>& grid, const int coarse_channel, con
 }
 
 //will be called on fine tiles
-__global__ void AccumulateToParents128Kernel(HATileAccessor<Tile> acc, HATileInfo<Tile>* fine_tiles, int fine_subtree_level, uint8_t fine_tile_types, int fine_channel, int coarse_channel, Tile::T coeff, bool additive, uint8_t cell_types) {
+__global__ void AccumulateToParentsOneStepKernel(HATileAccessor<Tile> acc, HATileInfo<Tile>* fine_tiles, int fine_subtree_level, uint8_t fine_tile_types, int fine_channel, int coarse_channel, Tile::T coeff, bool additive, uint8_t cell_types) {
     __shared__ T data[8 * 8 * 8];
 	int bi = blockIdx.x;
 	int ti = threadIdx.x;
@@ -593,9 +593,11 @@ __global__ void AccumulateToParents128Kernel(HATileAccessor<Tile> acc, HATileInf
     }
 }
 
-void AccumulateToParents128(HADeviceGrid<Tile>& grid, const int fine_channel, const int coarse_channel, const uint8_t fine_tile_types, const Tile::T coeff, bool additive, uint8_t cell_types) {
+void AccumulateToParentsOneStep(HADeviceGrid<Tile>& grid, const int fine_channel, const int coarse_channel, const uint8_t fine_tile_types, const Tile::T coeff, bool additive, uint8_t cell_types) {
+    Assert(fine_tile_types == GHOST || fine_tile_types == LEAF, "AccumulateToParentsOneStep can only be carried out on GHOST or LEAF tiles");
+
 	int num_fine_tiles = grid.dAllTiles.size();
-    AccumulateToParents128Kernel << <num_fine_tiles, 128 >> > (
+    AccumulateToParentsOneStepKernel << <num_fine_tiles, 128 >> > (
         grid.deviceAccessor(),
         thrust::raw_pointer_cast(grid.dAllTiles.data()),
         -1, fine_tile_types, fine_channel, coarse_channel, coeff, additive, cell_types
