@@ -2,7 +2,7 @@
 
 #include "PoissonGrid.h"
 
-void NegativeLaplacianAMG128(HADeviceGrid<Tile>& grid, thrust::device_vector<HATileInfo<Tile>>& tiles, int launch_tile_num, uint8_t launch_tile_types, int x_channel, int coeff_channel, int Ax_channel);
+//void NegativeLaplacianAMG128(HADeviceGrid<Tile>& grid, thrust::device_vector<HATileInfo<Tile>>& tiles, int launch_tile_num, uint8_t launch_tile_types, int x_channel, int coeff_channel, int Ax_channel);
 
 void CalculateAMGCoefficients(HADeviceGrid<Tile>& grid, const int coeff_channel, const uint8_t launch_tile_types);
 
@@ -10,7 +10,7 @@ void CalculateAMGCoefficients(HADeviceGrid<Tile>& grid, const int coeff_channel,
 
 void GaussSeidelAMG(int iters, int order, HADeviceGrid<Tile>& grid, const int level, const int x_channel, const int coeff_channel, const int rhs_channel);
 
-void VCycleAMG(HADeviceGrid<Tile>& grid, const int x_channel, const int f_channel, const int tmp_channel, const int rhs_channel, const int coeff_channel, int level_iters, int coarsest_iters, const T one_over_alpha, const T prolong_coeff);
+//void VCycleAMG(HADeviceGrid<Tile>& grid, const int x_channel, const int f_channel, const int tmp_channel, const int rhs_channel, const int coeff_channel, int level_iters, int coarsest_iters, const T one_over_alpha, const T prolong_coeff);
 
 class AMGSolver {
 public:
@@ -36,6 +36,8 @@ public:
     }
 
 	void prepareTypesAndCoeffs(HADeviceGrid<Tile>& grid);
+
+    void VCycle(HADeviceGrid<Tile>& grid, const int x_channel, const int f_channel, const int rhs_channel, const int coeff_channel, int level_iters, int coarsest_iters);
 
     //solve -lap(x_channel)=b_channel
     //b channel will be modified

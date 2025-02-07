@@ -597,6 +597,7 @@ namespace SolverTests {
 
             _sleep(200);
             //GMGSolver solver;
+            //AMGSolver solver(Tile::u_channel, 1., 1.);
             AMGSolver solver(Tile::u_channel, 1., 1.);
             solver.prepareTypesAndCoeffs(grid);
 

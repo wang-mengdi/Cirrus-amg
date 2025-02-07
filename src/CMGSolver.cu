@@ -51,9 +51,9 @@ __device__ static Coord FaceNeighborLocalCoord(int axis, int sgn, const int vi) 
     return axis == 0 ? Coord(axk, i, j) : axis == 1 ? Coord(i, axk, j) : Coord(i, j, axk);
 }
 
-__device__ static Coord FastLocalOffsetToCoord(int vi) {
-    return { vi / 64, (vi / 8) % 8, vi % 8 };
-}
+//__device__ static Coord FastLocalOffsetToCoord(int vi) {
+//    return { vi / 64, (vi / 8) % 8, vi % 8 };
+//}
 
 __device__ void LoadCMGLaplacianTileData(const HATileAccessor<Tile>& acc, const HATileInfo<Tile>& info, CMGLaplacianTileData& shared_data, const int subtree_level, const int x_channel, int ti) {
     auto& tile = info.tile();
@@ -364,19 +364,9 @@ void CMGSolver::VCycle(HADeviceGrid<Tile>& grid, int x_channel, int f_channel, c
         //smooth(u^l, b^l)
 		GaussSeidelCMG(level_iters, 0, grid, i, x_channel, rhs_channel);
 
-        //calculate residual
+        //calculate residual and restrict to next level
         //r^l = b^l-Au^l
-        //including ghost cells
-        //NegativeLaplacianSameLevel128(grid, grid.dTileArrays[i], grid.hNumTiles[i], i, LEAF | NONLEAF | GHOST, x_channel, tmp_channel);
-        //BinaryTransform(grid, rhs_channel, tmp_channel, tmp_channel, []__device__(Tile::T rhs, Tile::T tmp) { return rhs - tmp; }, i, LEAF | NONLEAF | GHOST, LAUNCH_LEVEL);
         ConservativeResidualAndRestrict(grid, x_channel, rhs_channel, rhs_channel, i, LEAF, one_over_alpha);
-
-        //restrict residual to the next level
-        //that fills NONLEAF cells of the next level
-        //this is done at the beginning
-        //Copy(grid, f_channel, rhs_channel, i - 1, LEAF, LAUNCH_LEVEL, INTERIOR | DIRICHLET | NEUMANN);
-        //this is done at the beginning
-        //Fill(grid, rhs_channel, (Tile::T)0, i - 1, GHOST, LAUNCH_LEVEL, INTERIOR | DIRICHLET | NEUMANN);
     }
 
     //smooth bottom
@@ -385,12 +375,6 @@ void CMGSolver::VCycle(HADeviceGrid<Tile>& grid, int x_channel, int f_channel, c
 
     for (int i = 1; i <= grid.mMaxLevel; i++) {
 		ConservativeProlongateAndUpdate128(grid, x_channel, x_channel, i, prolong_coeff);
-        //PropagateValues(grid, x_channel, x_channel, i, GHOST, LAUNCH_LEVEL);
-        ////prolongation: fine.r=prolongate(coarse.x)
-        ////prolongate to all fine tiles, which are coarse non-leafs
-        //Prolongate(grid, x_channel, tmp_channel, i, LEAF | NONLEAF);
-
-        //Axpy(grid,  prolong_coeff, tmp_channel, x_channel, i, LEAF | NONLEAF, LAUNCH_LEVEL);
 
         //smoothing: fine.x = smooth(fine.b)
 		GaussSeidelCMG(level_iters, 1, grid, i, x_channel, rhs_channel);

@@ -6,7 +6,8 @@ int main(int argc, char** argv) {
 
 	for (int i : {0, 1, 2}) {
 
-		SolverTests::TestNeumannBC(i);
+		//SolverTests::TestNeumannBC(i);
+		SolverTests::TestAMGNeumannBC(i);
 	}
 	return 0;
 }
