@@ -37,6 +37,8 @@ public:
 				T x1 = xValueT(nl_ijk);
                 T coeff = NegativeLaplacianCoeff(h, ctype0, ctype1);
 				sum += diag ? coeff : coeff * (x0 - x1);
+
+                //printf("CMG axis %d sgn %d ctype0 %d ctype1 %d coeff %f x0 %f x1 %f sum %f\n", axis, sgn, ctype0, ctype1, coeff, x0, x1, sum);
             }
         }
 
@@ -153,7 +155,13 @@ __global__ void ConservativeNegativeLaplacianSameLevel128Kernel(HATileAccessor<T
         //voxel idx
         int vi = i * 128 + ti;
         Coord l_ijk = acc.localOffsetToCoord(vi);
-        //info.tile()(Ax_channel, vi) = info.tile().type(vi) == INTERIOR ? shared_data.negativeLap(h, l_ijk, false) : 0;
+        //
+        //auto g_ijk = acc.composeGlobalCoord(info.mTileCoord, l_ijk);
+        //if (g_ijk == Coord(47, 126, 83)) {
+        //    printf("CMG l_ijk: %d %d %d\n", l_ijk[0], l_ijk[1], l_ijk[2]);
+        //}
+        //else continue;
+
 		info.tile()(Ax_channel, vi) = shared_data.negativeLap(h, l_ijk, calc_diag);
     }
 }

@@ -99,7 +99,7 @@ void CalculateNeighborTiles(HADeviceGrid<Tile>& grid) {
         }
     }, -1, LEAF | GHOST | NONLEAF, LAUNCH_SUBTREE);
 }
-
+ 
 
 //follow the same launch convention as launchVoxelFunc
 __global__ void Dot128Kernel(HATileAccessor<PoissonTile<T>> acc, HATileInfo<PoissonTile<T>>* infos, const uint8_t in1_channel, const uint8_t in2_channel, double* sum, int subtree_level, uint8_t launch_types) {

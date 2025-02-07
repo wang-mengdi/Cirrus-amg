@@ -169,6 +169,7 @@ public:
     __device__ T negativeLap(Coord l_ijk) {
         T x0 = xValueT(l_ijk);
 		T sum = x0 * diagValueT(l_ijk);
+        //printf("AMG x0 %f diag %f sum %f\n", x0, diagValueT(l_ijk), sum);
 
 		for (int axis : { 0, 1, 2 }) {
 			for (int sgn : { -1, 1 }) {
@@ -178,7 +179,11 @@ public:
                 Coord ul_ijk = l_ijk;
                 ul_ijk[axis] += (sgn == -1) ? 0 : 1;
 
+			    
+
                 sum += offDiagValueT(axis, ul_ijk) * xValueT(nl_ijk);
+
+                //printf("AMG axis %d sgn %d nl_ijk %d %d %d ul_ijk %d %d %d off %f xvalueT %f sum %f\n", axis, sgn, nl_ijk[0], nl_ijk[1], nl_ijk[2], ul_ijk[0], ul_ijk[1], ul_ijk[2], offDiagValueT(axis, ul_ijk), xValueT(nl_ijk), sum);
 			}
 		}
 
@@ -296,6 +301,13 @@ __global__ void NegativeLaplacianSameLevelAMG128Kernel(const HATileAccessor<Tile
         //voxel idx
         int vi = i * 128 + ti;
 		Coord l_ijk = acc.localOffsetToCoord(vi);
+
+		//auto g_ijk = acc.composeGlobalCoord(info.mTileCoord, l_ijk);
+  //      if (g_ijk == Coord(47, 126, 83)) {
+  //          printf("l_ijk: %d %d %d\n", l_ijk[0], l_ijk[1], l_ijk[2]);
+  //      }
+  //      else continue;
+
         info.tile()(Ax_channel, vi) = info.tile().type(vi) == INTERIOR ? shared_data.negativeLap(l_ijk) : 0;
     }
 }

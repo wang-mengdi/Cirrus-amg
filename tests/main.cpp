@@ -13,8 +13,9 @@ int main(int argc, char** argv) {
 		TestGrids::twosources67,
 		}) {
 
-		SolverTests::TestNeumannDirichletRecovery(grid_name, "cmg");
-		//SolverTests::TestNeumannDirichletRecovery(grid_name, "amg");
+		//SolverTests::TestLaplacianCMGAndAMG(grid_name);
+		//SolverTests::TestNeumannDirichletRecovery(grid_name, "cmg");
+		SolverTests::TestNeumannDirichletRecovery(grid_name, "amg");
 	}
 	return 0;
 }
