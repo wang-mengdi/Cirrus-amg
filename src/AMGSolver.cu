@@ -8,7 +8,7 @@
 #include "PoissonIOFunc.h"
 #include <polyscope/polyscope.h>
 
-__forceinline__ __device__ T NegativeLaplacianCoeff(T h, uint8_t ttype0, uint8_t ttype1, uint8_t ctype0, const uint8_t ctype1) {
+__forceinline__ __device__ T NegativeLaplacianCoeff(T h, uint8_t ctype0, const uint8_t ctype1) {
     int has_neumann = int(ctype0 & NEUMANN || ctype1 & NEUMANN);
     return has_neumann ? 0 : h;
 }
@@ -32,7 +32,6 @@ void CalculateAMGCoefficients(HADeviceGrid<Tile>& grid, const int coeff_channel,
         //     }
 
         //uint8_t ttype0 = info.mType == NONLEAF ? LEAF : info.mType;
-        uint8_t ttype0 = info.mType;
         uint8_t ctype0 = tile.type(l_ijk);
 
         Tile::T diag_coeff = 0;
@@ -42,36 +41,22 @@ void CalculateAMGCoefficients(HADeviceGrid<Tile>& grid, const int coeff_channel,
         acc.iterateSameLevelNeighborVoxels(info, l_ijk,
             [&]__device__(const HATileInfo<Tile>&ninfo, const Coord & nl_ijk, const int axis, const int sgn) {
 
-            uint8_t ttype1 = ttype0;
             uint8_t ctype1;
             T coeff = 0;
 
             if (ninfo.empty()) {
-                ttype1 = ttype0;
                 ctype1 = DIRICHLET;
-
             }
             else {
                 auto& ntile = ninfo.tile();
                 //ttype1 = ninfo.mType == NONLEAF ? LEAF : ninfo.mType;
-                ttype1 = ninfo.mType;
                 ctype1 = ntile.type(nl_ijk);
             }
 
-            coeff = NegativeLaplacianCoeff(h, ttype0, ttype1, ctype0, ctype1) * h * h * h;
-
-
+            coeff = NegativeLaplacianCoeff(h, ctype0, ctype1);
 
             if (sgn == -1 && ctype1 == INTERIOR)  off_diag_coeff[axis] = -coeff;
             diag_coeff += coeff;
-
-
-            //{
-            //    auto g_ijk = acc.localToGlobalCoord(info, l_ijk);
-            //    if (info.mLevel == 3 && g_ijk == Coord(31 + 1, 46, 62)) {
-            //        printf("compute axis %d sgn %d coeff %f ttype0 %d ttype1 %d ctype0 %d ctype1 %d\n", axis, sgn, coeff, ttype0, ttype1, ctype0, ctype1);
-            //    }
-            //}
 
         });
 
@@ -82,8 +67,6 @@ void CalculateAMGCoefficients(HADeviceGrid<Tile>& grid, const int coeff_channel,
         //tile(coeff_channel + 3, l_ijk) = diag_coeff;
 		tile(coeff_channel + 3, l_ijk) = (ctype0 == INTERIOR) ? diag_coeff : 0;
     }, launch_tile_types);
-        //level, launch_types, mode
-    //);
 }
 
 void CoarsenTypesAndAMGCoeffs(HADeviceGrid<Tile>& grid, const int coeff_channel, const T R_matrix_coeff) {

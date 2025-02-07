@@ -126,28 +126,8 @@ __host__ std::vector<int> RefineLeafsOneStep(HADeviceGrid<Tile>& grid, ABFunc le
                     Coord offset = Acc::childIndexToOffset(ci);
 					Coord c_ijk = Acc::childCoord(info.mTileCoord, offset);
 
-                    //if (info.mLevel == 2 && info.mTileCoord == Coord(0, 1, 3)) {
-                    //    Info("refine tile {} to ci {} offset {} c_ijk {}", info.mTileCoord, ci, offset, c_ijk);
-                    //}
-
                     grid.setTileHost(i + 1, c_ijk, tile.childTile(offset), LEAF);
                 }
-
-                //Acc::iterateChildCoords(info.mTileCoord,
-                //    [&](const Coord& c_ijk) {
-                //        //auto& c_info = grid.mHostLayers[i + 1].tileInfo(c_ijk);
-                //        auto& c_info = h_acc.tileInfo(i + 1, c_ijk);
-                //        if (c_info.empty()) {
-                //            //create a new tile
-                //            grid.setTileHost(i + 1, c_ijk, tile.childTile(), LEAF);
-                //            //grid.mHostLayers[i + 1].setTile(c_ijk, Tile(), i + 1, LEAF);
-                //        }
-                //        else {
-                //            //already created (for example, may be a ghost tile), set it to leaf
-                //            c_info.mType = LEAF;
-                //        }
-                //    });
-
             }
         }
 
@@ -414,11 +394,10 @@ double VolumeWeightedNorm(HADeviceGrid<Tile>& grid, const int order, const int i
 
 void MeanAsync(HADeviceGrid<Tile>& grid, const int in_channel, const uint8_t launch_tile_types, double* d_mean, double* d_count);
 
-void PropagateValuesToGhostTiles(HADeviceGrid<Tile>& grid, const int coarse_channel, const int fine_channel);
 //In general, cell values can be propagated and accumulated casually
 //however, we have to take caution when propagating and accumulating face values
 //because 
-void PropagateValues(HADeviceGrid<Tile>& grid, const int coarse_channel, const int fine_channel, const int fine_level, const uint8_t propagated_tile_types, const LaunchMode mode);
+//void PropagateValues(HADeviceGrid<Tile>& grid, const int coarse_channel, const int fine_channel, const int fine_level, const uint8_t propagated_tile_types, const LaunchMode mode);
 
 //copy values from parents for tiles specified by propagate_tile_types
 //for example, GHOST will propagate ghost values from parents
@@ -443,8 +422,6 @@ void CalcLeafNodeValuesFromCellCenters(HADeviceGrid<Tile>& grid, const int cell_
 
 __device__ Tile::T InterpolateCellValue(const HATileAccessor<Tile>& acc, const Vec& pos, const int cell_channel, const int node_channel);
 __device__ Vec InterpolateFaceValue(const HATileAccessor<Tile>& acc, const Vec& pos, const int u_channel, const int node_u_channel);
-
-__device__ thrust::tuple<uint8_t, uint8_t> FaceNeighborCellTypes(const HATileAccessor<Tile>& acc, const HATileInfo<Tile>& info, const Coord& l_ijk, const int axis);
 
 template<class FuncII>
 __hostdev__ void IterateFaceNeighborCellTypes(const HATileAccessor<Tile>& acc, const HATileInfo<Tile>& info, const Coord& l_ijk, const int axis, FuncII f) {

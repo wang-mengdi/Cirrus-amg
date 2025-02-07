@@ -3,6 +3,27 @@
 
 int laplacian_total_tile_counts = 0;
 
+//void PropagateValuesToGhostTiles(HADeviceGrid<Tile>& grid, const int coarse_channel, const int fine_channel) {
+//    grid.launchVoxelFuncOnAllTiles(
+//        [=]__device__(HATileAccessor<Tile> &acc, HATileInfo<Tile> &info, const Coord & l_ijk) {
+//        auto& tile = info.tile();
+//        if (!tile.isInterior(l_ijk)) {
+//            tile(fine_channel, l_ijk) = Tile::BACKGROUND_VALUE;
+//            return;
+//        }
+//        auto fine_g_ijk = acc.localToGlobalCoord(info, l_ijk);
+//        auto coarse_g_ijk = acc.parentCoord(fine_g_ijk);
+//        HATileInfo<Tile> coarse_info; Coord coarse_l_ijk;
+//        acc.findVoxel(info.mLevel - 1, coarse_g_ijk, coarse_info, coarse_l_ijk);
+//        if (!coarse_info.empty()) {
+//            auto& coarse_tile = coarse_info.tile();
+//            tile(fine_channel, l_ijk) = coarse_tile.interiorValue(coarse_channel, coarse_l_ijk);
+//        }
+//        else tile(fine_channel, l_ijk) = Tile::BACKGROUND_VALUE;
+//    },
+//        GHOST
+//    );
+//}
 
 //__hostdev__ __forceinline__ int3 localIdxToInt3(int _idx)
 //{
@@ -202,7 +223,8 @@ void NegativeLaplacianSameLevel128(HADeviceGrid<Tile>& grid, thrust::device_vect
 //on all leafs of the tree
 void FullNegativeLaplacian(HADeviceGrid<Tile>& grid, const int x_channel, const int Ax_channel, bool calc_diag) {
     //PropagateValues(grid, x_channel, x_channel, -1, GHOST, LAUNCH_SUBTREE);
-    PropagateValuesToGhostTiles(grid, x_channel, x_channel);
+    //PropagateValuesToGhostTiles(grid, x_channel, x_channel);
+    PropagateToChildren(grid, x_channel, x_channel, -1, GHOST, LAUNCH_SUBTREE, INTERIOR | DIRICHLET | NEUMANN);
 
     NegativeLaplacianSameLevel128(grid, grid.dAllTiles, grid.dAllTiles.size(), -1, LEAF | GHOST, x_channel, Ax_channel, calc_diag);
     //NegativeLaplacianSameLevel(grid, x_channel, Ax_channel, -1, LEAF | GHOST, LAUNCH_SUBTREE, false);

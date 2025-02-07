@@ -582,28 +582,6 @@ double VolumeWeightedNorm(HADeviceGrid<Tile>& grid, const int order, const int i
     }
 }
 
-void PropagateValuesToGhostTiles(HADeviceGrid<Tile>& grid, const int coarse_channel, const int fine_channel) {
-    grid.launchVoxelFuncOnAllTiles(
-        [=]__device__(HATileAccessor<Tile> &acc, HATileInfo<Tile> &info, const Coord & l_ijk) {
-        auto& tile = info.tile();
-        if (!tile.isInterior(l_ijk)) {
-            tile(fine_channel, l_ijk) = Tile::BACKGROUND_VALUE;
-            return;
-        }
-        auto fine_g_ijk = acc.localToGlobalCoord(info, l_ijk);
-        auto coarse_g_ijk = acc.parentCoord(fine_g_ijk);
-        HATileInfo<Tile> coarse_info; Coord coarse_l_ijk;
-        acc.findVoxel(info.mLevel - 1, coarse_g_ijk, coarse_info, coarse_l_ijk);
-        if (!coarse_info.empty()) {
-            auto& coarse_tile = coarse_info.tile();
-            tile(fine_channel, l_ijk) = coarse_tile.interiorValue(coarse_channel, coarse_l_ijk);
-        }
-        else tile(fine_channel, l_ijk) = Tile::BACKGROUND_VALUE;
-    },
-        GHOST
-    );
-}
-
 //copy values from parents for tiles specified by propagate_tile_types
 //for example, GHOST will propagate ghost values from parents
 //this is actually prolongation with sum kernel
@@ -975,23 +953,6 @@ __device__ Vec InterpolateFaceValue(const HATileAccessor<Tile>& acc, const Vec& 
         vec[axis] = (1 - w) * v0 + w * v1;
     }
     return vec;
-}
-
-__device__ thrust::tuple<uint8_t, uint8_t> FaceNeighborCellTypes(const HATileAccessor<Tile>& acc, const HATileInfo<Tile>& info, const Coord& l_ijk, const int axis) {
-    auto& tile = info.tile();
-    uint8_t type0 = tile.type(l_ijk);
-
-    auto g_ijk = acc.localToGlobalCoord(info, l_ijk);
-    auto ng_ijk = g_ijk; ng_ijk[axis]--;
-    HATileInfo<Tile> n_info; Coord nl_ijk;
-    acc.findVoxel(info.mLevel, ng_ijk, n_info, nl_ijk);
-    uint8_t type1;
-    if (!n_info.empty()) {
-        auto& n_tile = n_info.tile();
-        type1 = n_tile.type(nl_ijk);
-    }
-    else type1 = DIRICHLET;
-    return thrust::make_tuple(type0, type1);
 }
 
 void ExtrapolateVelocity(HADeviceGrid<Tile>& grid, const int u_channel, const int num_iters) {

@@ -317,50 +317,6 @@ public:
 		}
 	}
 
-	//here l_ijk is node local coord, it can be in [0,8], and the coordinate calculation is correct
-	//each component in off is either -1 or 0, indicating the cell just lower or the cell just upper
-	//will try to find the neighbor cell, that:
-	//must be LEAF or GHOST
-	//is at the finest level
-	__hostdev__ void findNodeNeighborLeafOrGhost(const HATileInfo<Tile>& info, const Coord& l_ijk, const Coord& off, HATileInfo<Tile>& nb_info, Coord& nb_l_ijk) const {
-		Coord g_ijk = composeGlobalCoord(info.mTileCoord, l_ijk);
-		Coord nb_g_ijk = g_ijk + off;
-
-		int level = info.mLevel;
-		findVoxel(level, nb_g_ijk, nb_info, nb_l_ijk);
-
-		//from coarse to fine: NONLEAF, NONLEAF, NONLEAF..., LEAF, [GHOST], EMPTY, EMPTY, ...
-
-		if (!nb_info.empty()) {
-			//should go down
-			HATileInfo<Tile> tmp_info; Coord tmp_l_ijk;
-			while (level <= mMaxLevel) {
-				Coord child_offset(0, 0, 0);
-				//if off is -1, the child offset is 1, because we are looking for the face just lower
-				//if off is 0, the child offset is 0, because we are looking for the face just upper
-				child_offset[0] = (off[0] == 0) ? 0 : 1;
-				child_offset[1] = (off[1] == 0) ? 0 : 1;
-				child_offset[2] = (off[2] == 0) ? 0 : 1;
-				nb_g_ijk = childCoord(nb_g_ijk, child_offset);
-				findVoxel(++level, nb_g_ijk, tmp_info, tmp_l_ijk);
-				if (tmp_info.empty()) break;
-				//the last recorded nb_info, nb_l_ijk is the correct one
-				//it must be either LEAF or GHOST
-				nb_info = tmp_info;
-				nb_l_ijk = tmp_l_ijk;
-			}
-		}
-		else {
-			//should go up
-			while (level > 0) {
-				nb_g_ijk = parentCoord(nb_g_ijk);
-				findVoxel(--level, nb_g_ijk, nb_info, nb_l_ijk);
-				//if (nb_info.isLeaf()) break;
-				if (nb_info.mType & (LEAF | GHOST)) break;
-			}
-		}
-	}
-
 	__hostdev__ bool findVoxelAndFrac(const Vec& world_pos, uint8_t tile_types, HATileInfo<Tile>& info, Coord& l_ijk, Vec& frac) const {
 		for (int i = mMaxLevel; i >= 0; i--) {
 			Coord g_ijk;

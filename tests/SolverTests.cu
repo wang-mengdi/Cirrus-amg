@@ -298,21 +298,40 @@ namespace SolverTests {
         //}
 
 
+        //{
+        //    CalculateNeighborTiles(grid);
+
+        //    _sleep(200);
+        //    CMGSolver solver(1.0, 1.0);
+        //    //Copy(grid, Tile::b_channel, Tile::phi_channel, -1, LEAF, LAUNCH_SUBTREE, INTERIOR | DIRICHLET | NEUMANN);
+        //    CPUTimer<std::chrono::microseconds> timer;
+        //    timer.start();
+        //    auto [iters, err] = solver.solve(grid, true, 1000, 1e-6, 1, 10, 1, false);
+        //    CheckCudaError("VCycleMultigrid done");
+        //    float elapsed = timer.stop("CMGPCG Async");
+        //    int total_cells = grid.numTotalTiles() * Tile::SIZE;
+        //    float cells_per_second = (total_cells + 0.0) / (elapsed / 1e6);
+        //    Info("Total {:.5}M cells, CMGPCG Async speed {:.5} M cells /s", total_cells / (1024.0 * 1024), cells_per_second / (1024.0 * 1024));
+        //    Info("CMGPCG solved in {} iterations with error {}, average iteration throughput {:.5}M cell/s", iters, err, cells_per_second * iters / (1024.0 * 1024));
+        //    _sleep(200);
+
+        //}
+
         {
             CalculateNeighborTiles(grid);
 
             _sleep(200);
-            CMGSolver solver(1.0, 1.0);
+            GMGSolver solver(1.0, 1.0);
             //Copy(grid, Tile::b_channel, Tile::phi_channel, -1, LEAF, LAUNCH_SUBTREE, INTERIOR | DIRICHLET | NEUMANN);
             CPUTimer<std::chrono::microseconds> timer;
             timer.start();
             auto [iters, err] = solver.solve(grid, true, 1000, 1e-6, 1, 10, 1, false);
             CheckCudaError("VCycleMultigrid done");
-            float elapsed = timer.stop("MGPCG Async");
+            float elapsed = timer.stop("GMGPCG Async");
             int total_cells = grid.numTotalTiles() * Tile::SIZE;
             float cells_per_second = (total_cells + 0.0) / (elapsed / 1e6);
-            Info("Total {:.5}M cells, MGPCG Async speed {:.5} M cells /s", total_cells / (1024.0 * 1024), cells_per_second / (1024.0 * 1024));
-            Info("MGPCG solved in {} iterations with error {}, average iteration throughput {:.5}M cell/s", iters, err, cells_per_second * iters / (1024.0 * 1024));
+            Info("Total {:.5}M cells, GMGPCG Async speed {:.5} M cells /s", total_cells / (1024.0 * 1024), cells_per_second / (1024.0 * 1024));
+            Info("GMGPCG solved in {} iterations with error {}, average iteration throughput {:.5}M cell/s", iters, err, cells_per_second * iters / (1024.0 * 1024));
             _sleep(200);
 
         }
