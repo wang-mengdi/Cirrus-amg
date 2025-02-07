@@ -70,9 +70,11 @@ namespace SolverTests {
         }
     }
 
-    void TestNeumannDirichletRecovery(const TestGrids grid_name, const std::string algorithm) {
+
+
+    __host__ void TestNeumannDirichletRecovery(TestGrids grid_name, const std::string algorithm) {
         //algorithm: "gmg"/"cmg"/"amg"
-        Info("Test Poisson Solver on Neumann/Dirichlet BC on grid {} with given function for {}", int(grid_name), algorithm);
+        Info("Test Poisson Solver on Neumann/Dirichlet BC on grid {} with given function for {}", ToString(grid_name), algorithm);
 
         uint32_t scale = 8;
         float h = 1.0 / scale;
