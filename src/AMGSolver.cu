@@ -8,30 +8,9 @@
 #include "PoissonIOFunc.h"
 #include <polyscope/polyscope.h>
 
-__hostdev__ __forceinline__ int3 localIdxToInt3(int _idx)
-{
-    return { _idx / 64  , (_idx / 8) % 8, _idx % 8 };
-}
-
-//it's the same as the one in PoissonSolverOptimized.cu
 __forceinline__ __device__ T NegativeLaplacianCoeff(T h, uint8_t ttype0, uint8_t ttype1, uint8_t ctype0, const uint8_t ctype1) {
-    ////tile types check
-    ////we only calculate LEAF-GHOST and LEAF-LEAF terms
-    ////and we set delta_h correspondingly
-
-    int both_leafs = int((ttype0 & LEAF) && (ttype1 & LEAF));
-    int one_leaf_one_ghost = int((ttype0 & LEAF && ttype1 & GHOST) || (ttype0 & GHOST && ttype1 & LEAF));
-    //dh=h if 2 LEAFS
-    //dh=1.5h if 1 LEAF 1 GHOST
-    //ignore for all others
-    //1.5f is important because FP64 operations will slow down the kernel
-
-    T one_over_delta_h = (1 / h) * both_leafs + (1 / (1.5f * h)) * one_leaf_one_ghost;
-    //T one_over_delta_h = ((1 / h) * (both_leafs)+(1.5f / h) * (1 - both_leafs)) * (1 - both_ghosts);
-    //ignore if one of them is NEUMANN
     int has_neumann = int(ctype0 & NEUMANN || ctype1 & NEUMANN);
-    //T coeff = one_over_delta_h / h * (1 - has_neumann);
-    return has_neumann ? 0 : one_over_delta_h / h;
+    return has_neumann ? 0 : h;
 }
 
 //coeff_channel+0,1,2: 3 off-diagonal coefficients
@@ -107,13 +86,13 @@ void CalculateAMGCoefficients(HADeviceGrid<Tile>& grid, const int coeff_channel,
     //);
 }
 
-void CoarsenTypesAndAMGCoeffs(HADeviceGrid<Tile>& grid, const int coeff_channel, const T one_over_alpha) {
+void CoarsenTypesAndAMGCoeffs(HADeviceGrid<Tile>& grid, const int coeff_channel, const T R_matrix_coeff) {
     // Before calling this function, cell types for LEAFs must be filled
     // This function will:
     // 1. fill GHOST cell types
     // 2. calculate off-diag and diag coeffs for LEAF and GHOST cells
     // 3. calculate cell types off-diag and diag coeffs for NONLEAF cells
-	// one_over_alpha is the coefficient used for coarsening: we have P=alpha*R^T, and all non-zero entries in R are one_over_alpha
+	// all non-zero entries in R equal to R_matrix_coeff
 
     //step 1: fill GHOST cell types
     grid.launchVoxelFuncOnAllTiles(
@@ -189,9 +168,9 @@ void CoarsenTypesAndAMGCoeffs(HADeviceGrid<Tile>& grid, const int coeff_channel,
             tile.type(l_ijk) = interior_cnt > 0 ? INTERIOR : DIRICHLET;
 
             for (int axis : {0, 1, 2}) {
-                tile(coeff_channel + axis, l_ijk) = offs[axis] * one_over_alpha;
+                tile(coeff_channel + axis, l_ijk) = offs[axis] * R_matrix_coeff;
             }
-            tile(coeff_channel + 3, l_ijk) = diag_sum * one_over_alpha;
+            tile(coeff_channel + 3, l_ijk) = diag_sum * R_matrix_coeff;
         }
         if (info.mType == LEAF && has_ghost_child) {
             for (int axis : {0, 1, 2}) {
@@ -287,103 +266,6 @@ __device__ static Coord FaceNeighborLocalCoord(int axis, int sgn, const int vi) 
 __device__ static Coord FastLocalOffsetToCoord(int vi) {
     return { vi / 64, (vi / 8) % 8, vi % 8 };
 }
-
-//__inline__ __device__ void LoadSharedMemoryAMGTileData(const HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, SharedAMGLaplacianTileData& shared_data, const int x_channel, const int coeff_channel, int ti) {
-    //constexpr int SN = 10;
-    //const int shared_offset = 1;
-
-    //auto& tile = info.tile();
-
-    //// Load 4 voxels into the shared memory region from the main tile
-    //for (int i = 0; i < 4; i++) {
-    //    // Voxel index
-    //    int vi = i * 128 + ti;
-    //    int3 l_ijk = localIdxToInt3(vi);
-    //    int si = l_ijk.x + shared_offset, sj = l_ijk.y + shared_offset, sk = l_ijk.z + shared_offset;
-
-    //    // Load x, off-diagonal and diagonal coefficients
-    //    shared_data.x[si][sj][sk] = tile(x_channel, vi);
-    //    for (int axis = 0; axis < 3; axis++) {
-    //        shared_data.off_diag[axis][si][sj][sk] = tile(coeff_channel + axis, vi);  // Access off-diagonal coeff by axis
-    //    }
-    //    shared_data.diag[si][sj][sk] = tile(coeff_channel + 3, vi);  // Load diagonal coefficient
-    //}
-
-
-    //Coord b_ijk = info.mTileCoord;
-
-    //// Load boundaries for x-, y-, z- (negative) boundaries
-    //if (ti < 64) {
-    //    int fi = ti;
-    //    for (int axis : {0, 1, 2}) {
-    //        Coord nb_ijk = b_ijk; nb_ijk[axis]--;
-    //        Coord nl_ijk = acc.rotateCoord(axis, Coord(7, fi / 8, fi % 8));
-    //        Coord s_ijk = nl_ijk + Coord(shared_offset, shared_offset, shared_offset);
-    //        s_ijk[axis] = 0;
-    //        int si = s_ijk[0], sj = s_ijk[1], sk = s_ijk[2];
-
-    //        if (tile.mNeighbors[axis].empty()) {
-    //            shared_data.x[si][sj][sk] = 0;
-    //            for (int ax = 0; ax < 3; ax++) {
-    //                shared_data.off_diag[ax][si][sj][sk] = 0;
-    //            }
-    //            shared_data.diag[si][sj][sk] = 0;
-    //        }
-    //        else {
-    //            //HATileInfo<Tile> ninfo = acc.tileInfo(info.mLevel, nb_ijk);
-    //            auto ninfo = tile.mNeighbors[axis];
-    //            auto& ntile = ninfo.tile();
-				////T* __restrict__ nx_data = ntile.mData[x_channel];
-				////T* __restrict__ noff0_data = ntile.mData[coeff_channel];
-				////T* __restrict__ noff1_data = ntile.mData[coeff_channel + 1];
-				////T* __restrict__ noff2_data = ntile.mData[coeff_channel + 2];
-				////T* __restrict__ ndiag_data = ntile.mData[coeff_channel + 3];
-
-				////int nvi = acc.localCoordToOffset(nl_ijk);
-				////shared_data.x[si][sj][sk] = nx_data[nvi];
-				////shared_data.off_diag[0][si][sj][sk] = noff0_data[nvi];
-				////shared_data.off_diag[1][si][sj][sk] = noff1_data[nvi];
-				////shared_data.off_diag[2][si][sj][sk] = noff2_data[nvi];
-				////shared_data.diag[si][sj][sk] = ndiag_data[nvi];
-
-    //            shared_data.x[si][sj][sk] = ntile(x_channel, nl_ijk);
-    //            for (int ax = 0; ax < 3; ax++) {
-    //                shared_data.off_diag[ax][si][sj][sk] = ntile(coeff_channel + ax, nl_ijk);
-    //            }
-    //            shared_data.diag[si][sj][sk] = ntile(coeff_channel + 3, nl_ijk);
-    //        }
-    //    }
-    //}
-    //else {
-    //    // Load boundaries for x+, y+, z+ (positive) boundaries
-    //    int fi = ti - 64;
-
-    //    for (int axis : {0, 1, 2}) {
-    //        Coord nb_ijk = b_ijk; nb_ijk[axis]++;
-    //        Coord nl_ijk = acc.rotateCoord(axis, Coord(0, fi / 8, fi % 8));
-    //        Coord s_ijk = nl_ijk + Coord(shared_offset, shared_offset, shared_offset);
-    //        s_ijk[axis] = SN - 1;
-    //        int si = s_ijk[0], sj = s_ijk[1], sk = s_ijk[2];
-
-    //        if (tile.mNeighbors[axis + 3].empty()) {
-    //            shared_data.x[si][sj][sk] = 0;
-    //            for (int ax = 0; ax < 3; ax++) {
-    //                shared_data.off_diag[ax][si][sj][sk] = 0;
-    //            }
-    //            shared_data.diag[si][sj][sk] = 0;
-    //        }
-    //        else {
-    //            auto ninfo = tile.mNeighbors[axis + 3];
-    //            auto& ntile = ninfo.tile();
-    //            shared_data.x[si][sj][sk] = ntile(x_channel, nl_ijk);
-    //            for (int ax = 0; ax < 3; ax++) {
-    //                shared_data.off_diag[ax][si][sj][sk] = ntile(coeff_channel + ax, nl_ijk);
-    //            }
-    //            shared_data.diag[si][sj][sk] = ntile(coeff_channel + 3, nl_ijk);
-    //        }
-    //    }
-    //}
-//}
 
 __device__ void LoadAMGLaplacianTileDataAndTileType(const HATileAccessor<Tile>& acc, const HATileInfo<Tile>& info, AMGLaplacianTileData& shared_data, const int x_channel, const int coeff_channel, int ti) {
     constexpr int SN = 10;
@@ -498,37 +380,8 @@ __global__ void NegativeLaplacianAMG128Kernel(const HATileAccessor<Tile> acc, HA
         //voxel idx
         int vi = i * 128 + ti;
 		Coord l_ijk = acc.localOffsetToCoord(vi);
-        //int3 l_ijk = localIdxToInt3(vi);
-        //int si = l_ijk.x + shared_offset, sj = l_ijk.y + shared_offset, sk = l_ijk.z + shared_offset;
-
-        
-        //{
-        //    auto g_ijk = acc.localToGlobalCoord(info, Coord(l_ijk.x, l_ijk.y, l_ijk.z));
-        //    if (info.mLevel == 2 && g_ijk == Coord(5, 16, 29)) {
-        //        for (int axis : {0, 1, 2}) {
-        //            for (int sgn : {-1, 1}) {
-        //                Coord ncrd(si, sj, sk);
-        //                ncrd[axis] += sgn;
-        //                Coord ccrd(si, sj, sk);
-        //                ccrd[axis] += (sgn == -1) ? 0 : 1;
-
-        //                
-        //                printf("si %d sj %d sk %d axis %d sgn %d type %d ntype %d term %f\n",si,sj,sk, axis, sgn, ttype_s[si][sj][sk], ttype_s[ncrd[0]][ncrd[1]][ncrd[2]],(ttype_s[ncrd[0]][ncrd[1]][ncrd[2]] == NONLEAF) ? 0 : shared_data.offDiagVal(axis, ccrd) * (shared_data.xVal(ncrd) - shared_data.x[si][sj][sk]));
-        //            }
-        //        }
-        //    }
-        //}
 
         info.tile()(Ax_channel, vi) = info.tile().type(vi) == INTERIOR ? shared_data.negativeLapSameLevel(l_ijk) : 0;
-
-
-        //if (cross_level) {
-        //    info.tile()(Ax_channel, vi) = info.tile().type(vi) == INTERIOR ? shared_data.negativeLapCrossLevel(l_ijk) : 0;
-        //}
-        //else {
-        //    //info.tile()(Ax_channel, vi) = shared_data.negativeLapSameLevel(l_ijk);
-        //    info.tile()(Ax_channel, vi) = info.tile().type(vi) == INTERIOR ? shared_data.negativeLapSameLevel(l_ijk) : 0;
-        //}
     }
 }
 
@@ -607,7 +460,7 @@ void GaussSeidelAMG(int iters, int order, HADeviceGrid<Tile>& grid, const int le
 
 
 //must initialize to zero 
-void VCycleAMG(HADeviceGrid<Tile>& grid, const int x_channel, const int f_channel, const int tmp_channel, const int rhs_channel, const int coeff_channel, int level_iters, int coarsest_iters, const T one_over_alpha, const T prolong_coeff) {
+void VCycleAMG(HADeviceGrid<Tile>& grid, const int x_channel, const int f_channel, const int tmp_channel, const int rhs_channel, const int coeff_channel, int level_iters, int coarsest_iters, const T restrict_coeff, const T prolong_coeff) {
     //int D_channel = Tile::D_channel;
 
     CPUTimer<std::chrono::microseconds> timer;
@@ -660,7 +513,7 @@ void VCycleAMG(HADeviceGrid<Tile>& grid, const int x_channel, const int f_channe
 
         //restrict residual to the next level
         //that fills NONLEAF cells of the next level
-        Restrict(grid, tmp_channel, rhs_channel, i - 1, NONLEAF, one_over_alpha);
+        Restrict(grid, tmp_channel, rhs_channel, i - 1, NONLEAF, restrict_coeff);
         Copy(grid, f_channel, rhs_channel, i - 1, LEAF, LAUNCH_LEVEL, INTERIOR | DIRICHLET | NEUMANN);
         //AccumulateValues(grid, tmp_channel, rhs_channel, i - 1, LEAF, LAUNCH_LEVEL, true);
         AccumulateToParents(grid, tmp_channel, rhs_channel, i - 1, LEAF, LAUNCH_LEVEL, INTERIOR | DIRICHLET | NEUMANN, 1., true);
@@ -716,7 +569,7 @@ void VCycleAMG(HADeviceGrid<Tile>& grid, const int x_channel, const int f_channe
 
 void AMGSolver::prepareTypesAndCoeffs(HADeviceGrid<Tile>& grid)
 {
-	CoarsenTypesAndAMGCoeffs(grid, coeff_channel, one_over_alpha);
+	CoarsenTypesAndAMGCoeffs(grid, coeff_channel, R_matrix_coeff);
 }
 
 std::tuple<int, double> AMGSolver::solve(HADeviceGrid<Tile>& grid, bool verbose, int max_iters, double relative_tolerance, int level_iters, int coarsest_iters, int sync_stride, bool is_pure_neumann)
@@ -749,7 +602,7 @@ std::tuple<int, double> AMGSolver::solve(HADeviceGrid<Tile>& grid, bool verbose,
     ////z0=Minv*r0
     //r_channel->z_channel
     //VCycleMultigrid(grid, Tile::z_channel, Tile::r_channel, Tile::Ap_channel, Tile::tmp_channel, Tile::D_channel, level_iters, coarsest_iters);
-    VCycleAMG(grid, Tile::z_channel, Tile::r_channel, Tile::Ap_channel, Tile::tmp_channel, coeff_channel, level_iters, coarsest_iters, one_over_alpha, prolong_coeff);
+    VCycleAMG(grid, Tile::z_channel, Tile::r_channel, Tile::Ap_channel, Tile::tmp_channel, coeff_channel, level_iters, coarsest_iters, R_restrict_coeff, prolong_coeff);
 
     //p0=z0
     Copy(grid, Tile::z_channel, Tile::p_channel, -1, LEAF, LAUNCH_SUBTREE, INTERIOR | DIRICHLET | NEUMANN);
@@ -812,7 +665,7 @@ std::tuple<int, double> AMGSolver::solve(HADeviceGrid<Tile>& grid, bool verbose,
         //z_{k+1} = Minv * r_{k+1}
         //r->z
         //VCycleMultigrid(grid, Tile::z_channel, Tile::r_channel, Tile::Ap_channel, Tile::tmp_channel, Tile::D_channel, level_iters, coarsest_iters);
-		VCycleAMG(grid, Tile::z_channel, Tile::r_channel, Tile::Ap_channel, Tile::tmp_channel, coeff_channel, level_iters, coarsest_iters, one_over_alpha, prolong_coeff);
+		VCycleAMG(grid, Tile::z_channel, Tile::r_channel, Tile::Ap_channel, Tile::tmp_channel, coeff_channel, level_iters, coarsest_iters, R_restrict_coeff, prolong_coeff);
 
 
         //gamma_old = gamma;

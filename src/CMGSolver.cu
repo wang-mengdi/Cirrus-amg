@@ -1,41 +1,7 @@
 #include "CMGSolver.h"
 #include "PoissonSolver.h"
 
-
-//__hostdev__ __forceinline__ int3 localIdxToInt3(int _idx)
-//{
-//    return { _idx / 64  , (_idx / 8) % 8, _idx % 8 };
-//}
-
 __forceinline__ __device__ T NegativeLaplacianCoeff(T h, uint8_t ttype0, uint8_t ttype1, uint8_t ctype0, const uint8_t ctype1) {
-    //   ////tile types check
-    //   ////we only calculate LEAF-GHOST and LEAF-LEAF terms
-    //   ////and we set delta_h correspondingly
-    //   //T delta_h = h;
-    //   //if (ttype & LEAF && nttype & LEAF) delta_h = h;
-    //   //else if (ttype & LEAF && nttype & GHOST) delta_h = 1.5 * h;
-    //   //else if (ttype & GHOST && nttype & LEAF) delta_h = 1.5 * h;
-    //   //else continue;
-
-    //   ////if one of them are NEUMANN we will not count this flux
-    //   //if (ctype & NEUMANN || nctype & NEUMANN) continue;
-    //   //sum += (x0 - x1) / (delta_h * h);
-
-    //   int both_leafs = int((ttype0 & LEAF) && (ttype1 & LEAF));
-    //   int one_leaf_one_ghost = int((ttype0 & LEAF && ttype1 & GHOST) || (ttype0 & GHOST && ttype1 & LEAF));
-    //   //dh=h if 2 LEAFS
-    //   //dh=1.5h if 1 LEAF 1 GHOST
-    //   //ignore for all others
-    //   //1.5f is important because FP64 operations will slow down the kernel
-       ////1/(1.5h)=1/h*1/(3/2)=1/h*2/3=2/3*one_over_h
-
-    //   T one_over_delta_h = one_over_h * both_leafs + (2 * one_over_h / 3) * one_leaf_one_ghost;
-    //   //T one_over_delta_h = ((1 / h) * (both_leafs)+(1.5f / h) * (1 - both_leafs)) * (1 - both_ghosts);
-    //   //ignore if one of them is NEUMANN
-    //   int has_neumann = int(ctype0 & NEUMANN || ctype1 & NEUMANN);
-    //   //T coeff = one_over_delta_h / h * (1 - has_neumann);
-    //   return has_neumann ? 0 : one_over_delta_h * one_over_h;
-
     int has_neumann = int(ctype0 & NEUMANN || ctype1 & NEUMANN);
     //   //T coeff = one_over_delta_h / h * (1 - has_neumann);
     return has_neumann ? 0 : h;

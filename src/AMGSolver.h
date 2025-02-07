@@ -14,14 +14,17 @@ void VCycleAMG(HADeviceGrid<Tile>& grid, const int x_channel, const int f_channe
 
 class AMGSolver {
 public:
-    T one_over_alpha = 1.0;//somehow only 1.0 works for multiple-level
+    //T one_over_alpha = 1.0;//somehow only 1.0 works for multiple-level
     //T one_over_alpha = 1.0 / 8 * 8;
     //T one_over_alpha = 1.0 / 2;
-    T prolong_coeff = 1; // 2 is better but does not work for cross-levels
+
+    T R_matrix_coeff = 1.0;
+	T R_restrict_coeff = 1.0;
+    T prolong_coeff = 1.0; // 2 is better but does not work for cross-levels
     //T prolong_coeff = 2; // 2 is better but 
 
-    AMGSolver(int _coeff_channel, T _one_over_alpha = 1, T _prolong_coeff = 1) : d_tmp(7), coeff_channel(_coeff_channel),
-        one_over_alpha(_one_over_alpha), prolong_coeff(_prolong_coeff)
+    AMGSolver(int _coeff_channel, T _R_matrix_coeff = 1, T _R_restrict_coeff = 1, T _P_coeff = 1) : d_tmp(7), coeff_channel(_coeff_channel),
+        R_matrix_coeff(_R_matrix_coeff), R_restrict_coeff(_R_restrict_coeff), prolong_coeff(_P_coeff)
     {
         gamma_d = thrust::raw_pointer_cast(d_tmp.data());
         beta_d = gamma_d + 1;
@@ -41,7 +44,7 @@ public:
     //in this case, the returned value will be [max_iters, -1] 
     std::tuple<int, double> solve(HADeviceGrid<Tile>& grid, bool verbose, int max_iters, double relative_tolerance, int level_iters, int coarsest_iters, int sync_stride, bool is_pure_neumann);
 
-    int coeff_channel;
+    int coeff_channel;//face coefficient channel
     thrust::device_vector<double> d_tmp;
     double* gamma_d;
     double* beta_d;
