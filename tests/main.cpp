@@ -4,10 +4,13 @@
 int main(int argc, char** argv) {
 	// Run all tests
 
-	for (int i : {0, 1, 2}) {
+	for (auto grid_name : { 
+		SolverTests::TestGrids::uniform128, 
+		SolverTests::TestGrids::staircase34,
+		SolverTests::TestGrids::twosources67,
+		}) {
 
-		//SolverTests::TestNeumannBC(i);
-		SolverTests::TestAMGNeumannBC(i);
+		SolverTests::TestNeumannDirichletRecovery(grid_name, "cmg");
 	}
 	return 0;
 }

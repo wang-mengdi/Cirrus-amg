@@ -1,7 +1,18 @@
+#include "Common.h"
+#include <magic_enum.hpp>
+
+
 namespace SolverTests {
+	enum class TestGrids {
+		uniform128 = 0,
+		uniform256,
+		uniform512,
+		staircase34,
+		twosources67,
+		twosources_deform,
+		centersource
+	};
 
-	void TestNeumannBC(int grid_case, bool debug = true);
-
-	void TestAMGNeumannBC(int grid_case, bool debug = true);
+	void TestNeumannDirichletRecovery(const TestGrids grid_name, const std::string algorithm);
 
 }

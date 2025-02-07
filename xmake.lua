@@ -5,6 +5,8 @@ includes("./src/xmake.lua")
 
 set_rundir("$(projectdir)")
 
+add_requires("magic_enum >=0.9.7")
+
 target("cirrus")
     set_kind("binary")
     add_headerfiles("fluid/*.h")
@@ -21,6 +23,8 @@ target("tests")
     add_files("tests/*.cpp", "tests/*.cu")
     add_includedirs("tests", {public = true})
     add_cugencodes("native")
+    add_cxxflags("--std=c++17")
     add_cuflags("-extended-lambda --std=c++17 -lineinfo")
     --add_cuflags("-rdc=true")
     add_deps("src")
+    add_packages("magic_enum")
