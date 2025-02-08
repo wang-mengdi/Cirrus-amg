@@ -88,9 +88,9 @@ namespace SolverTests {
         int x_channel = 0;
         int coeff_channel = 1;
         int u_channel = 5;
-        int nlap_channel = 6;
-        int lap_channel = 7;
-        int diff_channel = 8;
+        int nlap_channel = 8;
+        int lap_channel = 9;
+        int diff_channel = 10;
 
         //load cell types, load solution to grdt_channel
         auto cell_type = [=]__device__(const HATileAccessor<Tile> &acc, const HATileInfo<Tile> &info, const nanovdb::Coord & l_ijk)->uint8_t {
@@ -154,7 +154,7 @@ namespace SolverTests {
         //auto holder = grid.getHostTileHolderForLeafs();
         //polyscope::init();
         //IOFunc::AddPoissonGridCellCentersToPolyscopePointCloud(holder,
-        //    { {-1,"type"}, { x_channel, "x" }, {lap_channel,"lap"}, {nlap_channel,"l2"},{diff_channel,"diff"} },
+        //    { {-1,"type"}, { x_channel, "x" }, {lap_channel,"div(grad)"}, {nlap_channel,"nlap"},{diff_channel,"diff"} },
         //    {}
         //);
         //polyscope::show();

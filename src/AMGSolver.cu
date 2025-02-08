@@ -302,7 +302,7 @@ __global__ void NegativeLaplacianSameLevelAMG128Kernel(const HATileAccessor<Tile
 		Coord l_ijk = acc.localOffsetToCoord(vi);
 
 		//auto g_ijk = acc.composeGlobalCoord(info.mTileCoord, l_ijk);
-  //      if (g_ijk == Coord(47, 126, 83)) {
+  //      if (info.mLevel==4&&g_ijk == Coord(63,63,58)) {
   //          printf("l_ijk: %d %d %d\n", l_ijk[0], l_ijk[1], l_ijk[2]);
   //      }
   //      else continue;
@@ -344,7 +344,6 @@ void AMGFluxCorrectionOnLeafs(HADeviceGrid<Tile>& grid, int subtree_level, int x
         Tile& tile = info.tile();
         uint8_t ctype0 = tile.type(l_ijk);
 		T x0 = tile(x_channel, l_ijk);
-		T u0 = tile(u_channel, l_ijk);
         T sum = 0;
 
         //iterate neighbors
@@ -352,7 +351,8 @@ void AMGFluxCorrectionOnLeafs(HADeviceGrid<Tile>& grid, int subtree_level, int x
             [&]__device__(const HATileInfo<Tile>&ninfo, const Coord & nl_ijk, const int axis, const int sgn) {
             uint8_t ctype1;
             T coeff = 0;
-            T x1, u1;
+            T x1, u0, u1;
+            u0 = tile(u_channel + axis, l_ijk);
 
             if (ninfo.empty()) {
                 ctype1 = DIRICHLET;
@@ -363,19 +363,38 @@ void AMGFluxCorrectionOnLeafs(HADeviceGrid<Tile>& grid, int subtree_level, int x
                 auto& ntile = ninfo.tile();
                 ctype1 = ntile.type(nl_ijk);
 				x1 = ntile(x_channel, nl_ijk);
-				u1 = ntile(u_channel, nl_ijk);
+                u1 = ntile(u_channel + axis, nl_ijk);
             }
             coeff = NegativeLaplacianCoeff(h, ctype0, ctype1);
 
             if (calc_div) {
-                sum += (sgn == -1) ? -u0 * coeff : u1 * coeff;
+
+                sum += (sgn == -1) ? -u0 * h * h : u1 * h * h;
+
+     //           {
+					//auto g_ijk = acc.composeGlobalCoord(info.mTileCoord, l_ijk);
+     //               if (info.mLevel == 4 && g_ijk == Coord(63, 63, 58)) {
+     //                   printf("g_ijk %d %d %d axis %d sgn %d ctype0 %d ctype1 %d h %f coeff %f u0 %f u1 %f term %f sum %f\n", g_ijk[0], g_ijk[1], g_ijk[2], axis, sgn, ctype0, ctype1,h, coeff, u0, u1, (sgn == -1) ? -u0 * h * h : u1 * h * h, sum);
+     //               }
+     //           }
             }
             else {
                 if (sgn == -1) {
                     tile(u_channel + axis, l_ijk) += (x0 - x1) * coeff / (h * h);
+
+                    //{
+                    //    auto g_ijk = acc.composeGlobalCoord(info.mTileCoord, l_ijk);
+                    //    if (info.mLevel == 4 && g_ijk == Coord(63, 63, 58)) {
+                    //        printf("calculating gradp g_ijk %d %d %d axis %d sgn %d ctype0 %d ctype1 %d h %f coeff %f x0 %f x1 %f term %f u %f\n", g_ijk[0], g_ijk[1], g_ijk[2], axis, sgn, ctype0, ctype1, h, coeff, x0, x1, (x0 - x1) * coeff / (h * h), tile(u_channel + axis, l_ijk));
+                    //    }
+                    //}
                 }
             }
         });
+
+        if (calc_div) {
+			tile(x_channel, l_ijk) = sum;
+        }
 
         
     }, LEAF);
