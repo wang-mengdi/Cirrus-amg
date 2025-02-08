@@ -279,7 +279,6 @@ __device__ void LoadAMGLaplacianTileData(const HATileAccessor<Tile>& acc, const 
     }
 }
 
-//will consider ttype for cross-level AMG calculation
 __global__ void NegativeLaplacianSameLevelAMG128Kernel(const HATileAccessor<Tile> acc, HATileInfo<Tile>* tiles, int subtree_level, uint8_t launch_tile_types, int x_channel, int coeff_channel, int Ax_channel) {             
     __shared__ AMGLaplacianTileData shared_data;
 
@@ -319,10 +318,56 @@ void NegativeLaplacianSameLevelAMG128(HADeviceGrid<Tile>& grid, thrust::device_v
 }
 
 //on all leafs of the tree
-void FullNegativeLaplacianAMG(HADeviceGrid<Tile>& grid, const int x_channel, const int coeff_channel, const int Ax_channel) {
+void AMGFullNegativeLaplacianOnLeafs(HADeviceGrid<Tile>& grid, const int x_channel, const int coeff_channel, const int Ax_channel) {
     PropagateToChildren(grid, x_channel, x_channel, -1, GHOST, LAUNCH_SUBTREE, INTERIOR | DIRICHLET | NEUMANN);
     AccumulateToParentsOneStep(grid, x_channel, x_channel, LEAF, 1. / 8, false, INTERIOR | DIRICHLET | NEUMANN);
     NegativeLaplacianSameLevelAMG128(grid, grid.dAllTiles, grid.dAllTiles.size(), -1, LEAF, x_channel, coeff_channel, Ax_channel);
+}
+
+//if calc_div is set, calculate x=div(u) of integral form (volume weighted)
+//otherwise, add grad(x) to u
+void ComputeFluxCorrection(HADeviceGrid<Tile>& grid, int subtree_level, uint8_t launch_tile_types, int x_channel, int u_channel, int coeff_channel, bool calc_div) {
+    grid.launchVoxelFuncOnAllTiles(
+        [=] __device__(HATileAccessor<Tile>&acc, HATileInfo<Tile>&info, const Coord & l_ijk) {
+        auto h = acc.voxelSize(info);
+        Tile& tile = info.tile();
+        uint8_t ctype0 = tile.type(l_ijk);
+		T x0 = tile(x_channel, l_ijk);
+		T u0 = tile(u_channel, l_ijk);
+        T sum = 0;
+
+        //iterate neighbors
+        acc.iterateSameLevelNeighborVoxels(info, l_ijk,
+            [&]__device__(const HATileInfo<Tile>&ninfo, const Coord & nl_ijk, const int axis, const int sgn) {
+            uint8_t ctype1;
+            T coeff = 0;
+            T x1, u1;
+
+            if (ninfo.empty()) {
+                ctype1 = DIRICHLET;
+				x1 = 0;
+				u1 = 0;
+            }
+            else {
+                auto& ntile = ninfo.tile();
+                ctype1 = ntile.type(nl_ijk);
+				x1 = ntile(x_channel, nl_ijk);
+				u1 = ntile(u_channel, nl_ijk);
+            }
+            coeff = NegativeLaplacianCoeff(h, ctype0, ctype1);
+
+            if (calc_div) {
+                sum += (sgn == -1) ? -u0 * coeff : u1 * coeff;
+            }
+            else {
+                if (sgn == -1) {
+                    tile(u_channel + axis, l_ijk) += (x0 - x1) * coeff / (h * h);
+                }
+            }
+        });
+
+        
+    }, launch_tile_types);
 }
 
 //for single level smoothing, does not consider ttype
@@ -578,8 +623,8 @@ std::tuple<int, double> AMGSolver::solve(HADeviceGrid<Tile>& grid, bool verbose,
     for (i = 0; i < max_iters; i++) {
         //Ap_k=A*p_k
         //here A=-lap
-        FullNegativeLaplacianAMG(grid, Tile::p_channel, coeff_channel, Tile::Ap_channel);
-        //FullNegativeLaplacianAMG(grid, Tile::p_channel, coeff_channel, Tile::Ap_channel);
+        AMGFullNegativeLaplacianOnLeafs(grid, Tile::p_channel, coeff_channel, Tile::Ap_channel);
+        //AMGFullNegativeLaplacianOnLeafs(grid, Tile::p_channel, coeff_channel, Tile::Ap_channel);
 
         //alpha_k=gamma_k/(p_k^T*A*p_k)
         DotAsync(fp_d, grid, Tile::p_channel, Tile::Ap_channel, LEAF);//fp_k=p_k^T*A*p_k
