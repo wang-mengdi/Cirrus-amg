@@ -7,6 +7,8 @@ void CalculateAMGCoefficients(HADeviceGrid<Tile>& grid, const int coeff_channel,
 
 void AMGFullNegativeLaplacianOnLeafs(HADeviceGrid<Tile>& grid, const int x_channel, const int coeff_channel, const int Ax_channel);
 
+void AMGFluxCorrectionOnLeafs(HADeviceGrid<Tile>& grid, int subtree_level, int x_channel, int u_channel, bool calc_div);
+
 void GaussSeidelAMG(int iters, int order, HADeviceGrid<Tile>& grid, const int level, const int x_channel, const int coeff_channel, const int rhs_channel);
 
 class AMGSolver {

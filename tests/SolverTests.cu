@@ -70,9 +70,9 @@ namespace SolverTests {
         }
     }
 
-    void TestLaplacianCMGAndAMG(TestGrids grid_name) {
+    void TestAMGLaplacianAndFluxConsistency(TestGrids grid_name) {
         fmt::print("==========================================================\n");
-		Info("Test Laplacian Solver on grid {}", ToString(grid_name));
+		Info("Test lap=div(grad) on grid {}", ToString(grid_name));
 
         uint32_t scale = 8;
         float h = 1.0 / scale;
@@ -86,10 +86,11 @@ namespace SolverTests {
         Info("Total {}M cells, hash table {}GB", num_cells / (1024.0 * 1024), total_hash_bytes / (1024.0 * 1024 * 1024));
 
         int x_channel = 0;
-        int l1_channel = 1;
-        int l2_channel = 2;
-        int diff_channel = 3;
-        int coeff_channel = 4;
+        int coeff_channel = 1;
+        int u_channel = 5;
+        int nlap_channel = 6;
+        int lap_channel = 7;
+        int diff_channel = 8;
 
         //load cell types, load solution to grdt_channel
         auto cell_type = [=]__device__(const HATileAccessor<Tile> &acc, const HATileInfo<Tile> &info, const nanovdb::Coord & l_ijk)->uint8_t {
@@ -116,34 +117,33 @@ namespace SolverTests {
             tile.type(l_ijk) = cell_type(acc, info, l_ijk);
             if (tile.type(l_ijk) & INTERIOR) tile(x_channel, l_ijk) = f(acc.cellCenter(info, l_ijk));
             else tile(x_channel, l_ijk) = 0;
+            for (int axis : {0, 1, 2}) {
+				tile(u_channel + axis, l_ijk) = 0;
+            }
         }, -1, LEAF, LAUNCH_SUBTREE
         );
         CalcCellTypesFromLeafs(grid);
 
-
-
-        //use CMG to calculate laplacian from x channel to l1 channel
-        {
-            CalculateNeighborTiles(grid);
-			ConservativeFullNegativeLaplacian(grid, x_channel, l1_channel);
-        }
-
-        //use AMG to calculate Laplacian from x channel to l2 channel
+        //use AMG to calculate Laplacian from x_channel to lap_channel
         {
             CalculateNeighborTiles(grid);
             AMGSolver solver(coeff_channel, 0.5, 1, 1);
             solver.prepareTypesAndCoeffs(grid);
-            AMGFullNegativeLaplacianOnLeafs(grid, x_channel, coeff_channel, l2_channel);
+            AMGFullNegativeLaplacianOnLeafs(grid, x_channel, coeff_channel, nlap_channel);
         }
 
-
+        //calculate div(grad)
+        {
+            AMGFluxCorrectionOnLeafs(grid, -1, x_channel, u_channel, false);
+            AMGFluxCorrectionOnLeafs(grid, -1, lap_channel, u_channel, true);
+        }
 
         //calculate difference from x and grdt in r_channel
         grid.launchVoxelFuncOnAllTiles(
             [=] __device__(HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const Coord& l_ijk) {
             auto& tile = info.tile();
             if (tile.type(l_ijk) & INTERIOR) {
-                tile(diff_channel, l_ijk) = tile(l1_channel, l_ijk) - tile(l2_channel, l_ijk);
+                tile(diff_channel, l_ijk) = tile(lap_channel, l_ijk) + tile(nlap_channel, l_ijk);
             }
             else {
                 tile(diff_channel, l_ijk) = 0;
@@ -151,13 +151,13 @@ namespace SolverTests {
         }, LEAF
         );
 
-        auto holder = grid.getHostTileHolderForLeafs();
-        polyscope::init();
-        IOFunc::AddPoissonGridCellCentersToPolyscopePointCloud(holder,
-            { {-1,"type"}, { x_channel, "x" }, {l1_channel,"l1"}, {l2_channel,"l2"},{diff_channel,"diff"} },
-            {}
-        );
-        polyscope::show();
+        //auto holder = grid.getHostTileHolderForLeafs();
+        //polyscope::init();
+        //IOFunc::AddPoissonGridCellCentersToPolyscopePointCloud(holder,
+        //    { {-1,"type"}, { x_channel, "x" }, {lap_channel,"lap"}, {nlap_channel,"l2"},{diff_channel,"diff"} },
+        //    {}
+        //);
+        //polyscope::show();
 
         auto linf_norm = SingleChannelLinfSync(grid, diff_channel, LEAF);
         if (linf_norm < 1e-5) {

@@ -326,7 +326,18 @@ void AMGFullNegativeLaplacianOnLeafs(HADeviceGrid<Tile>& grid, const int x_chann
 
 //if calc_div is set, calculate x=div(u) of integral form (volume weighted)
 //otherwise, add grad(x) to u
-void ComputeFluxCorrection(HADeviceGrid<Tile>& grid, int subtree_level, uint8_t launch_tile_types, int x_channel, int u_channel, int coeff_channel, bool calc_div) {
+void AMGFluxCorrectionOnLeafs(HADeviceGrid<Tile>& grid, int subtree_level, int x_channel, int u_channel, bool calc_div) {
+
+    if (calc_div) {
+        for (int axis : {0, 1, 2}) {
+			PropagateToChildren(grid, u_channel + axis, u_channel + axis, -1, GHOST, LAUNCH_SUBTREE, INTERIOR | DIRICHLET | NEUMANN);
+			AccumulateToParentsOneStep(grid, u_channel + axis, u_channel + axis, LEAF, 1. / 8, false, INTERIOR | DIRICHLET | NEUMANN);
+        }
+    }
+    else {
+        PropagateToChildren(grid, x_channel, x_channel, -1, GHOST, LAUNCH_SUBTREE, INTERIOR | DIRICHLET | NEUMANN);
+        AccumulateToParentsOneStep(grid, x_channel, x_channel, LEAF, 1. / 8, false, INTERIOR | DIRICHLET | NEUMANN);
+    }
     grid.launchVoxelFuncOnAllTiles(
         [=] __device__(HATileAccessor<Tile>&acc, HATileInfo<Tile>&info, const Coord & l_ijk) {
         auto h = acc.voxelSize(info);
@@ -367,7 +378,7 @@ void ComputeFluxCorrection(HADeviceGrid<Tile>& grid, int subtree_level, uint8_t 
         });
 
         
-    }, launch_tile_types);
+    }, LEAF);
 }
 
 //for single level smoothing, does not consider ttype
