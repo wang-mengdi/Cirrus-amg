@@ -236,6 +236,7 @@ __device__ void LoadAMGLaplacianTileData(const HATileAccessor<Tile>& acc, const 
     const int shared_offset = 1;
 
     auto& tile = info.tile();
+	auto h = acc.voxelSize(info);
 
     for (int i = 0; i < 4; i++) {
         // Voxel index
@@ -281,7 +282,7 @@ __device__ void LoadAMGLaplacianTileData(const HATileAccessor<Tile>& acc, const 
         bool empty = ninfo.empty();
         if (empty) {
             shared_data.xValueT(fl_ijk) = 0;
-            if (sgn == 1) shared_data.offDiagValueT(axis, fl_ijk) = 0;
+            if (sgn == 1) shared_data.offDiagValueT(axis, fl_ijk) = h;
         }
         else if (ninfo.mType & GHOST) {
             T vH = ninfo.tile()(x_channel, nl_ijk);//larger cell center, which is a corner of the ghost cell
@@ -353,81 +354,76 @@ void AMGFullNegativeLaplacianOnLeafs(HADeviceGrid<Tile>& grid, const int x_chann
     NegativeLaplacianSameLevelAMG128(grid, grid.dAllTiles, grid.dAllTiles.size(), -1, LEAF, x_channel, coeff_channel, Ax_channel);
 }
 
-//if calc_div is set, calculate x=div(u) of integral form (volume weighted)
-//otherwise, add grad(x) to u
-void AMGFluxCorrectionOnLeafs(HADeviceGrid<Tile>& grid, int subtree_level, uint8_t launch_tile_types, int coeff_channel, int x_channel, int u_channel, bool calc_div) {
+__global__ void AMGAddGradientToFace128Kernel(const HATileAccessor<Tile> acc, HATileInfo<Tile>* tiles, int subtree_level, uint8_t launch_tile_types, int x_channel, int coeff_channel, int u_channel) {
+    __shared__ AMGLaplacianTileData shared_data;
+    //bi: block idx, ti: thread idx
+    int bi = blockIdx.x, ti = threadIdx.x;
+    //somehow it's faster with the reference symbol
+    const auto& info = tiles[bi];
+    if (!(info.subtreeType(subtree_level) & launch_tile_types)) return;
+    LoadAMGLaplacianTileData(acc, info, shared_data, x_channel, coeff_channel, ti);
+    __syncthreads();
 
-   // if (calc_div) {
-   //     for (int axis : {0, 1, 2}) {
-			//PropagateToChildren(grid, u_channel + axis, u_channel + axis, -1, GHOST, LAUNCH_SUBTREE, INTERIOR | DIRICHLET | NEUMANN);
-			//AccumulateToParentsOneStep(grid, u_channel + axis, u_channel + axis, LEAF, 1. / 8, false, INTERIOR | DIRICHLET | NEUMANN);
-   //     }
-   // }
-   // else {
-   //     PropagateToChildren(grid, x_channel, x_channel, -1, GHOST, LAUNCH_SUBTREE, INTERIOR | DIRICHLET | NEUMANN);
-   //     AccumulateToParentsOneStep(grid, x_channel, x_channel, LEAF, 1. / 8, false, INTERIOR | DIRICHLET | NEUMANN);
-   // }
+    auto& tile = info.tile();
+	auto h = acc.voxelSize(info);
+    for (int i = 0; i < 4; i++) {
+        //voxel idx
+        int vi = i * 128 + ti;
+        Coord l_ijk = acc.localOffsetToCoord(vi);
+
+        for (int axis : {0, 1, 2}) {
+            Coord dl_ijk = l_ijk; dl_ijk[axis]--;
+			T pu = shared_data.xValueT(l_ijk);
+			T pd = shared_data.xValueT(dl_ijk);
+            tile(u_channel, l_ijk) += (pu - pd) * shared_data.offDiagValueT(axis, l_ijk) / (h * h);
+        }
+    }
+}
+
+void AMGAddGradientToFace(HADeviceGrid<Tile>& grid, int subtree_level, uint8_t launch_tile_types, int x_channel, int coeff_channel, int u_channel) {
+    //first calculate GHOST and NONLEAF values
+    PropagateToChildren(grid, x_channel, x_channel, -1, GHOST, LAUNCH_SUBTREE, INTERIOR | DIRICHLET | NEUMANN);
+    AccumulateToParentsOneStep(grid, x_channel, x_channel, LEAF, 1. / 8, false, INTERIOR | DIRICHLET | NEUMANN);
+    //then launch AMGAddGradientToFace128Kernel on all leafs to add grad(x) to u
+    AMGAddGradientToFace128Kernel << <grid.dAllTiles.size(), 128 >> > (grid.deviceAccessor(), thrust::raw_pointer_cast(grid.dAllTiles.data()), subtree_level, launch_tile_types, x_channel, coeff_channel, u_channel);
+}
+
+void AMGVolumeWeightedDivergenceOnLeafs(HADeviceGrid<Tile>& grid, int u_channel, int coeff_channel, int x_channel) {
+    for (int axis : {0, 1, 2}) {
+        PropagateToChildren(grid, u_channel + axis, u_channel + axis, -1, GHOST, LAUNCH_SUBTREE, INTERIOR | DIRICHLET | NEUMANN);
+        AccumulateToParentsOneStep(grid, u_channel + axis, u_channel + axis, LEAF, 1. / 8, false, INTERIOR | DIRICHLET | NEUMANN);
+    }
+
     grid.launchVoxelFuncOnAllTiles(
         [=] __device__(HATileAccessor<Tile>&acc, HATileInfo<Tile>&info, const Coord & l_ijk) {
         auto h = acc.voxelSize(info);
         Tile& tile = info.tile();
         uint8_t ctype0 = tile.type(l_ijk);
-		T x0 = tile(x_channel, l_ijk);
         T sum = 0;
 
         //iterate neighbors
         acc.iterateSameLevelNeighborVoxels(info, l_ijk,
             [&]__device__(const HATileInfo<Tile>&ninfo, const Coord & nl_ijk, const int axis, const int sgn) {
-            uint8_t ctype1;
-            T coeff0 = tile(coeff_channel + axis, l_ijk), coeff1;
-            T x1, u0, u1;
-            u0 = tile(u_channel + axis, l_ijk);
+
+            T coeff0 = tile(coeff_channel + axis, l_ijk);
+            T u0 = tile(u_channel + axis, l_ijk);
+            T coeff1, u1;
 
             if (ninfo.empty()) {
-                ctype1 = DIRICHLET;
-				x1 = 0;
-				u1 = 0;
-                coeff1 = 0;
+                u1 = 0;
+                coeff1 = h;
             }
             else {
                 auto& ntile = ninfo.tile();
-                ctype1 = ntile.type(nl_ijk);
-				x1 = ntile(x_channel, nl_ijk);
                 u1 = ntile(u_channel + axis, nl_ijk);
-				coeff1 = ntile(coeff_channel + axis, nl_ijk);
+                coeff1 = ntile(coeff_channel + axis, nl_ijk);
             }
-			T coeff = (sgn == -1) ? coeff0 : coeff1;
+            T coeff = (sgn == -1) ? coeff0 : coeff1;
 
-            if (calc_div) {
-
-                sum += (sgn == -1) ? -u0 * h * h : u1 * h * h;
-
-     //           {
-					//auto g_ijk = acc.composeGlobalCoord(info.mTileCoord, l_ijk);
-     //               if (info.mLevel == 4 && g_ijk == Coord(47,126,87)) {
-     //                   printf("g_ijk %d %d %d axis %d sgn %d ctype0 %d ctype1 %d h %f coeff %f u0 %f u1 %f term %f sum %f\n", g_ijk[0], g_ijk[1], g_ijk[2], axis, sgn, ctype0, ctype1,h, coeff, u0, u1, (sgn == -1) ? -u0 * h * h : u1 * h * h, sum);
-     //               }
-     //           }
-            }
-            else {
-                if (sgn == -1) {
-                    tile(u_channel + axis, l_ijk) += (x1 - x0) * coeff / (h * h);
-
-                    //{
-                    //    auto g_ijk = acc.composeGlobalCoord(info.mTileCoord, l_ijk);
-                    //    if (info.mLevel == 4 && g_ijk == Coord(63, 63, 58)) {
-                    //        printf("calculating gradp g_ijk %d %d %d axis %d sgn %d ctype0 %d ctype1 %d h %f coeff %f x0 %f x1 %f term %f u %f\n", g_ijk[0], g_ijk[1], g_ijk[2], axis, sgn, ctype0, ctype1, h, coeff, x0, x1, (x0 - x1) * coeff / (h * h), tile(u_channel + axis, l_ijk));
-                    //    }
-                    //}
-                }
-            }
+            sum += (sgn == -1) ? -u0 * h * h : u1 * h * h;
         });
 
-        if (calc_div) {
-			tile(x_channel, l_ijk) = sum;
-        }
-
-        
+        tile(x_channel, l_ijk) = sum;
     }, LEAF);
 }
 

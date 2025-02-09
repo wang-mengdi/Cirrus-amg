@@ -7,7 +7,9 @@
 
 void AMGFullNegativeLaplacianOnLeafs(HADeviceGrid<Tile>& grid, const int x_channel, const int coeff_channel, const int Ax_channel);
 
-void AMGFluxCorrectionOnLeafs(HADeviceGrid<Tile>& grid, int subtree_level, uint8_t launch_tile_types, int coeff_channel, int x_channel, int u_channel, bool calc_div);
+void AMGAddGradientToFace(HADeviceGrid<Tile>& grid, int subtree_level, uint8_t launch_tile_types, int x_channel, int coeff_channel, int u_channel);
+void AMGVolumeWeightedDivergenceOnLeafs(HADeviceGrid<Tile>& grid, int u_channel, int coeff_channel, int x_channel);
+//void AMGFluxCorrectionOnLeafs(HADeviceGrid<Tile>& grid, int subtree_level, uint8_t launch_tile_types, int coeff_channel, int x_channel, int u_channel, bool calc_div);
 
 void GaussSeidelAMG(int iters, int order, HADeviceGrid<Tile>& grid, const int level, const int x_channel, const int coeff_channel, const int rhs_channel);
 

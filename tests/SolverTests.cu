@@ -136,9 +136,9 @@ namespace SolverTests {
         //calculate div(grad)
         {
             //grad(p)
-            AMGFluxCorrectionOnLeafs(grid, -1, LEAF | GHOST, coeff_channel, x_channel, u_channel, false);
+            AMGAddGradientToFace(grid, -1, LEAF | GHOST, x_channel, coeff_channel, u_channel);
             //div(u)
-            AMGFluxCorrectionOnLeafs(grid, -1, LEAF, coeff_channel, lap_channel, u_channel, true);
+            AMGVolumeWeightedDivergenceOnLeafs(grid, u_channel, coeff_channel, x_channel);
         }
 
         //calculate difference from x and grdt in r_channel
