@@ -154,13 +154,13 @@ namespace SolverTests {
         }, LEAF
         );
 
-        auto holder = grid.getHostTileHolderForLeafs();
-        polyscope::init();
-        IOFunc::AddPoissonGridCellCentersToPolyscopePointCloud(holder,
-            { {-1,"type"}, { x_channel, "x" }, {lap_channel,"div(grad)"}, {nlap_channel,"nlap"},{diff_channel,"diff"} },
-            {}
-        );
-        polyscope::show();
+        //auto holder = grid.getHostTileHolderForLeafs();
+        //polyscope::init();
+        //IOFunc::AddPoissonGridCellCentersToPolyscopePointCloud(holder,
+        //    { {-1,"type"}, { x_channel, "x" }, {lap_channel,"div(grad)"}, {nlap_channel,"nlap"},{diff_channel,"diff"} },
+        //    {}
+        //);
+        //polyscope::show();
 
         auto linf_norm = SingleChannelLinfSync(grid, diff_channel, LEAF);
         if (linf_norm < 1e-5) {

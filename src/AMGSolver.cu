@@ -270,6 +270,21 @@ __device__ void LoadAMGLaplacianTileData(const HATileAccessor<Tile>& acc, const 
 
     for (int axis : {0, 1, 2}) {
         Coord fl_ijk = FaceNeighborLocalCoord(axis, sgn, fi);
+        //for example, for positive boundary, fl_ijk may be (8,j,k), and the cell inside the center tile is (7,j,k)
+        Coord cl_ijk = fl_ijk; cl_ijk[axis] -= sgn;
+        T avg_x = 0;
+        Coord cl1_ijk = cl_ijk;
+        for (int di : {0, 1}) {
+            cl1_ijk[0] = (cl_ijk[0] ^ di);
+            for (int dj : {0, 1}) {
+				cl1_ijk[1] = (cl_ijk[1] ^ dj);
+                for (int dk : {0, 1}) {
+					cl1_ijk[2] = (cl_ijk[2] ^ dk);
+					avg_x += shared_data.xValueT(cl1_ijk);
+                }
+            }
+        }
+		avg_x /= 8;
 
         Coord nb_ijk = b_ijk; nb_ijk[axis] += sgn;
         //for sgn==-1 (load negative boundaries), the local coord in the neighboring tile is 7
@@ -285,22 +300,30 @@ __device__ void LoadAMGLaplacianTileData(const HATileAccessor<Tile>& acc, const 
             if (sgn == 1) shared_data.offDiagValueT(axis, fl_ijk) = h;
         }
         else if (ninfo.mType & GHOST) {
-            T vH = ninfo.tile()(x_channel, nl_ijk);//larger cell center, which is a corner of the ghost cell
+            //dp/dx calculated with coarse grid equals to fine grid
+            T V1 = ninfo.tile()(x_channel, nl_ijk);
+            T V0 = avg_x;
+			T vg = shared_data.xValueT(cl_ijk) + 0.5 * (V1 - V0);
+			shared_data.xValueT(fl_ijk) = vg;
 
-            //next we extrapolate the opposite corner of the ghost cell
-            //Afivo: a framework for quadtree/octree AMR with shared-memory parallelization and geometric multigrid methods
-
-            //for example, for positive boundary, fl_ijk may be (8,j,k), and the cell inside the center tile is (7,j,k)
-            Coord cl_ijk = fl_ijk; cl_ijk[axis] -= sgn;
-            T vh = shared_data.xValueT(cl_ijk);
-            Coord cl0_ijk = cl_ijk; cl0_ijk[0] ^= 1; T vh0 = shared_data.xValueT(cl0_ijk);
-            Coord cl1_ijk = cl_ijk; cl1_ijk[1] ^= 1; T vh1 = shared_data.xValueT(cl1_ijk);
-            Coord cl2_ijk = cl_ijk; cl2_ijk[2] ^= 1; T vh2 = shared_data.xValueT(cl2_ijk);
-            //vh - 0.5 * (vh0 - vh) - 0.5 * (vh1 - vh) - 0.5 * (vh2 - vh);
-            T v1 = 2.5 * vh - 0.5 * (vh0 + vh1 + vh2);
-
-            shared_data.xValueT(fl_ijk) = (vH + v1) / 2;
             if (sgn == 1) shared_data.offDiagValueT(axis, fl_ijk) = ninfo.tile()(coeff_channel + axis, nl_ijk);
+
+            //T vH = ninfo.tile()(x_channel, nl_ijk);//larger cell center, which is a corner of the ghost cell
+
+            ////next we extrapolate the opposite corner of the ghost cell
+            ////Afivo: a framework for quadtree/octree AMR with shared-memory parallelization and geometric multigrid methods
+
+            ////for example, for positive boundary, fl_ijk may be (8,j,k), and the cell inside the center tile is (7,j,k)
+            //Coord cl_ijk = fl_ijk; cl_ijk[axis] -= sgn;
+            //T vh = shared_data.xValueT(cl_ijk);
+            //Coord cl0_ijk = cl_ijk; cl0_ijk[0] ^= 1; T vh0 = shared_data.xValueT(cl0_ijk);
+            //Coord cl1_ijk = cl_ijk; cl1_ijk[1] ^= 1; T vh1 = shared_data.xValueT(cl1_ijk);
+            //Coord cl2_ijk = cl_ijk; cl2_ijk[2] ^= 1; T vh2 = shared_data.xValueT(cl2_ijk);
+            ////vh - 0.5 * (vh0 - vh) - 0.5 * (vh1 - vh) - 0.5 * (vh2 - vh);
+            //T v1 = 2.5 * vh - 0.5 * (vh0 + vh1 + vh2);
+
+            //shared_data.xValueT(fl_ijk) = (vH + v1) / 2;
+            //if (sgn == 1) shared_data.offDiagValueT(axis, fl_ijk) = ninfo.tile()(coeff_channel + axis, nl_ijk);
         }
         else {
             shared_data.xValueT(fl_ijk) = ninfo.tile()(x_channel, nl_ijk);
