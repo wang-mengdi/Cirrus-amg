@@ -87,6 +87,14 @@ void CoarsenTypesAndAMGCoeffs(HADeviceGrid<Tile>& grid, const int coeff_channel,
                     //fine level: -c0*h, -c1*h, -c2*h, -c3*h
 					//coarse level: -(c0+c1+c2+c3)/4*2h=-0.5*(c0+c1+c2+c3)*h
                     tile(coeff_channel + axis, l_ijk) += ctile(coeff_channel + axis, cl_ijk) * 0.5;
+
+                    {
+						auto g_ijk = acc.composeGlobalCoord(info.mTileCoord, l_ijk);
+                        if (info.mLevel == 1 && g_ijk == Coord(8, 15, 11) && axis==0) {
+							printf("g_ijk %d %d %d axis %d cl_ijk %d %d %d coeff %f sum %f\n", g_ijk[0], g_ijk[1], g_ijk[2], axis, cl_ijk[0], cl_ijk[1], cl_ijk[2], ctile(coeff_channel + axis, cl_ijk) * 0.5, tile(coeff_channel + axis, l_ijk));
+                        }
+                    }
+
                 }
             }
         }
@@ -198,7 +206,11 @@ public:
     __device__ T negativeLap(Coord l_ijk) {
         T x0 = xValueT(l_ijk);
 		T sum = x0 * diagValueT(l_ijk);
-        //printf("AMG x0 %f diag %f sum %f\n", x0, diagValueT(l_ijk), sum);
+
+        //if (l_ijk == Coord(4, 4, 4)) 
+        {
+            printf("AMG x0 %f diag %f sum %f\n", x0, diagValueT(l_ijk), sum);
+        }
 
 		for (int axis : { 0, 1, 2 }) {
 			for (int sgn : { -1, 1 }) {
@@ -212,7 +224,12 @@ public:
 
                 sum += offDiagValueT(axis, ul_ijk) * xValueT(nl_ijk);
 
-                //printf("AMG axis %d sgn %d nl_ijk %d %d %d ul_ijk %d %d %d off %f xvalueT %f sum %f\n", axis, sgn, nl_ijk[0], nl_ijk[1], nl_ijk[2], ul_ijk[0], ul_ijk[1], ul_ijk[2], offDiagValueT(axis, ul_ijk), xValueT(nl_ijk), sum);
+                //if (l_ijk == Coord(4, 4, 4)) 
+                {
+                    T h = 1. / 32;
+                    T induced_u = (xValueT(nl_ijk) - x0) * offDiagValueT(axis, ul_ijk) / (h * h);
+                    printf("AMG axis %d sgn %d nl_ijk %d %d %d ul_ijk %d %d %d off %f nx %f induced u %f sum %f\n", axis, sgn, nl_ijk[0], nl_ijk[1], nl_ijk[2], ul_ijk[0], ul_ijk[1], ul_ijk[2], offDiagValueT(axis, ul_ijk), xValueT(nl_ijk), induced_u, sum);
+                }
 			}
 		}
 
@@ -354,11 +371,11 @@ __global__ void NegativeLaplacianSameLevelAMG128Kernel(const HATileAccessor<Tile
         int vi = i * 128 + ti;
 		Coord l_ijk = acc.localOffsetToCoord(vi);
 
-		//auto g_ijk = acc.composeGlobalCoord(info.mTileCoord, l_ijk);
-  //      if (info.mLevel==4&&g_ijk == Coord(47,126,87)) {
-  //          printf("l_ijk: %d %d %d\n", l_ijk[0], l_ijk[1], l_ijk[2]);
-  //      }
-  //      else continue;
+		auto g_ijk = acc.composeGlobalCoord(info.mTileCoord, l_ijk);
+        if (info.mLevel==2&&g_ijk == Coord(15,30,22)) {
+            printf("l_ijk: %d %d %d\n", l_ijk[0], l_ijk[1], l_ijk[2]);
+        }
+        else continue;
 
         info.tile()(Ax_channel, vi) = info.tile().type(vi) == INTERIOR ? shared_data.negativeLap(l_ijk) : 0;
     }
@@ -394,11 +411,26 @@ __global__ void AMGAddGradientToFace128Kernel(const HATileAccessor<Tile> acc, HA
         int vi = i * 128 + ti;
         Coord l_ijk = acc.localOffsetToCoord(vi);
 
+        
+
         for (int axis : {0, 1, 2}) {
+			//printf("axis %d l_ijk %d %d %d u %f\n",axis, l_ijk[0], l_ijk[1], l_ijk[2], tile(u_channel + axis, l_ijk));
+
             Coord dl_ijk = l_ijk; dl_ijk[axis]--;
 			T pu = shared_data.xValueT(l_ijk);
 			T pd = shared_data.xValueT(dl_ijk);
-            tile(u_channel, l_ijk) += (pu - pd) * shared_data.offDiagValueT(axis, l_ijk) / (h * h);
+            tile(u_channel + axis, l_ijk) -= (pu - pd) * shared_data.offDiagValueT(axis, l_ijk) / (h * h);
+
+            {
+				auto g_ijk = acc.composeGlobalCoord(info.mTileCoord, l_ijk);
+                if (
+                    //(info.mLevel==2&&g_ijk == Coord(16,30,22))
+                    //||
+                    (info.mLevel==1&&g_ijk==Coord(16/2,30/2,22/2))
+                    ) {
+					printf("g_ijk %d %d %d axis %d pu %f pd %f off %f term %f vel %f\n", g_ijk[0], g_ijk[1], g_ijk[2], axis, pu, pd, shared_data.offDiagValueT(axis, l_ijk), -(pu - pd) * shared_data.offDiagValueT(axis, l_ijk) / (h * h), tile(u_channel + axis, l_ijk));
+                }
+            }
         }
     }
 }
@@ -421,29 +453,41 @@ void AMGVolumeWeightedDivergenceOnLeafs(HADeviceGrid<Tile>& grid, int u_channel,
         [=] __device__(HATileAccessor<Tile>&acc, HATileInfo<Tile>&info, const Coord & l_ijk) {
         auto h = acc.voxelSize(info);
         Tile& tile = info.tile();
-        uint8_t ctype0 = tile.type(l_ijk);
+        //uint8_t ctype0 = tile.type(l_ijk);
         T sum = 0;
 
         //iterate neighbors
         acc.iterateSameLevelNeighborVoxels(info, l_ijk,
             [&]__device__(const HATileInfo<Tile>&ninfo, const Coord & nl_ijk, const int axis, const int sgn) {
 
-            T coeff0 = tile(coeff_channel + axis, l_ijk);
+            //T coeff0 = tile(coeff_channel + axis, l_ijk);
             T u0 = tile(u_channel + axis, l_ijk);
-            T coeff1, u1;
+            T coeff1;
+            T u1;
 
             if (ninfo.empty()) {
                 u1 = 0;
-                coeff1 = h;
+                //coeff1 = 0;
             }
             else {
                 auto& ntile = ninfo.tile();
                 u1 = ntile(u_channel + axis, nl_ijk);
-                coeff1 = ntile(coeff_channel + axis, nl_ijk);
+                //coeff1 = ntile(coeff_channel + axis, nl_ijk);
             }
-            T coeff = (sgn == -1) ? coeff0 : coeff1;
+            //T coeff = (sgn == -1) ? coeff0 : coeff1;
+
+            //basically coeff is -h
+            //so for 
 
             sum += (sgn == -1) ? -u0 * h * h : u1 * h * h;
+
+            {
+                //43,13,45
+				auto g_ijk = acc.composeGlobalCoord(info.mTileCoord, l_ijk);
+                if (info.mLevel == 2 && g_ijk == Coord(15, 30, 22)) {
+                    printf("g_ijk %d %d %d axis %d sgn %d u0 %f u1 %f term %f sum %f\n", g_ijk[0], g_ijk[1], g_ijk[2], axis, sgn, u0, u1, (sgn == -1) ? -u0 * h * h : u1 * h * h, sum);
+                }
+            }
         });
 
         tile(x_channel, l_ijk) = sum;

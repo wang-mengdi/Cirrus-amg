@@ -1,9 +1,11 @@
 #include <string>
 
 enum class TestGrids {
-	uniform128 = 0,
+	uniform8 = 0,
+	uniform128,
 	uniform256,
 	uniform512,
+	staircase12,
 	staircase34,
 	twosources67,
 	twosources_deform,

@@ -16,7 +16,10 @@
 namespace SolverTests {
     __hostdev__ int SolverTestsLevelTarget(const HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const TestGrids grid_name) {
         //uniform grids
-        if (grid_name == TestGrids::uniform128) {
+        if (grid_name == TestGrids::uniform8) {
+            return 0;
+        }
+        else if (grid_name == TestGrids::uniform128) {
             return 4;
         }
         else if (grid_name == TestGrids::uniform256) {
@@ -24,6 +27,12 @@ namespace SolverTests {
         }
         else if (grid_name == TestGrids::uniform512) {
             return 6;
+        }
+        else if (grid_name == TestGrids::staircase12) {
+            auto bbox = acc.tileBBox(info);
+            int desired_level = 0;
+            if (bbox.min()[0] <= 0.25) return 2;//slow converging, if 0.25 not converging
+            else return 1;
         }
         else if (grid_name == TestGrids::staircase34) {
 			//64^3 at small x, 128^3 at large x
@@ -111,18 +120,17 @@ namespace SolverTests {
         auto f = [=]__device__(const Vec & pos) ->T {
             return sin(-2.5 * pos[0] + pos[1] + 7 * pos[2]);
         };
-        grid.launchVoxelFunc(
+        grid.launchVoxelFuncOnAllTiles(
             [=] __device__(HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const Coord& l_ijk) {
             auto& tile = info.tile();
             tile.type(l_ijk) = cell_type(acc, info, l_ijk);
             if (tile.type(l_ijk) & INTERIOR) tile(x_channel, l_ijk) = f(acc.cellCenter(info, l_ijk));
             else tile(x_channel, l_ijk) = 0;
             for (int axis : {0, 1, 2}) {
-				tile(u_channel + axis, l_ijk) = 0;
+                tile(u_channel + axis, l_ijk) = 0;
             }
 
-        }, -1, LEAF|GHOST, LAUNCH_SUBTREE
-        );
+        }, LEAF | GHOST);
         CalcCellTypesFromLeafs(grid);
 
         //use AMG to calculate Laplacian from x_channel to lap_channel
@@ -138,7 +146,7 @@ namespace SolverTests {
             //grad(p)
             AMGAddGradientToFace(grid, -1, LEAF | GHOST, x_channel, coeff_channel, u_channel);
             //div(u)
-            AMGVolumeWeightedDivergenceOnLeafs(grid, u_channel, coeff_channel, x_channel);
+            AMGVolumeWeightedDivergenceOnLeafs(grid, u_channel, coeff_channel, lap_channel);
         }
 
         //calculate difference from x and grdt in r_channel
@@ -154,13 +162,13 @@ namespace SolverTests {
         }, LEAF
         );
 
-        //auto holder = grid.getHostTileHolderForLeafs();
-        //polyscope::init();
-        //IOFunc::AddPoissonGridCellCentersToPolyscopePointCloud(holder,
-        //    { {-1,"type"}, { x_channel, "x" }, {lap_channel,"div(grad)"}, {nlap_channel,"nlap"},{diff_channel,"diff"} },
-        //    {}
-        //);
-        //polyscope::show();
+        auto holder = grid.getHostTileHolderForLeafs();
+        polyscope::init();
+        IOFunc::AddPoissonGridCellCentersToPolyscopePointCloud(holder,
+            { {-1,"type"}, { x_channel, "x" }, {lap_channel,"div(grad)"}, {nlap_channel,"nlap"},{diff_channel,"diff"} },
+            {}
+        );
+        polyscope::show();
 
         auto linf_norm = SingleChannelLinfSync(grid, diff_channel, LEAF);
         if (linf_norm < 1e-5) {
