@@ -120,7 +120,8 @@ namespace SolverTests {
             for (int axis : {0, 1, 2}) {
 				tile(u_channel + axis, l_ijk) = 0;
             }
-        }, -1, LEAF, LAUNCH_SUBTREE
+
+        }, -1, LEAF|GHOST, LAUNCH_SUBTREE
         );
         CalcCellTypesFromLeafs(grid);
 
@@ -134,8 +135,10 @@ namespace SolverTests {
 
         //calculate div(grad)
         {
-            AMGFluxCorrectionOnLeafs(grid, -1, x_channel, u_channel, false);
-            AMGFluxCorrectionOnLeafs(grid, -1, lap_channel, u_channel, true);
+            //grad(p)
+            AMGFluxCorrectionOnLeafs(grid, -1, coeff_channel, x_channel, u_channel, false);
+            //div(u)
+            AMGFluxCorrectionOnLeafs(grid, -1, coeff_channel, lap_channel, u_channel, true);
         }
 
         //calculate difference from x and grdt in r_channel

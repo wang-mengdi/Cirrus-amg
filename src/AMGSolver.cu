@@ -355,18 +355,18 @@ void AMGFullNegativeLaplacianOnLeafs(HADeviceGrid<Tile>& grid, const int x_chann
 
 //if calc_div is set, calculate x=div(u) of integral form (volume weighted)
 //otherwise, add grad(x) to u
-void AMGFluxCorrectionOnLeafs(HADeviceGrid<Tile>& grid, int subtree_level, int x_channel, int u_channel, bool calc_div) {
+void AMGFluxCorrectionOnLeafs(HADeviceGrid<Tile>& grid, int subtree_level, int coeff_channel, int x_channel, int u_channel, bool calc_div) {
 
-    if (calc_div) {
-        for (int axis : {0, 1, 2}) {
-			PropagateToChildren(grid, u_channel + axis, u_channel + axis, -1, GHOST, LAUNCH_SUBTREE, INTERIOR | DIRICHLET | NEUMANN);
-			AccumulateToParentsOneStep(grid, u_channel + axis, u_channel + axis, LEAF, 1. / 8, false, INTERIOR | DIRICHLET | NEUMANN);
-        }
-    }
-    else {
-        PropagateToChildren(grid, x_channel, x_channel, -1, GHOST, LAUNCH_SUBTREE, INTERIOR | DIRICHLET | NEUMANN);
-        AccumulateToParentsOneStep(grid, x_channel, x_channel, LEAF, 1. / 8, false, INTERIOR | DIRICHLET | NEUMANN);
-    }
+   // if (calc_div) {
+   //     for (int axis : {0, 1, 2}) {
+			//PropagateToChildren(grid, u_channel + axis, u_channel + axis, -1, GHOST, LAUNCH_SUBTREE, INTERIOR | DIRICHLET | NEUMANN);
+			//AccumulateToParentsOneStep(grid, u_channel + axis, u_channel + axis, LEAF, 1. / 8, false, INTERIOR | DIRICHLET | NEUMANN);
+   //     }
+   // }
+   // else {
+   //     PropagateToChildren(grid, x_channel, x_channel, -1, GHOST, LAUNCH_SUBTREE, INTERIOR | DIRICHLET | NEUMANN);
+   //     AccumulateToParentsOneStep(grid, x_channel, x_channel, LEAF, 1. / 8, false, INTERIOR | DIRICHLET | NEUMANN);
+   // }
     grid.launchVoxelFuncOnAllTiles(
         [=] __device__(HATileAccessor<Tile>&acc, HATileInfo<Tile>&info, const Coord & l_ijk) {
         auto h = acc.voxelSize(info);
@@ -379,7 +379,7 @@ void AMGFluxCorrectionOnLeafs(HADeviceGrid<Tile>& grid, int subtree_level, int x
         acc.iterateSameLevelNeighborVoxels(info, l_ijk,
             [&]__device__(const HATileInfo<Tile>&ninfo, const Coord & nl_ijk, const int axis, const int sgn) {
             uint8_t ctype1;
-            T coeff = 0;
+            T coeff0 = tile(coeff_channel + axis, l_ijk), coeff1;
             T x1, u0, u1;
             u0 = tile(u_channel + axis, l_ijk);
 
@@ -387,14 +387,16 @@ void AMGFluxCorrectionOnLeafs(HADeviceGrid<Tile>& grid, int subtree_level, int x
                 ctype1 = DIRICHLET;
 				x1 = 0;
 				u1 = 0;
+                coeff1 = 0;
             }
             else {
                 auto& ntile = ninfo.tile();
                 ctype1 = ntile.type(nl_ijk);
 				x1 = ntile(x_channel, nl_ijk);
                 u1 = ntile(u_channel + axis, nl_ijk);
+				coeff1 = ntile(coeff_channel + axis, nl_ijk);
             }
-            coeff = NegativeLaplacianCoeff(h, ctype0, ctype1);
+			T coeff = (sgn == -1) ? coeff0 : coeff1;
 
             if (calc_div) {
 
@@ -409,7 +411,7 @@ void AMGFluxCorrectionOnLeafs(HADeviceGrid<Tile>& grid, int subtree_level, int x
             }
             else {
                 if (sgn == -1) {
-                    tile(u_channel + axis, l_ijk) += (x0 - x1) * coeff / (h * h);
+                    tile(u_channel + axis, l_ijk) += (x1 - x0) * coeff / (h * h);
 
                     //{
                     //    auto g_ijk = acc.composeGlobalCoord(info.mTileCoord, l_ijk);
