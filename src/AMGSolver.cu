@@ -13,9 +13,11 @@ __forceinline__ __device__ T NegativeLaplacianCoeff(T h, uint8_t ctype0, const u
     return has_neumann ? 0 : h;
 }
 
-//coeff_channel+0,1,2: 3 off-diagonal coefficients
+//coeff_channel+0,1,2: 3 face coefficients
 //coeff_channel+3: diagonal coefficient
-//this function will consider all NONLEAF tiles as LEAFs, for the purpose of single-level smoothing in AMG
+//INTERIOR cells in LEAF cells are dofs in the AMG system
+//Only them have non-zero diagonal coeffs
+//Other cells may have face coeffs but not dofs, so diagonal coeffs are zero
 void CalculateAMGCoefficients(HADeviceGrid<Tile>& grid, const int coeff_channel, const uint8_t launch_tile_types) {
     grid.launchVoxelFuncOnAllTiles(
         [=] __device__(HATileAccessor<Tile>&acc, HATileInfo<Tile>&info, const Coord & l_ijk) {
