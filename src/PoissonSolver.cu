@@ -19,7 +19,7 @@ void CalcCellTypesFromLeafs(HADeviceGrid<Tile>& grid) {
 
         acc.iterateChildVoxels(info, l_ijk,
             [&]__device__(const HATileInfo<Tile>&c_info, const Coord & c_ijk) {
-            if (c_info.isActive()) {
+            if (!c_info.empty() && c_info.isActive()) {
                 auto& tile = c_info.tile();
                 auto typ = tile.type(c_ijk);
                 if (typ & DIRICHLET) dirichlet_cnt++;
