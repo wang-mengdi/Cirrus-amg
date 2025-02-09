@@ -10,7 +10,8 @@ int main(int argc, char** argv) {
 	for (auto grid_name : { 
 		//TestGrids::uniform8,
 		//TestGrids::uniform128, 
-		TestGrids::staircase12, 
+		//TestGrids::staircase12, 
+		TestGrids::staircase21, 
 		//TestGrids::staircase34,
 		//TestGrids::twosources67,
 		}) {

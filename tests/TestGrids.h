@@ -6,6 +6,7 @@ enum class TestGrids {
 	uniform256,
 	uniform512,
 	staircase12,
+	staircase21,
 	staircase34,
 	twosources67,
 	twosources_deform,
