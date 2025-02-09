@@ -331,7 +331,7 @@ __global__ void NegativeLaplacianSameLevelAMG128Kernel(const HATileAccessor<Tile
 		Coord l_ijk = acc.localOffsetToCoord(vi);
 
 		//auto g_ijk = acc.composeGlobalCoord(info.mTileCoord, l_ijk);
-  //      if (info.mLevel==4&&g_ijk == Coord(63,63,58)) {
+  //      if (info.mLevel==4&&g_ijk == Coord(47,126,87)) {
   //          printf("l_ijk: %d %d %d\n", l_ijk[0], l_ijk[1], l_ijk[2]);
   //      }
   //      else continue;
@@ -355,7 +355,7 @@ void AMGFullNegativeLaplacianOnLeafs(HADeviceGrid<Tile>& grid, const int x_chann
 
 //if calc_div is set, calculate x=div(u) of integral form (volume weighted)
 //otherwise, add grad(x) to u
-void AMGFluxCorrectionOnLeafs(HADeviceGrid<Tile>& grid, int subtree_level, int coeff_channel, int x_channel, int u_channel, bool calc_div) {
+void AMGFluxCorrectionOnLeafs(HADeviceGrid<Tile>& grid, int subtree_level, uint8_t launch_tile_types, int coeff_channel, int x_channel, int u_channel, bool calc_div) {
 
    // if (calc_div) {
    //     for (int axis : {0, 1, 2}) {
@@ -404,7 +404,7 @@ void AMGFluxCorrectionOnLeafs(HADeviceGrid<Tile>& grid, int subtree_level, int c
 
      //           {
 					//auto g_ijk = acc.composeGlobalCoord(info.mTileCoord, l_ijk);
-     //               if (info.mLevel == 4 && g_ijk == Coord(63, 63, 58)) {
+     //               if (info.mLevel == 4 && g_ijk == Coord(47,126,87)) {
      //                   printf("g_ijk %d %d %d axis %d sgn %d ctype0 %d ctype1 %d h %f coeff %f u0 %f u1 %f term %f sum %f\n", g_ijk[0], g_ijk[1], g_ijk[2], axis, sgn, ctype0, ctype1,h, coeff, u0, u1, (sgn == -1) ? -u0 * h * h : u1 * h * h, sum);
      //               }
      //           }
