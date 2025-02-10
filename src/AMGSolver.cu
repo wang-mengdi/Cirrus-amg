@@ -618,12 +618,14 @@ __global__ void ResidualAndRestrictAMG128Kernel(HATileAccessor<Tile> acc, HATile
         acc.findVoxel(level - 1, cg_ijk, cinfo, cl_ijk);
         if (!cinfo.empty()) {
             T residual_sum = 0;
+            T x_sum = 0;
             for (int ii : {0, 1}) {
                 for (int jj : {0, 1}) {
                     for (int kk : {0, 1}) {
                         Coord fl1_ijk = fl_ijk + Coord(ii, jj, kk);
                         int vi1 = acc.localCoordToOffset(fl1_ijk);
                         residual_sum += residual[vi1];
+                        x_sum += shared_data.xValueT(fl1_ijk);
                     }
                 }
             }
@@ -638,7 +640,8 @@ __global__ void ResidualAndRestrictAMG128Kernel(HATileAccessor<Tile> acc, HATile
             else {
                 auto& ctile = cinfo.tile();
                 ctile(coarse_residual_channel, cl_ijk) = residual_sum * residual_op_coeff;
-                ctile(coarse_x_channel, cl_ijk) = 0;
+                //ctile(coarse_x_channel, cl_ijk) = 0;
+                ctile(coarse_x_channel, cl_ijk) = x_sum / 8;
             }
         }
 
@@ -820,7 +823,9 @@ void AMGSolver::muCycleStep(int current_level, int repeat_times, HADeviceGrid<Ti
     
     GaussSeidelAMG(level_iters, 0, grid, current_level, x_channel, coeff_channel, rhs_channel);
     //will set initial guess of coarser level to 0
-    ResidualAndRestrictAMG(grid, x_channel, coeff_channel, rhs_channel, x_channel, rhs_channel, current_level, LEAF | GHOST, R_restrict_coeff);
+    ResidualAndRestrictAMG(grid, x_channel, coeff_channel, rhs_channel, x_channel, rhs_channel, current_level, LEAF, R_restrict_coeff);
+    DeductFluxOnAbsLeafs(grid, current_level - 1, x_channel, coeff_channel, rhs_channel);
+    SetLevelZeroAbsTiles(grid, current_level - 1, NONLEAF, x_channel);
 
     for (int i = 0; i < repeat_times; i++) {
         muCycleStep(current_level - 1, repeat_times, grid, x_channel, rhs_channel, coeff_channel, level_iters, coarsest_iters);
