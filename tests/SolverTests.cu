@@ -28,19 +28,19 @@ namespace SolverTests {
         else if (grid_name == TestGrids::uniform512) {
             return 6;
         }
-        else if (grid_name == TestGrids::staircase12) {
+        else if (grid_name == TestGrids::staircase21) {
             auto bbox = acc.tileBBox(info);
             int desired_level = 0;
             if (bbox.min()[0] <= 0.25) return 2;//slow converging, if 0.25 not converging
             else return 1;
         }
-        else if (grid_name == TestGrids::staircase21) {
+        else if (grid_name == TestGrids::staircase12) {
             auto bbox = acc.tileBBox(info);
             int desired_level = 0;
             if (bbox.max()[0] >= 0.75) return 2;//slow converging, if 0.25 not converging
             else return 1;
         }
-        else if (grid_name == TestGrids::staircase34) {
+        else if (grid_name == TestGrids::staircase43) {
 			//64^3 at small x, 128^3 at large x
             auto bbox = acc.tileBBox(info);
             int desired_level = 0;

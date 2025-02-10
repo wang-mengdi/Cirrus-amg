@@ -7,7 +7,7 @@ enum class TestGrids {
 	uniform512,
 	staircase12,
 	staircase21,
-	staircase34,
+	staircase43,
 	twosources67,
 	twosources_deform,
 	centersource

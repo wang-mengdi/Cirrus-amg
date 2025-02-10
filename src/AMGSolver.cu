@@ -447,8 +447,9 @@ void AMGAddGradientToFace(HADeviceGrid<Tile>& grid, int subtree_level, uint8_t l
 void AMGVolumeWeightedDivergenceOnLeafs(HADeviceGrid<Tile>& grid, int u_channel, int coeff_channel, int x_channel) {
     for (int axis : {0, 1, 2}) {
         PropagateToChildren(grid, u_channel + axis, u_channel + axis, -1, GHOST, LAUNCH_SUBTREE, INTERIOR | DIRICHLET | NEUMANN);
-        AccumulateToParentsOneStep(grid, u_channel + axis, u_channel + axis, LEAF, 1. / 8, false, INTERIOR | DIRICHLET | NEUMANN);
+        //AccumulateToParentsOneStep(grid, u_channel + axis, u_channel + axis, LEAF, 1. / 8, false, INTERIOR | DIRICHLET | NEUMANN);
     }
+    AccumulateFacesToParentsOneStep(grid, u_channel, u_channel, LEAF, 1. / 4, false, INTERIOR | DIRICHLET | NEUMANN);
 
     grid.launchVoxelFuncOnAllTiles(
         [=] __device__(HATileAccessor<Tile>&acc, HATileInfo<Tile>&info, const Coord & l_ijk) {
