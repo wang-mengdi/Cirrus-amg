@@ -287,7 +287,7 @@ __global__ void ConservativeResidualAndRestrict128Kernel(HATileAccessor<Tile> ac
             }
             //ghost accumulate
             if (finfo.subtreeType(level) & GHOST) {
-                //cinfo.tile()(coarse_residual_channel, cl_ijk) += sum;
+                cinfo.tile()(coarse_residual_channel, cl_ijk) += sum;
 			}
 			else {
 				cinfo.tile()(coarse_residual_channel, cl_ijk) = sum * one_over_alpha;

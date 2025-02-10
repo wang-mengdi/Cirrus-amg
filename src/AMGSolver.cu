@@ -28,7 +28,7 @@ void CoarsenTypesAndAMGCoeffs(HADeviceGrid<Tile>& grid, const int coeff_channel,
     // 1. fill GHOST cell types
     // 2. calculate off-diag and diag coeffs for LEAF and GHOST cells
     // 3. calculate cell types off-diag and diag coeffs for NONLEAF cells
-	// all non-zero entries in R equal to R_matrix_coeff
+    // all non-zero entries in R equal to R_matrix_coeff
 
     //step 0: clear coeff channel for all tiles
     grid.launchVoxelFuncOnAllTiles(
@@ -56,7 +56,7 @@ void CoarsenTypesAndAMGCoeffs(HADeviceGrid<Tile>& grid, const int coeff_channel,
 
     //step 2: calculate face terms on LEAF and GHOST cells
     grid.launchVoxelFuncOnAllTiles(
-        [=] __device__(HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const Coord& l_ijk) {
+        [=] __device__(HATileAccessor<Tile>&acc, HATileInfo<Tile>&info, const Coord & l_ijk) {
         auto h = acc.voxelSize(info);
         Tile& tile = info.tile();
         uint8_t ttype0 = info.mType;
@@ -84,7 +84,7 @@ void CoarsenTypesAndAMGCoeffs(HADeviceGrid<Tile>& grid, const int coeff_channel,
         });
     }, LEAF | GHOST);
 
-	//step 3: accumulate face terms
+    //step 3: accumulate face terms
     for (int i = grid.mMaxLevel; i >= 0; i--) {
         int num_tiles = grid.hNumTiles[i];
         if (num_tiles > 0) {
@@ -108,8 +108,8 @@ void CoarsenTypesAndAMGCoeffs(HADeviceGrid<Tile>& grid, const int coeff_channel,
         auto& tile = info.tile();
         auto g_ijk = acc.composeGlobalCoord(info.mTileCoord, l_ijk);
 
-        if (info.mType == LEAF) {
-			auto h = acc.voxelSize(info);
+        if (info.mType & (LEAF | GHOST)) {
+            auto h = acc.voxelSize(info);
             T diag_coeff = 0;
             if (tile.type(l_ijk) & INTERIOR) {
                 acc.iterateSameLevelNeighborVoxels(info, l_ijk,
@@ -140,7 +140,7 @@ void CoarsenTypesAndAMGCoeffs(HADeviceGrid<Tile>& grid, const int coeff_channel,
                             auto& ctile = cinfo.tile();
                             diag_sum += ctile(coeff_channel + 3, cl_ijk);
                             interior_cnt += (ctile.type(cl_ijk) == INTERIOR);
-							ctypes[ci][cj][ck] = ctile.type(cl_ijk);
+                            ctypes[ci][cj][ck] = ctile.type(cl_ijk);
                             for (int axis : {0, 1, 2}) {
                                 coff_diag[axis][ci][cj][ck] = ctile(coeff_channel + axis, cl_ijk);
                             }
@@ -161,36 +161,36 @@ void CoarsenTypesAndAMGCoeffs(HADeviceGrid<Tile>& grid, const int coeff_channel,
                     for (int ck = 0; ck < 2; ck++) {
                         if (ctypes[0][cj][ck] == INTERIOR && ctypes[1][cj][ck] == INTERIOR) {
                             //it will be added twice
-							diag_sum += coff_diag[0][1][cj][ck];
+                            diag_sum += coff_diag[0][1][cj][ck];
                         }
-						if (ctypes[ci][0][ck] == INTERIOR && ctypes[ci][1][ck] == INTERIOR) {
-							//it will be added twice
-							diag_sum += coff_diag[1][ci][1][ck];
-						}
-						if (ctypes[ci][cj][0] == INTERIOR && ctypes[ci][cj][1] == INTERIOR) {
-							//it will be added twice
-							diag_sum += coff_diag[2][ci][cj][1];
-						}
+                        if (ctypes[ci][0][ck] == INTERIOR && ctypes[ci][1][ck] == INTERIOR) {
+                            //it will be added twice
+                            diag_sum += coff_diag[1][ci][1][ck];
+                        }
+                        if (ctypes[ci][cj][0] == INTERIOR && ctypes[ci][cj][1] == INTERIOR) {
+                            //it will be added twice
+                            diag_sum += coff_diag[2][ci][cj][1];
+                        }
 
-          //              //seems not working
-          //              Coord coff(ci, cj, ck);
-          //              for (int axis : {0, 1, 2}) {
-          //                  for (int sgn : {0, 1}) {
-          //                      if (sgn == coff[axis]) {
-          //                          //test if the child neighbors a ghost cell
-          //                          Coord ncg_ijk(g_ijk[0] * 2 + ci, g_ijk[1] * 2 + cj, g_ijk[2] * 2 + ck);
-          //                          ncg_ijk[axis] += (sgn == 1) ? 1 : -1;
-          //                          HATileInfo<Tile> ncinfo; Coord ncl_ijk;
-          //                          acc.findVoxel(info.mLevel + 1, ncg_ijk, ncinfo, ncl_ijk);
-          //                          if (!ncinfo.empty() && ncinfo.mType == GHOST) {
-										//T off0 = coff_diag[axis][ci][cj][ck];
-										//T off1 = ncinfo.tile()(coeff_channel + axis, ncl_ijk);
-          //                              diag_sum -= 0.5 * (sgn == 1) ? off1 : off0;
-          //                              //printf("off0: %f off1: %f\n", off0, off1);
-          //                          }
-          //                      }
-          //                  }
-          //              }
+                        //              //seems not working
+                        //              Coord coff(ci, cj, ck);
+                        //              for (int axis : {0, 1, 2}) {
+                        //                  for (int sgn : {0, 1}) {
+                        //                      if (sgn == coff[axis]) {
+                        //                          //test if the child neighbors a ghost cell
+                        //                          Coord ncg_ijk(g_ijk[0] * 2 + ci, g_ijk[1] * 2 + cj, g_ijk[2] * 2 + ck);
+                        //                          ncg_ijk[axis] += (sgn == 1) ? 1 : -1;
+                        //                          HATileInfo<Tile> ncinfo; Coord ncl_ijk;
+                        //                          acc.findVoxel(info.mLevel + 1, ncg_ijk, ncinfo, ncl_ijk);
+                        //                          if (!ncinfo.empty() && ncinfo.mType == GHOST) {
+                                                      //T off0 = coff_diag[axis][ci][cj][ck];
+                                                      //T off1 = ncinfo.tile()(coeff_channel + axis, ncl_ijk);
+                        //                              diag_sum -= 0.5 * (sgn == 1) ? off1 : off0;
+                        //                              //printf("off0: %f off1: %f\n", off0, off1);
+                        //                          }
+                        //                      }
+                        //                  }
+                        //              }
                     }
                 }
             }
@@ -199,7 +199,7 @@ void CoarsenTypesAndAMGCoeffs(HADeviceGrid<Tile>& grid, const int coeff_channel,
             tile(coeff_channel + 3, l_ijk) = diag_sum * R_matrix_coeff;
         }
     },
-        -1, LEAF | NONLEAF, LAUNCH_SUBTREE, FINE_FIRST);
+        -1, LEAF | GHOST | NONLEAF, LAUNCH_SUBTREE, FINE_FIRST);
 }
 
 class AMGLaplacianTileData {
@@ -629,7 +629,11 @@ __global__ void ResidualAndRestrictAMG128Kernel(HATileAccessor<Tile> acc, HATile
             }
             //ghost accumulate
             if (finfo.subtreeType(level) & GHOST) {
-                //cinfo.tile()(coarse_residual_channel, cl_ijk) += sum;
+                //auto& ctile = cinfo.tile();
+                //ctile(coarse_residual_channel, cl_ijk) += sum;
+     //           {
+					//printf("cg_ijk %d %d %d sum %f\n", cg_ijk[0], cg_ijk[1], cg_ijk[2], sum);
+     //           }
             }
             else {
                 auto& ctile = cinfo.tile();
@@ -762,7 +766,7 @@ void AMGSolver::muCycleStep(int current_level, int repeat_times, HADeviceGrid<Ti
     
     GaussSeidelAMG(level_iters, 0, grid, current_level, x_channel, coeff_channel, rhs_channel);
     //will set initial guess of coarser level to 0
-    ResidualAndRestrictAMG(grid, x_channel, coeff_channel, rhs_channel, x_channel, rhs_channel, current_level, LEAF, R_restrict_coeff);
+    ResidualAndRestrictAMG(grid, x_channel, coeff_channel, rhs_channel, x_channel, rhs_channel, current_level, LEAF | GHOST, R_restrict_coeff);
 
     for (int i = 0; i < repeat_times; i++) {
         muCycleStep(current_level - 1, repeat_times, grid, x_channel, rhs_channel, coeff_channel, level_iters, coarsest_iters);
@@ -804,7 +808,7 @@ void AMGSolver::prepareTypesAndCoeffs(HADeviceGrid<Tile>& grid)
 
 std::tuple<int, double> AMGSolver::solve(HADeviceGrid<Tile>& grid, bool verbose, int max_iters, double relative_tolerance, int level_iters, int coarsest_iters, int sync_stride, bool is_pure_neumann)
 {
-    int mu_cycle_repeat_times = 2;
+    int mu_cycle_repeat_times = 1;
 
     double rhs_norm2, threshold_norm2, last_residual_norm2;
 
