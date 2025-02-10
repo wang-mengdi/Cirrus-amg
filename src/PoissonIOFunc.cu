@@ -597,7 +597,7 @@ namespace IOFunc {
         mesh->setTransparency(0.2);
     }
 
-    void AddLeveledPoissonGridCellCentersToPolyscopePointCloud(std::shared_ptr<HAHostTileHolder<Tile>> holder_ptr, const std::vector<std::pair<int, std::string>> scalar_channels, std::vector<std::pair<int, std::string>> vec_channels, const double invalid_value) {
+    void AddLeveledPoissonGridCellCentersToPolyscopePointCloud(std::shared_ptr<HAHostTileHolder<Tile>> holder_ptr, const std::vector<std::pair<int, std::string>> scalar_channels, std::vector<std::pair<int, std::string>> vec_channels, int level, const double invalid_value) {
         auto& holder = *holder_ptr;
         using Coord = typename Tile::CoordType;
 
@@ -662,10 +662,12 @@ namespace IOFunc {
             }
             };
 
-        for (int level = 0; level <= holder.mMaxLevel; level++) {
-            add_data(level, LEAF, fmt::format("Level{}LEAF", level));
-            add_data(level, GHOST, fmt::format("Level{}GHOST", level));
-            add_data(level, NONLEAF, fmt::format("Level{}NONLEAF", level));
+        int beg = 0, end = holder.mMaxLevel;
+		if (level != -1) beg = end = level;
+        for (int i = beg; i <= end; i++) {
+            add_data(i, LEAF, fmt::format("Level{}LEAF", i));
+            add_data(i, GHOST, fmt::format("Level{}GHOST", i));
+            add_data(i, NONLEAF, fmt::format("Level{}NONLEAF", i));
         }
     }
 

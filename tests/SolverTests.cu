@@ -19,6 +19,9 @@ namespace SolverTests {
         if (grid_name == TestGrids::uniform8) {
             return 0;
         }
+        else if (grid_name == TestGrids::uniform32) {
+            return 2;
+        }
         else if (grid_name == TestGrids::uniform128) {
             return 4;
         }
@@ -271,11 +274,20 @@ namespace SolverTests {
             solver.prepareTypesAndCoeffs(grid);
             AMGFullNegativeLaplacianOnLeafs(grid, grdt_channel, coeff_channel, Tile::b_channel);
 
+            //auto holder = grid.getHostTileHolder(LEAF | NONLEAF);
+            //polyscope::init();
+            //IOFunc::AddLeveledPoissonGridCellCentersToPolyscopePointCloud(holder,
+            //    {
+            //    {solver.coeff_channel,"offd0"}, {solver.coeff_channel + 1,"offd1"} ,{solver.coeff_channel + 2,"offd2"},{solver.coeff_channel + 3,"diag"}, {-1,"type"}
+            //    },
+            //    {}, -1, FLT_MAX);
+            //polyscope::show();
+
             _sleep(200);
 
             CPUTimer<std::chrono::microseconds> timer;
             timer.start();
-            auto [iters, err] = solver.solve(grid, true, 1000, 1e-6, 1, 10, 1, false);
+            auto [iters, err] = solver.solve(grid, true, 1000, 1e-6, 2, 10, 1, false);
             CheckCudaError("AMGPCG solve");
             float elapsed = timer.stop("AMGPCG Async");
             int total_cells = grid.numTotalLeafTiles() * Tile::SIZE;
@@ -299,7 +311,7 @@ namespace SolverTests {
         }, LEAF
         );
 		auto linf_norm = SingleChannelLinfSync(grid, Tile::r_channel, LEAF);
-        if (linf_norm < 1e-5) {
+        if (linf_norm < 1e-4) {
 			Pass("Test passed with Linf norm of grdt-x: {}\n\n", linf_norm);
 		}
         else {

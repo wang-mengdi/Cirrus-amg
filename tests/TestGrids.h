@@ -2,6 +2,7 @@
 
 enum class TestGrids {
 	uniform8 = 0,
+	uniform32,
 	uniform128,
 	uniform256,
 	uniform512,
