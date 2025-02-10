@@ -617,13 +617,13 @@ __global__ void ResidualAndRestrictAMG128Kernel(HATileAccessor<Tile> acc, HATile
         HATileInfo<Tile> cinfo; Coord cl_ijk;//coarse tile and local coord
         acc.findVoxel(level - 1, cg_ijk, cinfo, cl_ijk);
         if (!cinfo.empty()) {
-            T sum = 0;
+            T residual_sum = 0;
             for (int ii : {0, 1}) {
                 for (int jj : {0, 1}) {
                     for (int kk : {0, 1}) {
                         Coord fl1_ijk = fl_ijk + Coord(ii, jj, kk);
                         int vi1 = acc.localCoordToOffset(fl1_ijk);
-                        sum += residual[vi1];
+                        residual_sum += residual[vi1];
                     }
                 }
             }
@@ -637,7 +637,7 @@ __global__ void ResidualAndRestrictAMG128Kernel(HATileAccessor<Tile> acc, HATile
             }
             else {
                 auto& ctile = cinfo.tile();
-                ctile(coarse_residual_channel, cl_ijk) = sum * residual_op_coeff;
+                ctile(coarse_residual_channel, cl_ijk) = residual_sum * residual_op_coeff;
                 ctile(coarse_x_channel, cl_ijk) = 0;
             }
         }
@@ -647,6 +647,60 @@ __global__ void ResidualAndRestrictAMG128Kernel(HATileAccessor<Tile> acc, HATile
 
 void ResidualAndRestrictAMG(HADeviceGrid<Tile>& grid, int fine_x_channel, int fine_coeff_channel, int fine_rhs_channel, int coarse_x_channel, int coarse_residual_channel, int level, uint8_t launch_tile_types, T residual_op_coeff) {
     ResidualAndRestrictAMG128Kernel << <grid.hNumTiles[level], 128 >> > (grid.deviceAccessor(), thrust::raw_pointer_cast(grid.dTileArrays[level].data()), level, launch_tile_types, fine_x_channel, fine_coeff_channel, fine_rhs_channel, coarse_x_channel, coarse_residual_channel, residual_op_coeff);
+}
+
+__global__ void DeductFluxOnAbsLeafs128Kernel(HATileAccessor<Tile> acc, HATileInfo<Tile>* tiles, int x_channel, int coeff_channel, int rhs_channel) {
+    __shared__ AMGLaplacianTileData shared_data;
+    //block idx (tile idx), distinguish from thread idx
+    int bi = blockIdx.x;
+    //thread idx
+    int ti = threadIdx.x;
+
+    auto& info = tiles[bi];
+    auto& tile = info.tile();
+
+
+    if (!(info.mType & LEAF)) return;
+
+    LoadAMGLaplacianTileData(acc, info, shared_data, x_channel, coeff_channel, ti);
+    __syncthreads();
+
+    //calculate residual
+    for (int i = 0; i < 4; i++) {
+        //voxel idx
+        int vi = i * 128 + ti;
+        Coord l_ijk = acc.localOffsetToCoord(vi);
+
+		tile(rhs_channel, l_ijk) -= shared_data.negativeLap(l_ijk);
+    }
+}
+
+void DeductFluxOnAbsLeafs(HADeviceGrid<Tile>& grid, int level, int x_channel, int coeff_channel, int rhs_channel) {
+    DeductFluxOnAbsLeafs128Kernel << <grid.hNumTiles[level], 128 >> > (
+        grid.deviceAccessor(), thrust::raw_pointer_cast(grid.dTileArrays[level].data()),
+        x_channel, coeff_channel, rhs_channel
+        );
+}
+
+__global__ void SetLevelZeroAbsTiles128Kernel(HATileAccessor<Tile> acc, HATileInfo<Tile>* tiles, int level, uint8_t abs_tile_types, int x_channel) {
+    //block idx (tile idx), distinguish from thread idx
+    int bi = blockIdx.x;
+    //thread idx
+    int ti = threadIdx.x;
+
+    auto& info = tiles[bi];
+    auto& tile = info.tile();
+    if (!(info.mType & abs_tile_types)) return;
+
+	for (int i = 0; i < 4; i++) {
+		int vi = i * 128 + ti;
+        Coord l_ijk = acc.localOffsetToCoord(vi);
+		tile(x_channel, l_ijk) = 0;
+	}
+}
+
+void SetLevelZeroAbsTiles(HADeviceGrid<Tile>& grid, int level, uint8_t abs_tile_types, int x_channel) {
+	SetLevelZeroAbsTiles128Kernel << <grid.hNumTiles[level], 128 >> > (grid.deviceAccessor(), thrust::raw_pointer_cast(grid.dTileArrays[level].data()), level, abs_tile_types, x_channel);
 }
 
 __global__ void ProlongateAndUpdateAMG128Kernel(HATileAccessor<Tile> acc, HATileInfo<Tile>* fine_tiles, int fine_level, uint8_t fine_tile_types, int coarse_x_channel, int fine_x_channel, T prolong_coeff) {
