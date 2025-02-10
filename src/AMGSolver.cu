@@ -206,6 +206,7 @@ class AMGLaplacianTileData {
 public:
     static constexpr int halo = 1;
     static constexpr int SN = 8 + halo * 2;
+	uint8_t absttype[SN][SN][SN];    // tile type
     T x[SN][SN][SN];               // x channel
 	T diag[8][8][8];			   // Diagonal coefficient
 	T off_diag0[9][8][8];		  // Off-diagonal coefficient 0
@@ -214,6 +215,7 @@ public:
     //uint8_t ttype[SN][SN][SN];    // tile type
 
     //they will take actual tile local coords
+	__device__ uint8_t& absttypeT(Coord l_ijk) { return absttype[l_ijk[0] + halo][l_ijk[1] + halo][l_ijk[2] + halo]; }
     __device__ T& xValueT(Coord l_ijk) { return x[l_ijk[0] + halo][l_ijk[1] + halo][l_ijk[2] + halo]; }
 	__device__ T& diagValueT(Coord l_ijk) { return diag[l_ijk[0]][l_ijk[1]][l_ijk[2]]; }
 	__device__ T& offDiag0ValueT(Coord l_ijk) { return off_diag0[l_ijk[0]][l_ijk[1]][l_ijk[2]]; }
@@ -261,6 +263,29 @@ public:
 
 		return sum;
     }
+
+    __device__ T negativeLapOuterNonLeaf(Coord l_ijk) {
+        //this is LEAF, only calculate terms induced by NONLEAF cells
+        //it's DIRICHLET of NEUMANN
+        if (diagValueT(l_ijk) == 0) return 0;
+        T x0 = absttypeT(l_ijk) == NONLEAF ? xValueT(l_ijk) : 0;
+        T sum = x0 * diagValueT(l_ijk);
+        for (int axis : { 0, 1, 2 }) {
+            for (int sgn : { -1, 1 }) {
+                Coord nl_ijk = l_ijk;
+                nl_ijk[axis] += sgn;
+                //the "upwind" cell, with higher axis coord
+                Coord ul_ijk = l_ijk;
+                ul_ijk[axis] += (sgn == -1) ? 0 : 1;
+
+				T x1 = absttypeT(nl_ijk) == NONLEAF ? xValueT(nl_ijk) : 0;
+
+                sum += offDiagValueT(axis, ul_ijk) * x1;
+            }
+        }
+
+        return sum;
+    }
 };
 
 //vi in [0,64)
@@ -287,6 +312,7 @@ __device__ void LoadAMGLaplacianTileData(const HATileAccessor<Tile>& acc, const 
         Coord l_ijk = acc.localOffsetToCoord(vi);
 
         // Load x, off-diagonal and diagonal coefficients
+        shared_data.absttypeT(l_ijk) = info.mType;
         shared_data.xValueT(l_ijk) = tile.type(l_ijk) == INTERIOR ? tile(x_channel, vi) : 0;
         shared_data.offDiag0ValueT(l_ijk) = tile(coeff_channel, vi);
         shared_data.offDiag1ValueT(l_ijk) = tile(coeff_channel + 1, vi);
@@ -339,10 +365,12 @@ __device__ void LoadAMGLaplacianTileData(const HATileAccessor<Tile>& acc, const 
 
         bool empty = ninfo.empty();
         if (empty) {
+            shared_data.absttypeT(fl_ijk) = info.mType;
             shared_data.xValueT(fl_ijk) = 0;
             if (sgn == 1) shared_data.offDiagValueT(axis, fl_ijk) = h;
         }
         else if (ninfo.mType & GHOST) {
+            shared_data.absttypeT(fl_ijk) = ninfo.mType;
             //dp/dx calculated with coarse grid equals to fine grid
             auto& ntile = ninfo.tile();
             T V1 = ntile(x_channel, nl_ijk);
@@ -370,6 +398,7 @@ __device__ void LoadAMGLaplacianTileData(const HATileAccessor<Tile>& acc, const 
             //if (sgn == 1) shared_data.offDiagValueT(axis, fl_ijk) = ninfo.tile()(coeff_channel + axis, nl_ijk);
         }
         else {
+			shared_data.absttypeT(fl_ijk) = ninfo.mType;
 			auto& ntile = ninfo.tile();
             shared_data.xValueT(fl_ijk) = (ntile.type(nl_ijk) == INTERIOR ? ntile(x_channel, nl_ijk) : 0);
             if (sgn == 1) shared_data.offDiagValueT(axis, fl_ijk) = ninfo.tile()(coeff_channel + axis, nl_ijk);
@@ -675,7 +704,7 @@ __global__ void DeductFluxOnAbsLeafs128Kernel(HATileAccessor<Tile> acc, HATileIn
         Coord l_ijk = acc.localOffsetToCoord(vi);
 
 		//tile(rhs_channel, l_ijk) -= shared_data.negativeLap(l_ijk);
-        if (tile.type(l_ijk) & INTERIOR) tile(rhs_channel, l_ijk) = tile(f_channel, l_ijk) - shared_data.negativeLap(l_ijk);
+        if (tile.type(l_ijk) & INTERIOR) tile(rhs_channel, l_ijk) = tile(f_channel, l_ijk) - shared_data.negativeLapOuterNonLeaf(l_ijk);
         else tile(rhs_channel, l_ijk) = 0;
     }
 }
@@ -963,7 +992,7 @@ std::tuple<int, double> AMGSolver::solve(HADeviceGrid<Tile>& grid, bool verbose,
                 auto holder = grid.getHostTileHolder(LEAF);
                 IOFunc::AddLeveledPoissonGridCellCentersToPolyscopePointCloud(
                     holder,
-                    { {-1,"type"}, { Tile::r_channel,"residual" }},
+                    { {-1,"type"}, { Tile::r_channel,"residual" }, {coeff_channel,"offd0"}, {coeff_channel + 1,"offd1"} ,{coeff_channel + 2,"offd2"},{coeff_channel + 3,"diag"} },
                     {},
                     -1, FLT_MAX
                 );
