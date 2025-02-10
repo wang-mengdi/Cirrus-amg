@@ -669,9 +669,9 @@ __global__ void AccumulateFacesToParentsOneStepKernel(HATileAccessor<Tile> acc, 
                         int vi1 = acc.localCoordToOffset(fl1_ijk);
                         sum += data[axis][vi1];
 
-                        if (cg_ijk == Coord(8, 8, 10) && cinfo.mLevel == 1) {
-                            printf("axis %d l_ijk %d %d %d vi1 %d data %f sum %f\n", axis, fl1_ijk[0], fl1_ijk[1], fl1_ijk[2], vi1, data[axis][vi1], sum);
-                        }
+                        //if (cg_ijk == Coord(8, 8, 10) && cinfo.mLevel == 1) {
+                        //    printf("axis %d l_ijk %d %d %d vi1 %d data %f sum %f\n", axis, fl1_ijk[0], fl1_ijk[1], fl1_ijk[2], vi1, data[axis][vi1], sum);
+                        //}
 
                     }
                 }
