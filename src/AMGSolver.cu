@@ -864,6 +864,20 @@ void AMGSolver::muCycleStep(int current_level, int repeat_times, HADeviceGrid<Ti
 
 	ProlongateAndUpdateAMG128(grid, x_channel, x_channel, current_level, prolong_coeff);
 	GaussSeidelAMG(level_iters, 1, grid, current_level, x_channel, coeff_channel, rhs_channel);
+
+    //{
+    //    Info("done with mucycle level {}", current_level);
+    //    polyscope::init();
+    //    auto holder = grid.getHostTileHolder(LEAF | NONLEAF | GHOST);
+    //    IOFunc::AddLeveledPoissonGridCellCentersToPolyscopePointCloud(
+    //        holder,
+    //        { {-1,"type"}, {x_channel,"x"}, { rhs_channel,"rhs" }, {coeff_channel,"offd0"}, {coeff_channel + 1,"offd1"} ,{coeff_channel + 2,"offd2"},{coeff_channel + 3,"diag"} },
+    //        {},
+    //        current_level, FLT_MAX
+    //    );
+    //    polyscope::show();
+    //    polyscope::removeAllStructures();
+    //}
 }
 
 void AMGSolver::muCycle(int repeat_times, HADeviceGrid<Tile>& grid, const int x_channel, const int f_channel, const int rhs_channel, const int coeff_channel, int level_iters, int coarsest_iters)
@@ -898,7 +912,7 @@ void AMGSolver::prepareTypesAndCoeffs(HADeviceGrid<Tile>& grid)
 
 std::tuple<int, double> AMGSolver::solve(HADeviceGrid<Tile>& grid, bool verbose, int max_iters, double relative_tolerance, int level_iters, int coarsest_iters, int sync_stride, bool is_pure_neumann)
 {
-    int mu_cycle_repeat_times = 2;
+    int mu_cycle_repeat_times = 1;
 
     double rhs_norm2, threshold_norm2, last_residual_norm2;
 
@@ -987,17 +1001,7 @@ std::tuple<int, double> AMGSolver::solve(HADeviceGrid<Tile>& grid, bool verbose,
                 return std::make_tuple(i + 1, sqrt(residual_norm2 / rhs_norm2));
             }
 
-            {
-                polyscope::init();
-                auto holder = grid.getHostTileHolder(LEAF);
-                IOFunc::AddLeveledPoissonGridCellCentersToPolyscopePointCloud(
-                    holder,
-                    { {-1,"type"}, { Tile::r_channel,"residual" }, {coeff_channel,"offd0"}, {coeff_channel + 1,"offd1"} ,{coeff_channel + 2,"offd2"},{coeff_channel + 3,"diag"} },
-                    {},
-                    -1, FLT_MAX
-                );
-                polyscope::show();
-            }
+
         }
         if (is_pure_neumann) ReCenterLeafVoxels(grid, Tile::r_channel, mean_d, count_d);
 
