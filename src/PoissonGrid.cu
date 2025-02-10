@@ -675,7 +675,6 @@ __global__ void AccumulateFacesToParentsOneStepKernel(HATileAccessor<Tile> acc, 
 
                     }
                 }
-                //ghost accumulate
                 if (additive) {
                     ctile(coarse_u_channel + axis, cl_ijk) += sum * coeff;
                 }

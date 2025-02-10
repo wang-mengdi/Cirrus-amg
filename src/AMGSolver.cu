@@ -30,6 +30,18 @@ void CoarsenTypesAndAMGCoeffs(HADeviceGrid<Tile>& grid, const int coeff_channel,
     // 3. calculate cell types off-diag and diag coeffs for NONLEAF cells
 	// all non-zero entries in R equal to R_matrix_coeff
 
+    //step 0: clear coeff channel for all tiles
+    grid.launchVoxelFuncOnAllTiles(
+        [=] __device__(HATileAccessor<Tile>&acc, HATileInfo<Tile>&info, const Coord & l_ijk) {
+        auto& tile = info.tile();
+        for (int axis : {0, 1, 2}) {
+            tile(coeff_channel + axis, l_ijk) = 0;
+        }
+        tile(coeff_channel + 3, l_ijk) = 0;
+    },
+        LEAF | GHOST | NONLEAF
+    );
+
     //step 1: fill GHOST cell types
     grid.launchVoxelFuncOnAllTiles(
         [=] __device__(HATileAccessor<Tile>&acc, HATileInfo<Tile>&info, const Coord & l_ijk) {
@@ -72,119 +84,90 @@ void CoarsenTypesAndAMGCoeffs(HADeviceGrid<Tile>& grid, const int coeff_channel,
         });
     }, LEAF | GHOST);
 
-	//step 3: accumulate face terms to LEAF cells and calculate diagonal terms
-    grid.launchVoxelFuncOnAllTiles(
-        [=] __device__(HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const Coord& l_ijk) {
-        auto h = acc.voxelSize(info);
-        Tile& tile = info.tile();
-
-        //ghost-ghost terms are zero so we can just add all 8 children for 3 axes
-        acc.iterateChildVoxels(info, l_ijk,
-            [&]__device__(const HATileInfo<Tile>&cinfo, const Coord & cl_ijk) {
-            if (!cinfo.empty()) {
-				auto& ctile = cinfo.tile();
-                for (int axis = 0; axis < 3; ++axis) {
-                    //fine level: -c0*h, -c1*h, -c2*h, -c3*h
-					//coarse level: -(c0+c1+c2+c3)/4*2h=-0.5*(c0+c1+c2+c3)*h
-                    tile(coeff_channel + axis, l_ijk) += ctile(coeff_channel + axis, cl_ijk) * 0.5;
-
-      //              {
-						//auto g_ijk = acc.composeGlobalCoord(info.mTileCoord, l_ijk);
-      //                  if (info.mLevel == 1 && g_ijk == Coord(8, 15, 11) && axis==0) {
-						//	printf("g_ijk %d %d %d axis %d cl_ijk %d %d %d coeff %f sum %f\n", g_ijk[0], g_ijk[1], g_ijk[2], axis, cl_ijk[0], cl_ijk[1], cl_ijk[2], ctile(coeff_channel + axis, cl_ijk) * 0.5, tile(coeff_channel + axis, l_ijk));
-      //                  }
-      //              }
-
-                }
-            }
+	//step 3: accumulate face terms
+    for (int i = grid.mMaxLevel; i >= 0; i--) {
+        int num_tiles = grid.hNumTiles[i];
+        if (num_tiles > 0) {
+            AccumulateFacesToParentsOneStepKernel << <num_tiles, 128 >> > (
+                grid.deviceAccessor(),
+                thrust::raw_pointer_cast(grid.dTileArrays[i].data()),
+                i,
+                LEAF | GHOST,
+                coeff_channel,
+                coeff_channel,
+                R_matrix_coeff,
+                true,
+                INTERIOR | DIRICHLET | NEUMANN
+                );
         }
-        );
+    }
 
-        //calculate diagonal terms
-		T diag_coeff = 0;
-        if (tile.type(l_ijk) & INTERIOR) {
-            acc.iterateSameLevelNeighborVoxels(info, l_ijk,
-                [&]__device__(const HATileInfo<Tile>&ninfo, const Coord & nl_ijk, const int axis, const int sgn) {
-				T c0 = tile(coeff_channel + axis, l_ijk);
-                //if ninfo if empty, we regard it as DIRICHLET and has coeff -h
-				T c1 = ninfo.empty() ? -h : ninfo.tile()(coeff_channel + axis, nl_ijk);
-                diag_coeff -= (sgn == -1) ? c0 : c1;
-
-                {
-					auto g_ijk = acc.composeGlobalCoord(info.mTileCoord, l_ijk);
-                    if (info.mLevel == 1 && g_ijk == Coord(7, 8, 10)) {
-
-                    }
-                }
-
-            });
-        }
-		tile(coeff_channel + 3, l_ijk) = diag_coeff;
-
-    }, LEAF);
-
-    //return;
-	//step 4: update types and coefficients for NONLEAF cells
+    //step 4: calculate diagonal terms for LEAF cells and coarsen diagonal terms for NONLEAF cells
     grid.launchVoxelFunc(
-        [=] __device__(HATileAccessor<Tile>&acc, HATileInfo<Tile>&info, const Coord & l_ijk) {
+        [=] __device__(HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const Coord& l_ijk) {
         auto& tile = info.tile();
         auto g_ijk = acc.composeGlobalCoord(info.mTileCoord, l_ijk);
-        int interior_cnt = 0;
-        bool has_ghost_child = false;
-        T coff_diag[3][2][2][2];//8 children
-        T diag_sum = 0;
-        for (int ci = 0; ci < 2; ci++) {
-            for (int cj = 0; cj < 2; cj++) {
-                for (int ck = 0; ck < 2; ck++) {
-                    Coord cg_ijk(g_ijk[0] * 2 + ci, g_ijk[1] * 2 + cj, g_ijk[2] * 2 + ck);
-					HATileInfo<Tile> cinfo; Coord cl_ijk;
-                    acc.findVoxel(info.mLevel + 1, cg_ijk, cinfo, cl_ijk);
-                    if (!cinfo.empty()) {
-						if (cinfo.mType == GHOST) has_ghost_child = true;
-                        auto& ctile = cinfo.tile();
-                        diag_sum += ctile(coeff_channel + 3, cl_ijk);
-                        interior_cnt += (ctile.type(cl_ijk) == INTERIOR);
-                        for (int axis : {0, 1, 2}) {
-                            coff_diag[axis][ci][cj][ck] = ctile(coeff_channel + axis, cl_ijk);
+
+        if (info.mType == LEAF) {
+			auto h = acc.voxelSize(info);
+            T diag_coeff = 0;
+            if (tile.type(l_ijk) & INTERIOR) {
+                acc.iterateSameLevelNeighborVoxels(info, l_ijk,
+                    [&]__device__(const HATileInfo<Tile>&ninfo, const Coord & nl_ijk, const int axis, const int sgn) {
+                    T c0 = tile(coeff_channel + axis, l_ijk);
+                    //if ninfo if empty, we regard it as DIRICHLET and has coeff -h
+                    T c1 = ninfo.empty() ? -h : ninfo.tile()(coeff_channel + axis, nl_ijk);
+                    diag_coeff -= (sgn == -1) ? c0 : c1;
+                });
+            }
+            tile(coeff_channel + 3, l_ijk) = diag_coeff;
+        }
+        else {
+            //coarsen diagonal terms at NONLEAF cells
+            int interior_cnt = 0;
+            bool has_ghost_child = false;
+            T coff_diag[3][2][2][2];//8 children
+            T diag_sum = 0;
+            for (int ci = 0; ci < 2; ci++) {
+                for (int cj = 0; cj < 2; cj++) {
+                    for (int ck = 0; ck < 2; ck++) {
+                        Coord cg_ijk(g_ijk[0] * 2 + ci, g_ijk[1] * 2 + cj, g_ijk[2] * 2 + ck);
+                        HATileInfo<Tile> cinfo; Coord cl_ijk;
+                        acc.findVoxel(info.mLevel + 1, cg_ijk, cinfo, cl_ijk);
+                        if (!cinfo.empty()) {
+                            if (cinfo.mType == GHOST) has_ghost_child = true;
+                            auto& ctile = cinfo.tile();
+                            diag_sum += ctile(coeff_channel + 3, cl_ijk);
+                            interior_cnt += (ctile.type(cl_ijk) == INTERIOR);
+                            for (int axis : {0, 1, 2}) {
+                                coff_diag[axis][ci][cj][ck] = ctile(coeff_channel + axis, cl_ijk);
+                            }
                         }
-                    }
-                    else {
-                        for (int axis : {0, 1, 2}) {
-                            coff_diag[axis][ci][cj][ck] = 0;
+                        else {
+                            for (int axis : {0, 1, 2}) {
+                                coff_diag[axis][ci][cj][ck] = 0;
+                            }
                         }
+
                     }
-                    
                 }
             }
-        }
 
 
-        T offs[3] = { 0,0,0 };
-        for (int ci = 0; ci < 2; ci++) {
-            for (int cj = 0; cj < 2; cj++) {
-                for (int ck = 0; ck < 2; ck++) {
-					if (ci == 0) offs[0] += coff_diag[0][ci][cj][ck];//face term
-                    if (ci == 1) diag_sum += 2 * coff_diag[0][ci][cj][ck];//a cross term will be count twice
-
-					if (cj == 0) offs[1] += coff_diag[1][ci][cj][ck];
-					if (cj == 1) diag_sum += 2 * coff_diag[1][ci][cj][ck];
-
-					if (ck == 0) offs[2] += coff_diag[2][ci][cj][ck];
-					if (ck == 1) diag_sum += 2 * coff_diag[2][ci][cj][ck];
+            for (int ci = 0; ci < 2; ci++) {
+                for (int cj = 0; cj < 2; cj++) {
+                    for (int ck = 0; ck < 2; ck++) {
+                        if (ci == 1) diag_sum += 2 * coff_diag[0][ci][cj][ck];//a cross term will be count twice
+                        if (cj == 1) diag_sum += 2 * coff_diag[1][ci][cj][ck];
+                        if (ck == 1) diag_sum += 2 * coff_diag[2][ci][cj][ck];
+                    }
                 }
             }
-        }
 
-        if (info.mType == NONLEAF) {
-            tile.type(l_ijk) = interior_cnt > 0 ? INTERIOR : DIRICHLET;
-
-            for (int axis : {0, 1, 2}) {
-                tile(coeff_channel + axis, l_ijk) = offs[axis] * R_matrix_coeff;
-            }
             tile(coeff_channel + 3, l_ijk) = diag_sum * R_matrix_coeff;
         }
     },
-        -1, NONLEAF, LAUNCH_SUBTREE, FINE_FIRST);
+        -1, LEAF | NONLEAF, LAUNCH_SUBTREE, FINE_FIRST);
 }
 
 class AMGLaplacianTileData {
@@ -215,10 +198,10 @@ public:
         T x0 = xValueT(l_ijk);
 		T sum = x0 * diagValueT(l_ijk);
 
-        //if (l_ijk == Coord(4, 4, 4)) 
-        {
-            printf("AMG x0 %f diag %f sum %f\n", x0, diagValueT(l_ijk), sum);
-        }
+        ////if (l_ijk == Coord(4, 4, 4)) 
+        //{
+        //    printf("AMG x0 %f diag %f sum %f\n", x0, diagValueT(l_ijk), sum);
+        //}
 
 		for (int axis : { 0, 1, 2 }) {
 			for (int sgn : { -1, 1 }) {
@@ -232,12 +215,12 @@ public:
 
                 sum += offDiagValueT(axis, ul_ijk) * xValueT(nl_ijk);
 
-                //if (l_ijk == Coord(4, 4, 4)) 
-                {
-                    T h = 1. / 16;
-                    T induced_u = (xValueT(nl_ijk) - x0) / h;
-                    printf("AMG axis %d sgn %d nl_ijk %d %d %d ul_ijk %d %d %d off %f nx %f induced u %f sum %f\n", axis, sgn, nl_ijk[0], nl_ijk[1], nl_ijk[2], ul_ijk[0], ul_ijk[1], ul_ijk[2], offDiagValueT(axis, ul_ijk), xValueT(nl_ijk), induced_u, sum);
-                }
+                ////if (l_ijk == Coord(4, 4, 4)) 
+                //{
+                //    T h = 1. / 16;
+                //    T induced_u = (xValueT(nl_ijk) - x0) / h;
+                //    printf("AMG axis %d sgn %d nl_ijk %d %d %d ul_ijk %d %d %d off %f nx %f induced u %f sum %f\n", axis, sgn, nl_ijk[0], nl_ijk[1], nl_ijk[2], ul_ijk[0], ul_ijk[1], ul_ijk[2], offDiagValueT(axis, ul_ijk), xValueT(nl_ijk), induced_u, sum);
+                //}
 			}
 		}
 
@@ -379,11 +362,11 @@ __global__ void NegativeLaplacianSameLevelAMG128Kernel(const HATileAccessor<Tile
         int vi = i * 128 + ti;
 		Coord l_ijk = acc.localOffsetToCoord(vi);
 
-		auto g_ijk = acc.composeGlobalCoord(info.mTileCoord, l_ijk);
-        if (info.mLevel==1&&g_ijk == Coord(7,8,10)) {
-            printf("l_ijk: %d %d %d\n", l_ijk[0], l_ijk[1], l_ijk[2]);
-        }
-        else continue;
+		//auto g_ijk = acc.composeGlobalCoord(info.mTileCoord, l_ijk);
+  //      if (info.mLevel==1&&g_ijk == Coord(7,8,10)) {
+  //          printf("l_ijk: %d %d %d\n", l_ijk[0], l_ijk[1], l_ijk[2]);
+  //      }
+  //      else continue;
 
         info.tile()(Ax_channel, vi) = info.tile().type(vi) == INTERIOR ? shared_data.negativeLap(l_ijk) : 0;
     }
@@ -430,16 +413,16 @@ __global__ void AMGAddGradientToFace128Kernel(const HATileAccessor<Tile> acc, HA
             //tile(u_channel + axis, l_ijk) -= (pu - pd) * shared_data.offDiagValueT(axis, l_ijk) / (h * h);
             tile(u_channel + axis, l_ijk) += (pu - pd) / h;
 
-            {
-				auto g_ijk = acc.composeGlobalCoord(info.mTileCoord, l_ijk);
-                if (
-                    //(info.mLevel==2&&g_ijk == Coord(16,30,22))
-                    //||
-                    (info.mLevel==1&&g_ijk==Coord(7,8,10))
-                    ) {
-					printf("calculating grad g_ijk %d %d %d axis %d pu %f pd %f off %f term %f vel %f\n", g_ijk[0], g_ijk[1], g_ijk[2], axis, pu, pd, shared_data.offDiagValueT(axis, l_ijk), (pu - pd) / h, tile(u_channel + axis, l_ijk));
-                }
-            }
+    //        {
+				//auto g_ijk = acc.composeGlobalCoord(info.mTileCoord, l_ijk);
+    //            if (
+    //                //(info.mLevel==2&&g_ijk == Coord(16,30,22))
+    //                //||
+    //                (info.mLevel==1&&g_ijk==Coord(7,8,10))
+    //                ) {
+				//	printf("calculating grad g_ijk %d %d %d axis %d pu %f pd %f off %f term %f vel %f\n", g_ijk[0], g_ijk[1], g_ijk[2], axis, pu, pd, shared_data.offDiagValueT(axis, l_ijk), (pu - pd) / h, tile(u_channel + axis, l_ijk));
+    //            }
+    //        }
         }
     }
 }
@@ -491,13 +474,13 @@ void AMGVolumeWeightedDivergenceOnLeafs(HADeviceGrid<Tile>& grid, int u_channel,
 
             //sum += (sgn == -1) ? -u0 * h * h : u1 * h * h;
 
-            {
-                //43,13,45
-				auto g_ijk = acc.composeGlobalCoord(info.mTileCoord, l_ijk);
-                if (info.mLevel == 1 && g_ijk == Coord(7,8,10)) {
-                    printf("g_ijk %d %d %d axis %d sgn %d u0 %f u1 %f term %f sum %f\n", g_ijk[0], g_ijk[1], g_ijk[2], axis, sgn, u0, u1, (sgn == -1) ? u0 * coeff * h : -u1 * coeff * h, sum);
-                }
-            }
+    //        {
+    //            //43,13,45
+				//auto g_ijk = acc.composeGlobalCoord(info.mTileCoord, l_ijk);
+    //            if (info.mLevel == 1 && g_ijk == Coord(7,8,10)) {
+    //                printf("g_ijk %d %d %d axis %d sgn %d u0 %f u1 %f term %f sum %f\n", g_ijk[0], g_ijk[1], g_ijk[2], axis, sgn, u0, u1, (sgn == -1) ? u0 * coeff * h : -u1 * coeff * h, sum);
+    //            }
+    //        }
         });
 
         tile(x_channel, l_ijk) = sum;
