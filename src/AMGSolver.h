@@ -40,7 +40,7 @@ public:
 
     void VCycle(HADeviceGrid<Tile>& grid, const int x_channel, const int f_channel, const int rhs_channel, const int coeff_channel, int level_iters, int coarsest_iters);
 
-    void muCycleStep(int current_level, int repeat_times, HADeviceGrid<Tile>& grid, const int x_channel, const int rhs_channel, const int coeff_channel, int level_iters, int coarsest_iters);
+    void muCycleStep(int current_level, int repeat_times, HADeviceGrid<Tile>& grid, const int x_channel, const int f_channel, const int rhs_channel, const int coeff_channel, int level_iters, int coarsest_iters);
     void muCycle(int repeat_times, HADeviceGrid<Tile>& grid, const int x_channel, const int f_channel, const int rhs_channel, const int coeff_channel, int level_iters, int coarsest_iters);
 
     //solve -lap(x_channel)=b_channel

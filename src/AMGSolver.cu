@@ -652,7 +652,7 @@ void ResidualAndRestrictAMG(HADeviceGrid<Tile>& grid, int fine_x_channel, int fi
     ResidualAndRestrictAMG128Kernel << <grid.hNumTiles[level], 128 >> > (grid.deviceAccessor(), thrust::raw_pointer_cast(grid.dTileArrays[level].data()), level, launch_tile_types, fine_x_channel, fine_coeff_channel, fine_rhs_channel, coarse_x_channel, coarse_residual_channel, residual_op_coeff);
 }
 
-__global__ void DeductFluxOnAbsLeafs128Kernel(HATileAccessor<Tile> acc, HATileInfo<Tile>* tiles, int x_channel, int coeff_channel, int rhs_channel) {
+__global__ void DeductFluxOnAbsLeafs128Kernel(HATileAccessor<Tile> acc, HATileInfo<Tile>* tiles, int x_channel, int coeff_channel, int f_channel, int rhs_channel) {
     __shared__ AMGLaplacianTileData shared_data;
     //block idx (tile idx), distinguish from thread idx
     int bi = blockIdx.x;
@@ -674,14 +674,16 @@ __global__ void DeductFluxOnAbsLeafs128Kernel(HATileAccessor<Tile> acc, HATileIn
         int vi = i * 128 + ti;
         Coord l_ijk = acc.localOffsetToCoord(vi);
 
-		tile(rhs_channel, l_ijk) -= shared_data.negativeLap(l_ijk);
+		//tile(rhs_channel, l_ijk) -= shared_data.negativeLap(l_ijk);
+        if (tile.type(l_ijk) & INTERIOR) tile(rhs_channel, l_ijk) = tile(f_channel, l_ijk) - shared_data.negativeLap(l_ijk);
+        else tile(rhs_channel, l_ijk) = 0;
     }
 }
 
-void DeductFluxOnAbsLeafs(HADeviceGrid<Tile>& grid, int level, int x_channel, int coeff_channel, int rhs_channel) {
+void DeductFluxOnAbsLeafs(HADeviceGrid<Tile>& grid, int level, int x_channel, int coeff_channel, int f_channel, int rhs_channel) {
     DeductFluxOnAbsLeafs128Kernel << <grid.hNumTiles[level], 128 >> > (
         grid.deviceAccessor(), thrust::raw_pointer_cast(grid.dTileArrays[level].data()),
-        x_channel, coeff_channel, rhs_channel
+        x_channel, coeff_channel, f_channel, rhs_channel
         );
 }
 
@@ -740,7 +742,7 @@ __global__ void ProlongateAndUpdateAMG128Kernel(HATileAccessor<Tile> acc, HATile
 }
 
 void ProlongateAndUpdateAMG128(HADeviceGrid<Tile>& grid, int coarse_x_channel, int fine_x_channel, int fine_level, T prolong_coeff) {
-    ProlongateAndUpdateAMG128Kernel << <grid.hNumTiles[fine_level], 128 >> > (grid.deviceAccessor(), thrust::raw_pointer_cast(grid.dTileArrays[fine_level].data()), fine_level, LEAF, coarse_x_channel, fine_x_channel, prolong_coeff);
+    ProlongateAndUpdateAMG128Kernel << <grid.hNumTiles[fine_level], 128 >> > (grid.deviceAccessor(), thrust::raw_pointer_cast(grid.dTileArrays[fine_level].data()), fine_level, LEAF | GHOST, coarse_x_channel, fine_x_channel, prolong_coeff);
 }
 
 //must initialize to zero 
@@ -814,7 +816,7 @@ void AMGSolver::VCycle(HADeviceGrid<Tile>& grid, const int x_channel, const int 
     // timer.stop("upstroke");
 }
 
-void AMGSolver::muCycleStep(int current_level, int repeat_times, HADeviceGrid<Tile>& grid, const int x_channel, const int rhs_channel, const int coeff_channel, int level_iters, int coarsest_iters) {
+void AMGSolver::muCycleStep(int current_level, int repeat_times, HADeviceGrid<Tile>& grid, const int x_channel, const int f_channel, const int rhs_channel, const int coeff_channel, int level_iters, int coarsest_iters) {
     if (current_level == 0) {
         GaussSeidelAMG(coarsest_iters / 2, 0, grid, 0, x_channel, coeff_channel, rhs_channel);
         GaussSeidelAMG(coarsest_iters / 2, 1, grid, 0, x_channel, coeff_channel, rhs_channel);
@@ -824,11 +826,11 @@ void AMGSolver::muCycleStep(int current_level, int repeat_times, HADeviceGrid<Ti
     GaussSeidelAMG(level_iters, 0, grid, current_level, x_channel, coeff_channel, rhs_channel);
     //will set initial guess of coarser level to 0
     ResidualAndRestrictAMG(grid, x_channel, coeff_channel, rhs_channel, x_channel, rhs_channel, current_level, LEAF, R_restrict_coeff);
-    DeductFluxOnAbsLeafs(grid, current_level - 1, x_channel, coeff_channel, rhs_channel);
+    DeductFluxOnAbsLeafs(grid, current_level - 1, x_channel, coeff_channel, f_channel, rhs_channel);
     SetLevelZeroAbsTiles(grid, current_level - 1, NONLEAF, x_channel);
 
     for (int i = 0; i < repeat_times; i++) {
-        muCycleStep(current_level - 1, repeat_times, grid, x_channel, rhs_channel, coeff_channel, level_iters, coarsest_iters);
+        muCycleStep(current_level - 1, repeat_times, grid, x_channel, f_channel, rhs_channel, coeff_channel, level_iters, coarsest_iters);
     }
 
 	ProlongateAndUpdateAMG128(grid, x_channel, x_channel, current_level, prolong_coeff);
@@ -857,7 +859,7 @@ void AMGSolver::muCycle(int repeat_times, HADeviceGrid<Tile>& grid, const int x_
     },
         LEAF | NONLEAF | GHOST, 4
     );
-    muCycleStep(grid.mMaxLevel, repeat_times, grid, x_channel, rhs_channel, coeff_channel, level_iters, coarsest_iters);
+    muCycleStep(grid.mMaxLevel, repeat_times, grid, x_channel, f_channel, rhs_channel, coeff_channel, level_iters, coarsest_iters);
 }
 
 void AMGSolver::prepareTypesAndCoeffs(HADeviceGrid<Tile>& grid)
@@ -867,7 +869,7 @@ void AMGSolver::prepareTypesAndCoeffs(HADeviceGrid<Tile>& grid)
 
 std::tuple<int, double> AMGSolver::solve(HADeviceGrid<Tile>& grid, bool verbose, int max_iters, double relative_tolerance, int level_iters, int coarsest_iters, int sync_stride, bool is_pure_neumann)
 {
-    int mu_cycle_repeat_times = 1;
+    int mu_cycle_repeat_times = 2;
 
     double rhs_norm2, threshold_norm2, last_residual_norm2;
 
@@ -954,6 +956,18 @@ std::tuple<int, double> AMGSolver::solve(HADeviceGrid<Tile>& grid, bool verbose,
             }
             if (residual_norm2 < threshold_norm2) {
                 return std::make_tuple(i + 1, sqrt(residual_norm2 / rhs_norm2));
+            }
+
+            {
+                polyscope::init();
+                auto holder = grid.getHostTileHolder(LEAF);
+                IOFunc::AddLeveledPoissonGridCellCentersToPolyscopePointCloud(
+                    holder,
+                    { {-1,"type"}, { Tile::r_channel,"residual" }},
+                    {},
+                    -1, FLT_MAX
+                );
+                polyscope::show();
             }
         }
         if (is_pure_neumann) ReCenterLeafVoxels(grid, Tile::r_channel, mean_d, count_d);
