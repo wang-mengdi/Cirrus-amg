@@ -126,6 +126,7 @@ void CoarsenTypesAndAMGCoeffs(HADeviceGrid<Tile>& grid, const int coeff_channel,
             //coarsen diagonal terms at NONLEAF cells
             int interior_cnt = 0;
             bool has_ghost_child = false;
+            uint8_t ctypes[2][2][2];
             T coff_diag[3][2][2][2];//8 children
             T diag_sum = 0;
             for (int ci = 0; ci < 2; ci++) {
@@ -139,11 +140,13 @@ void CoarsenTypesAndAMGCoeffs(HADeviceGrid<Tile>& grid, const int coeff_channel,
                             auto& ctile = cinfo.tile();
                             diag_sum += ctile(coeff_channel + 3, cl_ijk);
                             interior_cnt += (ctile.type(cl_ijk) == INTERIOR);
+							ctypes[ci][cj][ck] = ctile.type(cl_ijk);
                             for (int axis : {0, 1, 2}) {
                                 coff_diag[axis][ci][cj][ck] = ctile(coeff_channel + axis, cl_ijk);
                             }
                         }
                         else {
+                            ctypes[ci][cj][ck] = DIRICHLET;
                             for (int axis : {0, 1, 2}) {
                                 coff_diag[axis][ci][cj][ck] = 0;
                             }
@@ -157,9 +160,23 @@ void CoarsenTypesAndAMGCoeffs(HADeviceGrid<Tile>& grid, const int coeff_channel,
             for (int ci = 0; ci < 2; ci++) {
                 for (int cj = 0; cj < 2; cj++) {
                     for (int ck = 0; ck < 2; ck++) {
-                        if (ci == 1) diag_sum += 2 * coff_diag[0][ci][cj][ck];//a cross term will be count twice
-                        if (cj == 1) diag_sum += 2 * coff_diag[1][ci][cj][ck];
-                        if (ck == 1) diag_sum += 2 * coff_diag[2][ci][cj][ck];
+                        if (ctypes[0][cj][ck] == INTERIOR && ctypes[1][cj][ck] == INTERIOR) {
+                            //it will be added twice
+							diag_sum += coff_diag[0][1][cj][ck];
+                        }
+						if (ctypes[ci][0][ck] == INTERIOR && ctypes[ci][1][ck] == INTERIOR) {
+							//it will be added twice
+							diag_sum += coff_diag[1][ci][1][ck];
+						}
+						if (ctypes[ci][cj][0] == INTERIOR && ctypes[ci][cj][1] == INTERIOR) {
+							//it will be added twice
+							diag_sum += coff_diag[2][ci][cj][1];
+						}
+
+
+                        //if (ci == 1) diag_sum += 2 * coff_diag[0][ci][cj][ck];//a cross term will be count twice
+                        //if (cj == 1) diag_sum += 2 * coff_diag[1][ci][cj][ck];
+                        //if (ck == 1) diag_sum += 2 * coff_diag[2][ci][cj][ck];
                     }
                 }
             }

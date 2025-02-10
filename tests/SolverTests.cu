@@ -267,7 +267,6 @@ namespace SolverTests {
         else if (algorithm == "amg") {
             CalculateNeighborTiles(grid);
             
-
             AMGSolver solver(coeff_channel, 0.5, 1, 1);
             solver.prepareTypesAndCoeffs(grid);
             AMGFullNegativeLaplacianOnLeafs(grid, grdt_channel, coeff_channel, Tile::b_channel);
