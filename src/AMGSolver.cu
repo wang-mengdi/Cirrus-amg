@@ -172,25 +172,25 @@ void CoarsenTypesAndAMGCoeffs(HADeviceGrid<Tile>& grid, const int coeff_channel,
                             diag_sum += coff_diag[2][ci][cj][1];
                         }
 
-                        //              //seems not working
-                        //              Coord coff(ci, cj, ck);
-                        //              for (int axis : {0, 1, 2}) {
-                        //                  for (int sgn : {0, 1}) {
-                        //                      if (sgn == coff[axis]) {
-                        //                          //test if the child neighbors a ghost cell
-                        //                          Coord ncg_ijk(g_ijk[0] * 2 + ci, g_ijk[1] * 2 + cj, g_ijk[2] * 2 + ck);
-                        //                          ncg_ijk[axis] += (sgn == 1) ? 1 : -1;
-                        //                          HATileInfo<Tile> ncinfo; Coord ncl_ijk;
-                        //                          acc.findVoxel(info.mLevel + 1, ncg_ijk, ncinfo, ncl_ijk);
-                        //                          if (!ncinfo.empty() && ncinfo.mType == GHOST) {
-                                                      //T off0 = coff_diag[axis][ci][cj][ck];
-                                                      //T off1 = ncinfo.tile()(coeff_channel + axis, ncl_ijk);
-                        //                              diag_sum -= 0.5 * (sgn == 1) ? off1 : off0;
-                        //                              //printf("off0: %f off1: %f\n", off0, off1);
-                        //                          }
-                        //                      }
-                        //                  }
-                        //              }
+                        //seems not working
+                        Coord coff(ci, cj, ck);
+                        for (int axis : {0, 1, 2}) {
+                            for (int sgn : {0, 1}) {
+                                if (sgn == coff[axis]) {
+                                    //test if the child neighbors a ghost cell
+                                    Coord ncg_ijk(g_ijk[0] * 2 + ci, g_ijk[1] * 2 + cj, g_ijk[2] * 2 + ck);
+                                    ncg_ijk[axis] += (sgn == 1) ? 1 : -1;
+                                    HATileInfo<Tile> ncinfo; Coord ncl_ijk;
+                                    acc.findVoxel(info.mLevel + 1, ncg_ijk, ncinfo, ncl_ijk);
+                                    if (!ncinfo.empty() && ncinfo.mType == GHOST) {
+                                        T off0 = coff_diag[axis][ci][cj][ck];
+                                        T off1 = ncinfo.tile()(coeff_channel + axis, ncl_ijk);
+                                        diag_sum -= 0.5 * (sgn == 1) ? off1 : off0;
+                                        //printf("off0: %f off1: %f\n", off0, off1);
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
