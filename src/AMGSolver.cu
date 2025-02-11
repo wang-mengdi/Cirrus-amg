@@ -172,6 +172,7 @@ void CoarsenTypesAndAMGCoeffs(HADeviceGrid<Tile>& grid, const int coeff_channel,
                     T face_term = (sgn == -1) ? c0 : c1;
 
                     //if (ninfo.mType == GHOST) face_term /= 8;
+                    //if (ninfo.mType == GHOST) face_term /= 4;
 
                     diag_coeff -= face_term;
                 });
@@ -228,39 +229,40 @@ void CoarsenTypesAndAMGCoeffs(HADeviceGrid<Tile>& grid, const int coeff_channel,
                             diag_sum += coff_diag[2][ci][cj][1];
                         }
 
-                        //seems not working
-                        Coord coff(ci, cj, ck);
-                        for (int axis : {0, 1, 2}) {
-                            for (int sgn : {0, 1}) {
-                                if (sgn == coff[axis]) {
-                                    //test if the child neighbors a ghost cell
-                                    Coord ncg_ijk(g_ijk[0] * 2 + ci, g_ijk[1] * 2 + cj, g_ijk[2] * 2 + ck);
-                                    ncg_ijk[axis] += (sgn == 1) ? 1 : -1;
-                                    HATileInfo<Tile> ncinfo; Coord ncl_ijk;
-                                    acc.findVoxel(info.mLevel + 1, ncg_ijk, ncinfo, ncl_ijk);
-                                    if (!ncinfo.empty() && ncinfo.mType == GHOST) {
-                                        T off0 = coff_diag[axis][ci][cj][ck];
-                                        T off1 = ncinfo.tile()(coeff_channel + axis, ncl_ijk);
-                                        T face_term = (sgn == 1) ? off1 : off0;
+                        ////seems not working
+                        //Coord coff(ci, cj, ck);
+                        //for (int axis : {0, 1, 2}) {
+                        //    for (int sgn : {0, 1}) {
+                        //        if (sgn == coff[axis]) {
+                        //            //test if the child neighbors a ghost cell
+                        //            Coord ncg_ijk(g_ijk[0] * 2 + ci, g_ijk[1] * 2 + cj, g_ijk[2] * 2 + ck);
+                        //            ncg_ijk[axis] += (sgn == 1) ? 1 : -1;
+                        //            HATileInfo<Tile> ncinfo; Coord ncl_ijk;
+                        //            acc.findVoxel(info.mLevel + 1, ncg_ijk, ncinfo, ncl_ijk);
+                        //            if (!ncinfo.empty() && ncinfo.mType == GHOST) {
+                        //                T off0 = coff_diag[axis][ci][cj][ck];
+                        //                T off1 = ncinfo.tile()(coeff_channel + axis, ncl_ijk);
+                        //                T face_term = (sgn == 1) ? off1 : off0;
 
-                                        for (int qi : {0, 1}) {
-                                            for (int qj : {0, 1}) {
-                                                for (int qk : {0, 1}) {
-                                                    if (ci == qi && cj == qj && ck == qk) continue;
-                                                    if (ctypes[qi][qj][qk] == INTERIOR) {
-                                                        //diag_sum -= face_term / 8;
-                                                    }
-                                                }
-                                            }
-                                        }
+                        //                for (int qi : {0, 1}) {
+                        //                    for (int qj : {0, 1}) {
+                        //                        for (int qk : {0, 1}) {
+                        //                            if (ci == qi && cj == qj && ck == qk) continue;
+                        //                            if (ctypes[qi][qj][qk] == INTERIOR) {
+                        //                                //diag_sum -= face_term / 8;
+                        //                                diag_sum -= face_term / 4;
+                        //                            }
+                        //                        }
+                        //                    }
+                        //                }
 
-                                        //diag_sum -= 0.5 * (sgn == 1) ? off1 : off0;
-                                        //diag_sum += 0.5 * (sgn == 1) ? off1 : off0;
-                                        //printf("off0: %f off1: %f\n", off0, off1);
-                                    }
-                                }
-                            }
-                        }
+                        //                //diag_sum -= 0.5 * (sgn == 1) ? off1 : off0;
+                        //                //diag_sum += 0.5 * (sgn == 1) ? off1 : off0;
+                        //                //printf("off0: %f off1: %f\n", off0, off1);
+                        //            }
+                        //        }
+                        //    }
+                        //}
                     }
                 }
             }
@@ -445,6 +447,10 @@ __device__ void LoadAMGLaplacianTileData(const HATileAccessor<Tile>& acc, const 
             auto& ntile = ninfo.tile();
             T V1 = ntile(x_channel, nl_ijk);
             T V0 = avg_x;
+
+            //Coord clc_ijk = cl_ijk; clc_ijk[0] ^= 1; clc_ijk[1] ^= 1; clc_ijk[2] ^= 1;
+            //T V0 = (shared_data.xValueT(cl_ijk) + shared_data.xValueT(clc_ijk)) / 2;
+
 			T vg = shared_data.xValueT(cl_ijk) + 0.5 * (V1 - V0);
             //T vg = shared_data.xValueT(cl_ijk) +  (V1 - V0);
 			shared_data.xValueT(fl_ijk) = vg;
