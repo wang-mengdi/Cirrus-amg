@@ -11,7 +11,7 @@ int main(int argc, char** argv) {
 		////TestGrids::uniform8,
 		//TestGrids::uniform32,
 		//TestGrids::uniform128,
-		TestGrids::uniform512, 
+		//TestGrids::uniform512, 
 		////TestGrids::staircase12, 
 		////TestGrids::staircase21, 
 		////TestGrids::staircase34,
@@ -20,7 +20,7 @@ int main(int argc, char** argv) {
 		}) {
 
 		//SolverTests::TestAMGLaplacianAndFluxConsistency(grid_name);
-		SolverTests::TestNeumannDirichletRecovery(grid_name, "cmg");
+		//SolverTests::TestNeumannDirichletRecovery(grid_name, "cmg");
 		SolverTests::TestNeumannDirichletRecovery(grid_name, "amg");
 	}
 	return 0;

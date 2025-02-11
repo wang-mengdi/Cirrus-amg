@@ -132,6 +132,7 @@ void CoarsenTypesAndAMGCoeffs(HADeviceGrid<Tile>& grid, const int coeff_channel,
                 ctype1 = ntile.type(nl_ijk);
             }
             coeff = NegativeLaplacianCoeff(h, ttype0, ttype1, ctype0, ctype1);
+            //if (ttype0 == GHOST) coeff *= 0.5;
             tile(coeff_channel + axis, l_ijk) = -coeff;
         });
     }, LEAF | GHOST);
@@ -168,7 +169,11 @@ void CoarsenTypesAndAMGCoeffs(HADeviceGrid<Tile>& grid, const int coeff_channel,
                     T c0 = tile(coeff_channel + axis, l_ijk);
                     //if ninfo if empty, we regard it as DIRICHLET and has coeff -h
                     T c1 = ninfo.empty() ? -h : ninfo.tile()(coeff_channel + axis, nl_ijk);
-                    diag_coeff -= (sgn == -1) ? c0 : c1;
+                    T face_term = (sgn == -1) ? c0 : c1;
+
+                    //if (ninfo.mType == GHOST) face_term /= 8;
+
+                    diag_coeff -= face_term;
                 });
             }
             tile(coeff_channel + 3, l_ijk) = diag_coeff;
@@ -236,6 +241,19 @@ void CoarsenTypesAndAMGCoeffs(HADeviceGrid<Tile>& grid, const int coeff_channel,
                                     if (!ncinfo.empty() && ncinfo.mType == GHOST) {
                                         T off0 = coff_diag[axis][ci][cj][ck];
                                         T off1 = ncinfo.tile()(coeff_channel + axis, ncl_ijk);
+                                        T face_term = (sgn == 1) ? off1 : off0;
+
+                                        for (int qi : {0, 1}) {
+                                            for (int qj : {0, 1}) {
+                                                for (int qk : {0, 1}) {
+                                                    if (ci == qi && cj == qj && ck == qk) continue;
+                                                    if (ctypes[qi][qj][qk] == INTERIOR) {
+                                                        //diag_sum -= face_term / 8;
+                                                    }
+                                                }
+                                            }
+                                        }
+
                                         //diag_sum -= 0.5 * (sgn == 1) ? off1 : off0;
                                         //diag_sum += 0.5 * (sgn == 1) ? off1 : off0;
                                         //printf("off0: %f off1: %f\n", off0, off1);
@@ -428,6 +446,7 @@ __device__ void LoadAMGLaplacianTileData(const HATileAccessor<Tile>& acc, const 
             T V1 = ntile(x_channel, nl_ijk);
             T V0 = avg_x;
 			T vg = shared_data.xValueT(cl_ijk) + 0.5 * (V1 - V0);
+            //T vg = shared_data.xValueT(cl_ijk) +  (V1 - V0);
 			shared_data.xValueT(fl_ijk) = vg;
 
             if (sgn == 1) shared_data.offDiagValueT(axis, fl_ijk) = ninfo.tile()(coeff_channel + axis, nl_ijk);
