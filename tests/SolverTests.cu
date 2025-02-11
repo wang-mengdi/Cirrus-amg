@@ -204,7 +204,7 @@ namespace SolverTests {
         uint32_t scale = 8;
         float h = 1.0 / scale;
         //0:8, 1:16, 2:32, 3:64, 4:128, 5:256, 6:512, 7:1024
-        HADeviceGrid<Tile> grid(h, { 16,16,16,16,16,16,18,16,16,16 });
+        HADeviceGrid<Tile> grid(h, { 16,16,16,16,16,16,20,16,16,16 });
         grid.setTileHost(0, nanovdb::Coord(0, 0, 0), Tile(), LEAF);
         grid.rebuild();
 
