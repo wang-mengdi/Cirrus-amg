@@ -22,6 +22,58 @@ __forceinline__ __device__ T NegativeLaplacianCoeff(T h, uint8_t ttype0, uint8_t
     return valid ? h : 0;
 }
 
+//will be called on fine tiles
+__global__ void CoarsenOffDiagCoefficientsOneStepKernel(HATileAccessor<Tile> acc, HATileInfo<Tile>* fine_tiles, int fine_subtree_level, uint8_t fine_tile_types, int fine_u_channel, int coarse_u_channel, Tile::T R_mat_coeff, uint8_t cell_types) {
+    __shared__ T data[3][8 * 8 * 8];
+    int bi = blockIdx.x, ti = threadIdx.x;
+    auto& finfo = fine_tiles[bi];
+
+    if (!(finfo.subtreeType(fine_subtree_level) & fine_tile_types)) {
+        return;
+    }
+    auto& ftile = finfo.tile();
+
+    for (int axis : {0, 1, 2}) {
+        for (int i = 0; i < 4; i++) {
+            int vi = i * 128 + ti;
+            uint8_t ctype = ftile.type(vi);
+            data[axis][vi] = (ctype & cell_types) ? ftile(fine_u_channel + axis, vi) : 0;
+        }
+    }
+    __syncthreads();
+
+    if (ti < 64) {
+        Coord fl_ijk(ti / 16 * 2, (ti / 4) % 4 * 2, ti % 4 * 2);
+        Coord fg_ijk = acc.localToGlobalCoord(finfo, fl_ijk);
+        Coord cg_ijk = acc.parentCoord(fg_ijk);
+        HATileInfo<Tile> cinfo; Coord cl_ijk;//coarse tile and local coord
+        acc.findVoxel(finfo.mLevel - 1, cg_ijk, cinfo, cl_ijk);
+        if (!cinfo.empty()) {
+            auto& ctile = cinfo.tile();
+            for (int axis : {0, 1, 2}) {
+                T sum = 0;
+                for (int jj : {0, 1}) {
+                    for (int kk : {0, 1}) {
+                        Coord fl1_ijk = fl_ijk + acc.rotateCoord(axis, Coord(0, jj, kk));
+                        int vi1 = acc.localCoordToOffset(fl1_ijk);
+                        sum += data[axis][vi1];
+
+                        //if (cg_ijk == Coord(8, 8, 10) && cinfo.mLevel == 1) {
+                        //    printf("axis %d l_ijk %d %d %d vi1 %d data %f sum %f\n", axis, fl1_ijk[0], fl1_ijk[1], fl1_ijk[2], vi1, data[axis][vi1], sum);
+                        //}
+
+                    }
+                }
+                
+                //T coeff = finfo.mType == GHOST ? 1 : R_mat_coeff;
+                T coeff = R_mat_coeff;
+                ctile(coarse_u_channel + axis, cl_ijk) += sum * coeff;
+            }
+        }
+
+    }
+}
+
 void CoarsenTypesAndAMGCoeffs(HADeviceGrid<Tile>& grid, const int coeff_channel, const T R_matrix_coeff) {
     // Before calling this function, cell types for LEAFs must be filled
     // This function will:
@@ -88,7 +140,7 @@ void CoarsenTypesAndAMGCoeffs(HADeviceGrid<Tile>& grid, const int coeff_channel,
     for (int i = grid.mMaxLevel; i >= 0; i--) {
         int num_tiles = grid.hNumTiles[i];
         if (num_tiles > 0) {
-            AccumulateFacesToParentsOneStepKernel << <num_tiles, 128 >> > (
+            CoarsenOffDiagCoefficientsOneStepKernel << <num_tiles, 128 >> > (
                 grid.deviceAccessor(),
                 thrust::raw_pointer_cast(grid.dTileArrays[i].data()),
                 i,
@@ -96,7 +148,6 @@ void CoarsenTypesAndAMGCoeffs(HADeviceGrid<Tile>& grid, const int coeff_channel,
                 coeff_channel,
                 coeff_channel,
                 R_matrix_coeff,
-                true,
                 INTERIOR | DIRICHLET | NEUMANN
                 );
         }
@@ -185,7 +236,8 @@ void CoarsenTypesAndAMGCoeffs(HADeviceGrid<Tile>& grid, const int coeff_channel,
                                     if (!ncinfo.empty() && ncinfo.mType == GHOST) {
                                         T off0 = coff_diag[axis][ci][cj][ck];
                                         T off1 = ncinfo.tile()(coeff_channel + axis, ncl_ijk);
-                                        diag_sum -= 0.5 * (sgn == 1) ? off1 : off0;
+                                        //diag_sum -= 0.5 * (sgn == 1) ? off1 : off0;
+                                        //diag_sum += 0.5 * (sgn == 1) ? off1 : off0;
                                         //printf("off0: %f off1: %f\n", off0, off1);
                                     }
                                 }
