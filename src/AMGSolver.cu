@@ -445,34 +445,38 @@ __device__ void LoadAMGLaplacianTileData(const HATileAccessor<Tile>& acc, const 
             shared_data.absttypeT(fl_ijk) = ninfo.mType;
             //dp/dx calculated with coarse grid equals to fine grid
             auto& ntile = ninfo.tile();
-            T V1 = ntile(x_channel, nl_ijk);
-            T V0 = avg_x;
+            {
+                T V1 = ntile(x_channel, nl_ijk);
+                T V0 = avg_x;
 
-            //Coord clc_ijk = cl_ijk; clc_ijk[0] ^= 1; clc_ijk[1] ^= 1; clc_ijk[2] ^= 1;
-            //T V0 = (shared_data.xValueT(cl_ijk) + shared_data.xValueT(clc_ijk)) / 2;
+                //Coord clc_ijk = cl_ijk; clc_ijk[0] ^= 1; clc_ijk[1] ^= 1; clc_ijk[2] ^= 1;
+                //T V0 = (shared_data.xValueT(cl_ijk) + shared_data.xValueT(clc_ijk)) / 2;
 
-			T vg = shared_data.xValueT(cl_ijk) + 0.5 * (V1 - V0);
-            //T vg = shared_data.xValueT(cl_ijk) +  (V1 - V0);
-			shared_data.xValueT(fl_ijk) = vg;
+                T vg = shared_data.xValueT(cl_ijk) + 0.5 * (V1 - V0);
+                //T vg = shared_data.xValueT(cl_ijk) +  (V1 - V0);
+                shared_data.xValueT(fl_ijk) = vg;
 
-            if (sgn == 1) shared_data.offDiagValueT(axis, fl_ijk) = ninfo.tile()(coeff_channel + axis, nl_ijk);
+                if (sgn == 1) shared_data.offDiagValueT(axis, fl_ijk) = ninfo.tile()(coeff_channel + axis, nl_ijk);
+            }
 
-            //T vH = ninfo.tile()(x_channel, nl_ijk);//larger cell center, which is a corner of the ghost cell
+            //{
+            //    T vH = ninfo.tile()(x_channel, nl_ijk);//larger cell center, which is a corner of the ghost cell
 
-            ////next we extrapolate the opposite corner of the ghost cell
-            ////Afivo: a framework for quadtree/octree AMR with shared-memory parallelization and geometric multigrid methods
+            //    //next we extrapolate the opposite corner of the ghost cell
+            //    //Afivo: a framework for quadtree/octree AMR with shared-memory parallelization and geometric multigrid methods
 
-            ////for example, for positive boundary, fl_ijk may be (8,j,k), and the cell inside the center tile is (7,j,k)
-            //Coord cl_ijk = fl_ijk; cl_ijk[axis] -= sgn;
-            //T vh = shared_data.xValueT(cl_ijk);
-            //Coord cl0_ijk = cl_ijk; cl0_ijk[0] ^= 1; T vh0 = shared_data.xValueT(cl0_ijk);
-            //Coord cl1_ijk = cl_ijk; cl1_ijk[1] ^= 1; T vh1 = shared_data.xValueT(cl1_ijk);
-            //Coord cl2_ijk = cl_ijk; cl2_ijk[2] ^= 1; T vh2 = shared_data.xValueT(cl2_ijk);
-            ////vh - 0.5 * (vh0 - vh) - 0.5 * (vh1 - vh) - 0.5 * (vh2 - vh);
-            //T v1 = 2.5 * vh - 0.5 * (vh0 + vh1 + vh2);
+            //    //for example, for positive boundary, fl_ijk may be (8,j,k), and the cell inside the center tile is (7,j,k)
+            //    Coord cl_ijk = fl_ijk; cl_ijk[axis] -= sgn;
+            //    T vh = shared_data.xValueT(cl_ijk);
+            //    Coord cl0_ijk = cl_ijk; cl0_ijk[0] ^= 1; T vh0 = shared_data.xValueT(cl0_ijk);
+            //    Coord cl1_ijk = cl_ijk; cl1_ijk[1] ^= 1; T vh1 = shared_data.xValueT(cl1_ijk);
+            //    Coord cl2_ijk = cl_ijk; cl2_ijk[2] ^= 1; T vh2 = shared_data.xValueT(cl2_ijk);
+            //    //vh - 0.5 * (vh0 - vh) - 0.5 * (vh1 - vh) - 0.5 * (vh2 - vh);
+            //    T v1 = 2.5 * vh - 0.5 * (vh0 + vh1 + vh2);
 
-            //shared_data.xValueT(fl_ijk) = (vH + v1) / 2;
-            //if (sgn == 1) shared_data.offDiagValueT(axis, fl_ijk) = ninfo.tile()(coeff_channel + axis, nl_ijk);
+            //    shared_data.xValueT(fl_ijk) = (vH + v1) / 2;
+            //    if (sgn == 1) shared_data.offDiagValueT(axis, fl_ijk) = ninfo.tile()(coeff_channel + axis, nl_ijk);
+            //}
         }
         else {
 			shared_data.absttypeT(fl_ijk) = ninfo.mType;
