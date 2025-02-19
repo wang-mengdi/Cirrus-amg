@@ -25,6 +25,12 @@ int main(int argc, char** argv) {
 	//}
 
 
-	SolverTests::TestAnalyticalConvergence(ConvergenceTestGridName::sphere_shell_05, 6, "gerris_sin", "amg");
+	//SolverTests::TestAnalyticalConvergence(ConvergenceTestGridName::sphere_shell_05, 6, "gerris_sin", "amg");
+
+	for (int max_level : {3, 4, 5, 6}) {
+
+		SolverTests::TestAnalyticalConvergence(ConvergenceTestGridName::sphere_shell_05, max_level, "athena_sin", "cmg");
+		SolverTests::TestAnalyticalConvergence(ConvergenceTestGridName::sphere_shell_05, max_level, "athena_sin", "amg");
+	}
 	return 0;
 }
