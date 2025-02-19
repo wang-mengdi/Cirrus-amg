@@ -449,4 +449,50 @@ namespace SolverTests {
             Error("Test failed with Linf norm of grdt-x: {}\n\n", linf_norm);
         }
     }
+
+    __hostdev__ int ConvergenceTestLevelTarget(const HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const ConvergenceTestGridName grid_name, const int max_level) {
+        if (grid_name == ConvergenceTestGridName::sphere_shell_05) {
+            auto bbox = acc.tileBBox(info);
+            auto bmin = bbox.min();
+            auto bmax = bbox.max();
+            const Vec ctr(0.5, 0.5, 0.5);
+            constexpr T radius = 0.5 / 2;
+            int inside_cnt = 0;
+            for (int di : {0, 1}) {
+                for (int dj : {0, 1}) {
+                    for (int dk : {0, 1}) {
+                        Vec vpos;
+                        vpos[0] = bmin[0] + di * (bmax[0] - bmin[0]);
+                        vpos[1] = bmin[1] + dj * (bmax[1] - bmin[1]);
+                        vpos[2] = bmin[2] + dk * (bmax[2] - bmin[2]);
+                        if ((vpos - ctr).length() < radius) {
+                            inside_cnt++;
+                        }
+                    }
+                }
+            }
+            if (inside_cnt == 0 || inside_cnt == 8) return 0;
+            else return max_level;
+        }
+        return max_level;
+    }
+
+    std::shared_ptr<HADeviceGrid<Tile>> CreateTestGrid(const ConvergenceTestGridName grid_name, const int max_level) {
+        uint32_t scale = 8;
+        float h = 1.0 / scale;
+        //0:8, 1:16, 2:32, 3:64, 4:128, 5:256, 6:512, 7:1024
+        HADeviceGrid<Tile> grid(h, { 16,16,16,16,16,16,20,16,16,16 });
+        grid.setTileHost(0, nanovdb::Coord(0, 0, 0), Tile(), LEAF);
+        grid.rebuild();
+
+		IterativeRefine(grid, [=]__device__(const HATileAccessor<Tile>&acc, HATileInfo<Tile>&info) { return ConvergenceTestLevelTarget(acc, info, grid_name, max_level); }, false);
+        int num_cells = grid.numTotalLeafTiles() * Tile::SIZE;
+        int total_hash_bytes = grid.hashTableDeviceBytes();
+        Info("Total {}M cells, hash table {}GB", num_cells / (1024.0 * 1024), total_hash_bytes / (1024.0 * 1024 * 1024));
+    }
+
+    void TestAnalyticalConvergence(const ConvergenceTestGridName grid_name, const int max_level) {
+		auto grid_ptr = CreateTestGrid(grid_name, max_level);
+		auto& grid = *grid_ptr;
+    }
 }
