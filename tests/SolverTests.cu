@@ -775,15 +775,15 @@ namespace SolverTests {
         //    {}, -1, FLT_MAX);
         //polyscope::show();
 
-        {
-			auto holder = grid.getHostTileHolderForLeafs();
-            IOFunc::OutputPoissonGridAsStructuredVTI(
-                holder,
-                { {-1, "type"}, {Tile::b_channel, "rhs"}, {grdt_channel, "grdt"}, {Tile::x_channel, "x"}, {Tile::r_channel, "r"} },
-                {  },
-                fmt::format("output/{}_result.vti", algorithm)
-            );
-        }
+   //     {
+			//auto holder = grid.getHostTileHolderForLeafs();
+   //         IOFunc::OutputPoissonGridAsStructuredVTI(
+   //             holder,
+   //             { {-1, "type"}, {Tile::b_channel, "rhs"}, {grdt_channel, "grdt"}, {Tile::x_channel, "x"}, {Tile::r_channel, "r"} },
+   //             {  },
+   //             fmt::format("output/{}_result.vti", algorithm)
+   //         );
+   //     }
 
         auto linf_norm = SingleChannelLinfSync(grid, Tile::r_channel, LEAF);
         if (linf_norm < 1e-4) {
