@@ -481,6 +481,47 @@ namespace SolverTests {
 
     }
 
+    class UniformGridCase {
+    public:
+        __hostdev__ static int target(const HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const ConvergenceTestGridName grid_name, const int min_level, const int max_level) {
+            return max_level;
+        }
+		__hostdev__ static uint8_t type(const HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const nanovdb::Coord& l_ijk) {
+			return CellType::INTERIOR;
+		}
+    };
+
+    class SphereShell05GridCase {
+    public:
+        __hostdev__ static int target(const HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const ConvergenceTestGridName grid_name, const int min_level, const int max_level) {
+            auto bbox = acc.tileBBox(info);
+            auto bmin = bbox.min();
+            auto bmax = bbox.max();
+            const Vec ctr(0.5, 0.5, 0.5);
+            constexpr T radius = 0.5 / 2;
+            int inside_cnt = 0;
+            for (int di : { 0, 1 }) {
+                for (int dj : { 0, 1 }) {
+                    for (int dk : { 0, 1 }) {
+                        Vec vpos;
+                        vpos[0] = bmin[0] + di * (bmax[0] - bmin[0]);
+                        vpos[1] = bmin[1] + dj * (bmax[1] - bmin[1]);
+                        vpos[2] = bmin[2] + dk * (bmax[2] - bmin[2]);
+                        if ((vpos - ctr).length() < radius) {
+                            inside_cnt++;
+                        }
+                    }
+                }
+            }
+            if (inside_cnt == 0 || inside_cnt == 8) return min_level;
+            else return max_level;
+        }
+        __hostdev__ static uint8_t type(const HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const nanovdb::Coord& l_ijk) {
+            return CellType::INTERIOR;
+        }
+    };
+
+
     class GerrisSinFunc {
     public:
         static constexpr T PI = 3.14159265358979323846;
@@ -662,69 +703,6 @@ namespace SolverTests {
         else if (bc_name == "athena_sin") {
             is_pure_neumann = true;
 			SetAnalyticalTestWithAllNeumannAnalyticalBC<AthenaSinFunc>(grid, rhs_channel, grdt_channel);
-   //         //load cell types, load solution to grdt_channel
-   //         auto cell_type = [=]__device__(const HATileAccessor<Tile> &acc, const HATileInfo<Tile> &info, const nanovdb::Coord & l_ijk)->uint8_t {
-   //             bool is_dirichlet = false;
-   //             bool is_neumann = false;
-   //             acc.iterateSameLevelNeighborVoxels(info, l_ijk,
-   //                 [&]__device__(const HATileInfo<Tile>&n_info, const Coord & n_l_ijk, const int axis, const int sgn) {
-   //                 if (n_info.empty()) {
-   //                     is_neumann = true;
-   //                 }
-   //             });
-   //             if (is_neumann) return CellType::NEUMANN;
-   //             else if (is_dirichlet) return CellType::DIRICHLET;
-   //             else return CellType::INTERIOR;
-   //         };
-   //         //solution f(x) and rhs b(x)
-   //         constexpr auto PI = 3.14159265358979323846;
-   //         constexpr auto Lx = 1.0;
-			//constexpr auto Ly = 1.0;
-			//constexpr auto Lz = 1.0;
-   //         constexpr auto G = 1.0;
-   //         constexpr auto A = 1.0;
-   //         constexpr auto rho0 = 2.0;
-   //         constexpr auto phi0 = 0;
-
-
-   //         auto rhs_func = [=]__device__(const Vec & pos) {
-   //             auto x = pos[0];
-   //             auto y = pos[1];
-   //             auto z = pos[2];
-   //             return rho0 + A * sin(2 * PI * x / Lx) * sin(2 * PI * y / Ly) * sin(2 * PI * z / Lz);
-   //         };
-   //         auto grdt_func = [=]__device__(const Vec & pos) ->T {
-   //             auto x = pos[0];
-			//	auto y = pos[1];
-			//	auto z = pos[2];
-			//	//phi = -4*pi*G*A / ( (2*pi/Lx)^2 + (2*pi/Ly)^2 + (2*pi/Lz)^2 )  * sin(2*pi*x/Lx) * sin(2*pi*y/Ly) * sin(2*pi*z/Lz) + phi0
-   //             return
-   //                 -4 * PI * G * A
-   //                 /
-   //                 ((2 * PI / Lx) * (2 * PI / Lx) + (2 * PI / Ly) * (2 * PI / Ly) + (2 * PI / Lz) * (2 * PI / Lz))
-   //                 *
-   //                 sin(2 * PI * x / Lx) * sin(2 * PI * y / Ly) * sin(2 * PI * z / Lz)
-   //                 +
-   //                 phi0;
-   //         };
-   //         grid.launchVoxelFunc(
-   //             [=] __device__(HATileAccessor<Tile>&acc, HATileInfo<Tile>&info, const Coord & l_ijk) {
-   //             auto& tile = info.tile();
-   //             tile.type(l_ijk) = cell_type(acc, info, l_ijk);
-   //             auto pos = acc.cellCenter(info, l_ijk);
-   //             auto h = acc.voxelSize(info);
-
-   //             if (tile.type(l_ijk) & INTERIOR) {
-   //                 tile(rhs_channel, l_ijk) = -rhs_func(pos) * h * h * h;
-   //                 tile(grdt_channel, l_ijk) = grdt_func(pos);
-			//		//printf("rhs %f, grdt %f\n", tile(rhs_channel, l_ijk), tile(grdt_channel, l_ijk));
-   //             }
-   //             else {
-   //                 tile(rhs_channel, l_ijk) = 0;
-   //                 tile(grdt_channel, l_ijk) = 0;
-   //             }
-   //         }, -1, LEAF, LAUNCH_SUBTREE
-   //         );
         }
         else {
 			Assert(false, "bc_name {} not supported", bc_name);
