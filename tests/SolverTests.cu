@@ -483,7 +483,7 @@ namespace SolverTests {
 
     class UniformGridCase {
     public:
-        __hostdev__ static int target(const HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const ConvergenceTestGridName grid_name, const int min_level, const int max_level) {
+        __hostdev__ static int target(const HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const int min_level, const int max_level) {
             return max_level;
         }
 		__hostdev__ static uint8_t type(const HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const nanovdb::Coord& l_ijk) {
@@ -493,7 +493,7 @@ namespace SolverTests {
 
     class SphereShell05GridCase {
     public:
-        __hostdev__ static int target(const HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const ConvergenceTestGridName grid_name, const int min_level, const int max_level) {
+        __hostdev__ static int target(const HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const int min_level, const int max_level) {
             auto bbox = acc.tileBBox(info);
             auto bmin = bbox.min();
             auto bmax = bbox.max();
@@ -679,20 +679,42 @@ namespace SolverTests {
         );
     }
 
-    //return <grid, is_pure_neumann>
-    std::tuple<std::shared_ptr<HADeviceGrid<Tile>>, bool> CreateTestGrid(const ConvergenceTestGridName grid_name, const int min_level, const int max_level, const std::string bc_name, const int rhs_channel, const int grdt_channel) {
+    template<class GridCase>
+    std::shared_ptr<HADeviceGrid<Tile>> CreateTestGridCase(const std::string grid_name, const int min_level, const int max_level) {
         uint32_t scale = 8;
         float h = 1.0 / scale;
         //0:8, 1:16, 2:32, 3:64, 4:128, 5:256, 6:512, 7:1024
-		auto grid_ptr = std::make_shared<HADeviceGrid<Tile>>(h, thrust::host_vector{ 16,16,16,16,16,16,20,16,16,16 });
-		auto& grid = *grid_ptr;
+        auto grid_ptr = std::make_shared<HADeviceGrid<Tile>>(h, thrust::host_vector{ 16,16,16,16,16,16,20,16,16,16 });
+        auto& grid = *grid_ptr;
         grid.setTileHost(0, nanovdb::Coord(0, 0, 0), Tile(), LEAF);
         grid.rebuild();
-
-		IterativeRefine(grid, [=]__device__(const HATileAccessor<Tile>&acc, HATileInfo<Tile>&info) { return ConvergenceTestLevelTarget(acc, info, grid_name, min_level, max_level); }, false);
+		IterativeRefine(grid, [=]__device__(const HATileAccessor<Tile>&acc, HATileInfo<Tile>&info) { return GridCase::target(acc, info, min_level, max_level); }, false);
         int num_cells = grid.numTotalLeafTiles() * Tile::SIZE;
         int total_hash_bytes = grid.hashTableDeviceBytes();
         Info("Total {}M cells, hash table {}GB", num_cells / (1024.0 * 1024), total_hash_bytes / (1024.0 * 1024 * 1024));
+
+        grid.launchVoxelFuncOnAllTiles(
+			[=] __device__(HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const Coord& l_ijk) {
+			auto& tile = info.tile();
+			tile.type(l_ijk) = GridCase::type(acc, info, l_ijk);
+		}, LEAF
+		);
+        return grid_ptr;
+    }
+
+    //return <grid, is_pure_neumann>
+    std::tuple<std::shared_ptr<HADeviceGrid<Tile>>, bool> CreateTestGrid(const std::string grid_name, const int min_level, const int max_level, const std::string bc_name, const int rhs_channel, const int grdt_channel) {
+		std::shared_ptr<HADeviceGrid<Tile>> grid_ptr;
+        if (grid_name == "uniform") {
+			grid_ptr = CreateTestGridCase<UniformGridCase>(grid_name, min_level, max_level);
+		}
+		else if (grid_name == "sphere_shell_05") {
+			grid_ptr = CreateTestGridCase<SphereShell05GridCase>(grid_name, min_level, max_level);
+		}
+        else {
+            Assert(false, "grid_name {} not supported", grid_name);
+        }
+		auto& grid = *grid_ptr;
 
         bool is_pure_neumann = false;
 
@@ -814,8 +836,8 @@ namespace SolverTests {
         }
     }
 
-    void TestAnalyticalConvergence(const ConvergenceTestGridName grid_name, const int min_level, const int max_level, const std::string bc_name, const std::string algorithm) {
-		Info("Test Poisson Solver on grid {}, {}~{} levels with given function of {} for {}", ToString(grid_name), min_level, max_level, bc_name, algorithm);
+    void TestAnalyticalConvergence(const std::string grid_name, const int min_level, const int max_level, const std::string bc_name, const std::string algorithm) {
+		Info("Test Poisson Solver on grid {}, {}~{} levels with given function of {} for {}", grid_name, min_level, max_level, bc_name, algorithm);
 
 
         int grdt_channel = 5;

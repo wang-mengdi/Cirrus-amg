@@ -27,12 +27,12 @@ int main(int argc, char** argv) {
 
 	for (int min_level : {1, 2, 3, 4, 5}) {
 		//SolverTests::TestAnalyticalConvergence(ConvergenceTestGridName::uniform, min_level, min_level, "gerris_sin", "amg");
-		SolverTests::TestAnalyticalConvergence(ConvergenceTestGridName::uniform, min_level, min_level, "athena_sin", "amg");
+		SolverTests::TestAnalyticalConvergence("uniform", min_level, min_level, "athena_sin", "amg");
 	}
 
 	for (int min_level : {1, 2, 3, 4}) {
 		//SolverTests::TestAnalyticalConvergence(ConvergenceTestGridName::sphere_shell_05, min_level, min_level + 2, "gerris_sin", "amg");
-		SolverTests::TestAnalyticalConvergence(ConvergenceTestGridName::sphere_shell_05, min_level, min_level + 2, "athena_sin", "amg");
+		SolverTests::TestAnalyticalConvergence("sphere_shell_05", min_level, min_level + 2, "athena_sin", "amg");
 	}
 	
 
