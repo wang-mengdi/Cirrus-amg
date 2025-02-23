@@ -520,6 +520,72 @@ namespace SolverTests {
             return CellType::INTERIOR;
         }
     };
+    class SphereSolid05GridCase {
+    public:
+        __hostdev__ static int target(const HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const int min_level, const int max_level) {
+            auto bbox = acc.tileBBox(info);
+            auto bmin = bbox.min();
+            auto bmax = bbox.max();
+            const Vec ctr(0.5, 0.5, 0.5);
+            constexpr T radius = 0.5 / 2;
+            int inside_cnt = 0;
+            for (int di : { 0, 1 }) {
+                for (int dj : { 0, 1 }) {
+                    for (int dk : { 0, 1 }) {
+                        Vec vpos;
+                        vpos[0] = bmin[0] + di * (bmax[0] - bmin[0]);
+                        vpos[1] = bmin[1] + dj * (bmax[1] - bmin[1]);
+                        vpos[2] = bmin[2] + dk * (bmax[2] - bmin[2]);
+                        if ((vpos - ctr).length() < radius) {
+                            inside_cnt++;
+                        }
+                    }
+                }
+            }
+            if (inside_cnt == 0 || inside_cnt == 8) return min_level;
+            else return max_level;
+        }
+        __hostdev__ static uint8_t type(const HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const nanovdb::Coord& l_ijk) {
+			auto pos = acc.cellCenter(info, l_ijk);
+            const Vec ctr(0.5, 0.5, 0.5);
+            constexpr T radius = 0.5 / 2;
+            if ((pos - ctr).length() < radius) return CellType::NEUMANN;
+            else return CellType::INTERIOR;
+        }
+    };
+    class SphereAir05GridCase {
+    public:
+        __hostdev__ static int target(const HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const int min_level, const int max_level) {
+            auto bbox = acc.tileBBox(info);
+            auto bmin = bbox.min();
+            auto bmax = bbox.max();
+            const Vec ctr(0.5, 0.5, 0.5);
+            constexpr T radius = 0.5 / 2;
+            int inside_cnt = 0;
+            for (int di : { 0, 1 }) {
+                for (int dj : { 0, 1 }) {
+                    for (int dk : { 0, 1 }) {
+                        Vec vpos;
+                        vpos[0] = bmin[0] + di * (bmax[0] - bmin[0]);
+                        vpos[1] = bmin[1] + dj * (bmax[1] - bmin[1]);
+                        vpos[2] = bmin[2] + dk * (bmax[2] - bmin[2]);
+                        if ((vpos - ctr).length() < radius) {
+                            inside_cnt++;
+                        }
+                    }
+                }
+            }
+            if (inside_cnt == 0 || inside_cnt == 8) return min_level;
+            else return max_level;
+        }
+        __hostdev__ static uint8_t type(const HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const nanovdb::Coord& l_ijk) {
+            auto pos = acc.cellCenter(info, l_ijk);
+            const Vec ctr(0.5, 0.5, 0.5);
+            constexpr T radius = 0.5 / 2;
+            if ((pos - ctr).length() < radius) return CellType::DIRICHLET;
+            else return CellType::INTERIOR;
+        }
+    };
 
 
     class GerrisSinFunc {
@@ -583,9 +649,49 @@ namespace SolverTests {
         }
     };
 
+    __device__ bool QueryEffectiveBoundaryDirection(const HATileAccessor<Tile>& acc, const int level, const Coord& g_ijk, int& boundary_axis, int& boundary_off) {
+        boundary_axis = -1;
+        boundary_off = 0;
+
+        for (int axis : {0, 1, 2}) {
+            for (int off : {-1, 1}) {
+                auto ng_ijk = g_ijk; ng_ijk[axis] += off;
+                HATileInfo<Tile> ninfo; Coord nl_ijk;
+                acc.findVoxel(level, ng_ijk, ninfo, nl_ijk);
+                if (ninfo.empty()) {
+                    boundary_axis = axis;
+                    boundary_off = off;
+                    return true;
+                }
+
+            }
+        }
+        return false;
+    }
+
+    __device__ bool QueryEffectiveBoundaryDirection(const HATileAccessor<Tile>& acc, int chk_level, const HATileInfo<Tile>& info, const nanovdb::Coord& l_ijk, int& boundary_axis, int& boundary_off) {
+        chk_level = min(chk_level, info.mLevel);
+        int level_diff = info.mLevel - chk_level;
+
+        auto g_ijk = acc.localToGlobalCoord(info, l_ijk);
+
+
+        g_ijk = Coord(g_ijk[0] >> level_diff, g_ijk[1] >> level_diff, g_ijk[2] >> level_diff);
+
+        //printf("level %d chk level %d diff %d g_ijk %d %d %d\n", info.mLevel, chk_level, level_diff, g_ijk[0], g_ijk[1], g_ijk[2]);
+        return QueryEffectiveBoundaryDirection(acc, chk_level, g_ijk, boundary_axis, boundary_off);
+    }
+
     template<class TestFunc>
-    void SetAnalyticalTestWithAllNeumannAnalyticalBC(HADeviceGrid<Tile>& grid, const int rhs_channel, const int grdt_channel) {
+    void SetAnalyticalTestWithAllDirichletAnalyticalBC(HADeviceGrid<Tile>& grid, const int rhs_channel, const int grdt_channel, const std::string algorithm) {
+
+    }
+
+    template<class TestFunc>
+    void SetAnalyticalTestWithAllNeumannAnalyticalBC(HADeviceGrid<Tile>& grid, int min_level, int max_level, const int rhs_channel, const int grdt_channel) {
         auto cell_type = [=]__device__(const HATileAccessor<Tile> &acc, const HATileInfo<Tile> &info, const nanovdb::Coord & l_ijk)->uint8_t {
+
+
             bool is_dirichlet = false;
             bool is_neumann = false;
             acc.iterateSameLevelNeighborVoxels(info, l_ijk,
@@ -601,7 +707,14 @@ namespace SolverTests {
         grid.launchVoxelFuncOnAllTiles(
             [=] __device__(HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const Coord& l_ijk) {
             auto& tile = info.tile();
-            tile.type(l_ijk) = cell_type(acc, info, l_ijk);
+            if (tile.type(l_ijk) == INTERIOR) {
+                //tile.type(l_ijk) = cell_type(acc, info, l_ijk);
+                int boundary_axis, boundary_off;
+                if (QueryEffectiveBoundaryDirection(acc, min_level, info, l_ijk, boundary_axis, boundary_off)) {
+					tile.type(l_ijk) = NEUMANN;
+                }
+                //tile.type(l_ijk) = 
+            }
         }, LEAF
         );
         CalcCellTypesFromLeafs(grid);
@@ -641,6 +754,65 @@ namespace SolverTests {
                             dirichlet_pos = npos;
                         }
                     }
+                    else if (ninfo.mType == NONLEAF) {
+                        auto& ntile = ninfo.tile();
+                        if (ntile.type(nl_ijk) & NEUMANN) {
+                            nb_neumann = true;
+                            neumann_pos = (pos + npos) * 0.5;
+                        }
+                        if (ntile.type(nl_ijk) & DIRICHLET) {
+                            nb_dirichlet = true;
+                            dirichlet_pos = npos;
+                        }
+
+                        //{
+                        //    auto ng_ijk = acc.localToGlobalCoord(ninfo, nl_ijk);
+                        //    int interior_cnt = 0;
+                        //    int neumann_cnt = 0;
+                        //    int dirichlet_cnt = 0;
+                        //    T children_term = 0;
+                        //    for (int ci : {0, 1}) {
+                        //        for (int cj : {0, 1}) {
+                        //            for (int ck : {0, 1}) {
+                        //                Coord ncg_ijk(ng_ijk[0] * 2 + ci, ng_ijk[1] * 2 + cj, ng_ijk[2] * 2 + ck);
+                        //                HATileInfo<Tile> ncinfo; Coord ncl_ijk;
+                        //                acc.findVoxel(ninfo.mLevel + 1, ncg_ijk, ncinfo, ncl_ijk);
+                        //                if (!ncinfo.empty()) {
+                        //                    auto& nctile = ncinfo.tile();
+                        //                    if (nctile.type(ncl_ijk) & INTERIOR) {
+                        //                        interior_cnt++;
+                        //                    }
+                        //                    else {
+
+                        //                        if (nctile.type(ncl_ijk) & NEUMANN) neumann_cnt++;
+                        //                        if (nctile.type(ncl_ijk) & DIRICHLET) dirichlet_cnt++;
+
+                        //                        //basically there is a term (p_i-(pnc0+...pnc7)/8) / h*h^2
+                        //                        //so there is a rhs term -pnc_j / 8 * h, if it's non-interior
+                        //                        //but this also has issues.
+                        //                        //the neumann/dirichlet cells will affect the face coefficient
+                        //                        //so this correction is again not precise
+                        //                        children_term -= TestFunc::f(acc.cellCenter(ncinfo, ncl_ijk)) / 8 * h;
+                        //                    }
+                        //                }
+                        //            }
+                        //        }
+                        //    }
+
+                        //    if (interior_cnt > 0) {
+                        //        rhs_correction += children_term;
+                        //    }
+                        //    else if (dirichlet_cnt > 0) {
+                        //        nb_dirichlet = true;
+                        //        dirichlet_pos = npos;
+                        //    }
+                        //    else if (neumann_cnt > 0) {
+                        //        nb_neumann = true;
+                        //        neumann_pos = (pos + npos) * 0.5;
+                        //    }
+                        //}
+
+                    }
                     else if (ninfo.mType == GHOST) {
                         auto g_ijk = acc.localToGlobalCoord(info, l_ijk);
 						auto pg_ijk = acc.parentCoord(g_ijk);
@@ -663,19 +835,38 @@ namespace SolverTests {
 
                     if (nb_neumann) {
                         rhs_correction += (-sgn) * TestFunc::df(neumann_pos)[axis] * h * h;
+
+       //                 {
+							//auto g_ijk = acc.localToGlobalCoord(info, l_ijk);
+       //                     if (info.mLevel == 3 && g_ijk == Coord(28, 34, 47)) {
+       //                         printf("g_ijk = %d %d %d, rhs_correction = %f\n", g_ijk[0], g_ijk[1], g_ijk[2], rhs_correction);
+       //                     }
+       //                 }
+
                     }
                     else if (nb_dirichlet) {
-                        rhs_correction += (-sgn) * TestFunc::f(dirichlet_pos) * h;
+                        //rhs_correction += (-sgn) * TestFunc::f(dirichlet_pos) * h;
+						rhs_correction += TestFunc::f(dirichlet_pos) * h;
                     }
                 });
+
+
+
                 tile(rhs_channel, l_ijk) -= rhs_correction;
+
+                //{
+                //    auto g_ijk = acc.localToGlobalCoord(info, l_ijk);
+                //    if (info.mLevel == 3 && g_ijk == Coord(28, 34, 47)) {
+                //        printf("g_ijk = %d %d %d, rhs = %f laplacian=%f h=%f\n", g_ijk[0], g_ijk[1], g_ijk[2], tile(rhs_channel, l_ijk), TestFunc::lapf(pos), h);
+                //    }
+                //}
 
             }
             else {
                 tile(rhs_channel, l_ijk) = 0;
                 tile(grdt_channel, l_ijk) = 0;
             }
-        }, LEAF
+        }, LEAF, 8
         );
     }
 
@@ -711,6 +902,9 @@ namespace SolverTests {
 		else if (grid_name == "sphere_shell_05") {
 			grid_ptr = CreateTestGridCase<SphereShell05GridCase>(grid_name, min_level, max_level);
 		}
+        else if (grid_name == "sphere_solid_05") {
+			grid_ptr = CreateTestGridCase<SphereSolid05GridCase>(grid_name, min_level, max_level);
+        }
         else {
             Assert(false, "grid_name {} not supported", grid_name);
         }
@@ -720,11 +914,11 @@ namespace SolverTests {
 
         if (bc_name == "gerris_sin") {
             is_pure_neumann = true;
-            SetAnalyticalTestWithAllNeumannAnalyticalBC<GerrisSinFunc>(grid, rhs_channel, grdt_channel);
+            SetAnalyticalTestWithAllNeumannAnalyticalBC<GerrisSinFunc>(grid, min_level, max_level, rhs_channel, grdt_channel);
         }
         else if (bc_name == "athena_sin") {
             is_pure_neumann = true;
-			SetAnalyticalTestWithAllNeumannAnalyticalBC<AthenaSinFunc>(grid, rhs_channel, grdt_channel);
+			SetAnalyticalTestWithAllNeumannAnalyticalBC<AthenaSinFunc>(grid, min_level, max_level, rhs_channel, grdt_channel);
         }
         else {
 			Assert(false, "bc_name {} not supported", bc_name);
@@ -807,15 +1001,17 @@ namespace SolverTests {
             }
         }, LEAF
         );
-
-        //auto holder = grid.getHostTileHolder(LEAF);
-        //polyscope::init();
-        //IOFunc::AddLeveledPoissonGridCellCentersToPolyscopePointCloud(holder,
-        //    {
-        //    {-1, "type"}, {Tile::x_channel,"x"} ,{grdt_channel,"grdt"},{Tile::r_channel, "r"}
-        //    },
-        //    {}, -1, FLT_MAX);
-        //polyscope::show();
+        
+        //{
+        //    auto holder = grid.getHostTileHolder(LEAF);
+        //    polyscope::init();
+        //    IOFunc::AddLeveledPoissonGridCellCentersToPolyscopePointCloud(holder,
+        //        {
+        //        {-1, "type"}, {Tile::x_channel,"x"} ,{grdt_channel,"grdt"},{Tile::r_channel, "r"}
+        //        },
+        //        {}, -1, FLT_MAX);
+        //    polyscope::show();
+        //}
 
    //     {
 			//auto holder = grid.getHostTileHolderForLeafs();
@@ -836,8 +1032,71 @@ namespace SolverTests {
         }
     }
 
-    void TestAnalyticalConvergence(const std::string grid_name, const int min_level, const int max_level, const std::string bc_name, const std::string algorithm) {
-		Info("Test Poisson Solver on grid {}, {}~{} levels with given function of {} for {}", grid_name, min_level, max_level, bc_name, algorithm);
+    void TestDiscretizedLaplacian(const std::string grid_name, const int min_level, const int max_level, const std::string bc_name) {
+        int x_channel = 0;
+        int analytical_nlap_channel = 1;
+        int numerical_nlap_channel = 2;
+        int residual_channel = 3;
+        int coeff_channel = 6;
+        
+
+        auto [grid_ptr, is_pure_neumann] = CreateTestGrid(grid_name, min_level, max_level, bc_name, analytical_nlap_channel, x_channel);
+        auto& grid = *grid_ptr;
+
+        {
+            CalculateNeighborTiles(grid);
+
+            AMGSolver solver(coeff_channel, 0.5, 1, 1);
+            solver.prepareTypesAndCoeffs(grid);
+            AMGFullNegativeLaplacianOnLeafs(grid, x_channel, coeff_channel, numerical_nlap_channel);
+        }
+
+        //calculate difference from x and grdt in r_channel
+        grid.launchVoxelFuncOnAllTiles(
+            [=] __device__(HATileAccessor<Tile>&acc, HATileInfo<Tile>&info, const Coord & l_ijk) {
+            auto& tile = info.tile();
+            if (tile.type(l_ijk) & INTERIOR) {
+                auto h = acc.voxelSize(info);
+                tile(residual_channel, l_ijk) = (tile(analytical_nlap_channel, l_ijk) - tile(numerical_nlap_channel, l_ijk)) / (h*h*h);
+				
+            }
+            else {
+                tile(residual_channel, l_ijk) = 0;
+            }
+        }, LEAF
+        );
+
+        auto holder = grid.getHostTileHolder(LEAF);
+        polyscope::init();
+        IOFunc::AddLeveledPoissonGridCellCentersToPolyscopePointCloud(holder,
+            {
+            {-1, "type"}, {x_channel,"x"} ,{analytical_nlap_channel,"analytical"},{numerical_nlap_channel, "numerical"}, {residual_channel,"residual"}
+            },
+            {}, -1, FLT_MAX);
+        polyscope::show();
+
+        {
+            auto holder = grid.getHostTileHolderForLeafs();
+            IOFunc::OutputPoissonGridAsStructuredVTI(
+                holder,
+                { {-1, "type"}, {analytical_nlap_channel, "analytical"}, {numerical_nlap_channel, "numerical"}, {residual_channel, "r"}, {x_channel, "x"} },
+                {  },
+                fmt::format("output/laplacian_test_{}_levels_{}_{}.vti", grid_name, min_level, max_level)
+            );
+        }
+        
+        Info("Test Laplacian linf error on grid {} levels {}~{}", grid_name, min_level, max_level);
+        auto linf_norm = SingleChannelLinfSync(grid, residual_channel, LEAF);
+        if (linf_norm < 1e-4) {
+            Pass("Test passed with Linf norm of grdt-x: {}\n\n", linf_norm);
+        }
+        else {
+            Warn("Test failed with Linf norm of grdt-x: {}\n\n", linf_norm);
+        }
+    }
+
+    void TestSolverErrorWithAllNeumannBC(const std::string grid_name, const int min_level, const int max_level, const std::string bc_name, const std::string algorithm) {
+		Info("TestSolverErrorWithAllNeumannBC on grid {}, {}~{} levels with given function of {} for {}", grid_name, min_level, max_level, bc_name, algorithm);
 
 
         int grdt_channel = 5;
@@ -850,13 +1109,15 @@ namespace SolverTests {
 
 		TestSolverWithAnalyticalSolution(grid, algorithm, coeff_channel, grdt_channel, is_pure_neumann);
 
-        //auto holder = grid.getHostTileHolderForLeafs();
-        //IOFunc::OutputPoissonGridAsStructuredVTI(
-        //    holder,
-        //    { {-1, "type"}, {rhs_channel, "rhs"}, {grdt_channel, "grdt"}, {Tile::x_channel, "x"}, {Tile::r_channel, "r"} },
-        //    {  },
-        //    fmt::format("output/analytical_{}_{}_{}_{}.vti", ToString(grid_name), max_level, bc_name, algorithm)
-        //);
+        {
+            auto holder = grid.getHostTileHolderForLeafs();
+            IOFunc::OutputPoissonGridAsStructuredVTI(
+                holder,
+                { {-2,"level"}, { -1, "type" }, {rhs_channel, "rhs"}, {grdt_channel, "grdt"}, {Tile::x_channel, "x"}, {Tile::r_channel, "r"} },
+                {  },
+                fmt::format("output/analytical_{}_levels{}_{}_{}_{}.vti", grid_name, min_level, max_level, bc_name, algorithm)
+            );
+        }
        
 
 
