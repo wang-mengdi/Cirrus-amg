@@ -880,7 +880,7 @@ namespace SolverTests {
         uint32_t scale = 8;
         float h = 1.0 / scale;
         //0:8, 1:16, 2:32, 3:64, 4:128, 5:256, 6:512, 7:1024
-        auto grid_ptr = std::make_shared<HADeviceGrid<Tile>>(h, thrust::host_vector{ 16,16,16,16,16,16,20,16,16,16 });
+        auto grid_ptr = std::make_shared<HADeviceGrid<Tile>>(h, thrust::host_vector{ 16,16,16,16,16,16,20,20,16,16 });
         auto& grid = *grid_ptr;
         grid.setTileHost(0, nanovdb::Coord(0, 0, 0), Tile(), LEAF);
         grid.rebuild();
