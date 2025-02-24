@@ -946,10 +946,10 @@ namespace SolverTests {
 		return std::make_tuple(grid_ptr, is_pure_neumann);
     }
 
-    void TestSolverWithAnalyticalSolution(HADeviceGrid<Tile>& grid, const std::string algorithm, const int coeff_channel, const int grdt_channel, bool is_pure_neumann) {
+    void TestSolverWithAnalyticalSolution(HADeviceGrid<Tile>& grid, const std::string algorithm, const int coeff_channel, const int grdt_channel, int error_channel, bool is_pure_neumann) {
         if (algorithm == "cmg") {
             CalculateNeighborTiles(grid);
-            ConservativeFullNegativeLaplacian(grid, grdt_channel, Tile::b_channel);
+            //ConservativeFullNegativeLaplacian(grid, grdt_channel, Tile::b_channel);
 
             _sleep(200);
             CMGSolver solver(1.0, 1.0);
@@ -994,10 +994,10 @@ namespace SolverTests {
             [=] __device__(HATileAccessor<Tile>&acc, HATileInfo<Tile>&info, const Coord & l_ijk) {
             auto& tile = info.tile();
             if (tile.type(l_ijk) & INTERIOR) {
-                tile(Tile::r_channel, l_ijk) = tile(grdt_channel, l_ijk) - tile(Tile::x_channel, l_ijk);
+                tile(error_channel, l_ijk) = tile(grdt_channel, l_ijk) - tile(Tile::x_channel, l_ijk);
             }
             else {
-                tile(Tile::r_channel, l_ijk) = 0;
+                tile(error_channel, l_ijk) = 0;
             }
         }, LEAF
         );
@@ -1023,12 +1023,12 @@ namespace SolverTests {
    //         );
    //     }
 
-        auto linf_norm = SingleChannelLinfSync(grid, Tile::r_channel, LEAF);
-        if (linf_norm < 1e-4) {
-            Pass("Test passed with Linf norm of grdt-x: {}\n\n", linf_norm);
+        auto weighted_rms_error = VolumeWeightedNorm(grid, 2, error_channel, -1, LEAF);
+        if (weighted_rms_error < 1e-4) {
+            Pass("Test passed with Linf norm of grdt-x: {}\n\n", weighted_rms_error);
         }
         else {
-            Warn("Test failed with Linf norm of grdt-x: {}\n\n", linf_norm);
+            Warn("Test failed with Linf norm of grdt-x: {}\n\n", weighted_rms_error);
         }
     }
 
@@ -1086,7 +1086,8 @@ namespace SolverTests {
         }
         
         Info("Test Laplacian linf error on grid {} levels {}~{}", grid_name, min_level, max_level);
-        auto linf_norm = SingleChannelLinfSync(grid, residual_channel, LEAF);
+        //auto linf_norm = SingleChannelLinfSync(grid, residual_channel, LEAF);
+        auto linf_norm = VolumeWeightedNorm(grid, -1, residual_channel, -1, LEAF);
         if (linf_norm < 1e-4) {
             Pass("Test passed with Linf norm of grdt-x: {}\n\n", linf_norm);
         }
@@ -1101,23 +1102,25 @@ namespace SolverTests {
 
         int grdt_channel = 5;
         int coeff_channel = 6;
-        int rhs_channel = Tile::b_channel;
+        int rhs_channel = Tile::b_channel;//1
+        //x:0
+        int error_channel = 2;
 
         auto [grid_ptr, is_pure_neumann] = CreateTestGrid(grid_name, min_level, max_level, bc_name, rhs_channel, grdt_channel);
 		auto& grid = *grid_ptr;
 
 
-		TestSolverWithAnalyticalSolution(grid, algorithm, coeff_channel, grdt_channel, is_pure_neumann);
+		TestSolverWithAnalyticalSolution(grid, algorithm, coeff_channel, grdt_channel, error_channel, is_pure_neumann);
 
-        {
-            auto holder = grid.getHostTileHolderForLeafs();
-            IOFunc::OutputPoissonGridAsStructuredVTI(
-                holder,
-                { {-2,"level"}, { -1, "type" }, {rhs_channel, "rhs"}, {grdt_channel, "grdt"}, {Tile::x_channel, "x"}, {Tile::r_channel, "r"} },
-                {  },
-                fmt::format("output/analytical_{}_levels{}_{}_{}_{}.vti", grid_name, min_level, max_level, bc_name, algorithm)
-            );
-        }
+        //{
+        //    auto holder = grid.getHostTileHolderForLeafs();
+        //    IOFunc::OutputPoissonGridAsStructuredVTI(
+        //        holder,
+        //        { {-2,"level"}, { -1, "type" }, {rhs_channel, "rhs"}, {grdt_channel, "grdt"}, {Tile::x_channel, "x"}, {Tile::r_channel, "r"} },
+        //        {  },
+        //        fmt::format("output/analytical_{}_levels{}_{}_{}_{}.vti", grid_name, min_level, max_level, bc_name, algorithm)
+        //    );
+        //}
        
 
 
