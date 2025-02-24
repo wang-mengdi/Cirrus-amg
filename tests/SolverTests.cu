@@ -185,7 +185,7 @@ namespace SolverTests {
         );
         polyscope::show();
 
-        auto linf_norm = SingleChannelLinfSync(grid, diff_channel, LEAF);
+		auto linf_norm = VolumeWeightedNorm(grid, -1, diff_channel, -1, LEAF);
         if (linf_norm < 1e-5) {
             Pass("Test passed with Linf norm of grdt-x: {}\n\n", linf_norm);
         }
@@ -316,7 +316,12 @@ namespace SolverTests {
             }
         }, LEAF
         );
-		auto linf_norm = SingleChannelLinfSync(grid, Tile::r_channel, LEAF);
+
+        Info("linf: {}", VolumeWeightedNorm(grid, -1, Tile::r_channel, -1, LEAF));
+        Info("weighted L1: {}", VolumeWeightedNorm(grid, 1, Tile::r_channel, -1, LEAF));
+        Info("weighted rms: {}", VolumeWeightedNorm(grid, 2, Tile::r_channel, -1, LEAF));
+
+        auto linf_norm = VolumeWeightedNorm(grid, -1, Tile::r_channel, -1, LEAF);
         if (linf_norm < 1e-4) {
 			Pass("Test passed with Linf norm of grdt-x: {}\n\n", linf_norm);
 		}
@@ -441,7 +446,7 @@ namespace SolverTests {
             }
         }, LEAF
         );
-        auto linf_norm = SingleChannelLinfSync(grid, Tile::r_channel, LEAF);
+        auto linf_norm = VolumeWeightedNorm(grid, -1, Tile::r_channel, -1, LEAF);
         if (linf_norm < 1e-5) {
             Pass("Test passed with Linf norm of grdt-x: {}\n\n", linf_norm);
         }
@@ -1023,12 +1028,17 @@ namespace SolverTests {
    //         );
    //     }
 
+
+        Info("linf: {}", VolumeWeightedNorm(grid, -1, error_channel, -1, LEAF));
+        Info("weighted L1: {}", VolumeWeightedNorm(grid, 1, error_channel, -1, LEAF));
+        Info("weighted rms: {}", VolumeWeightedNorm(grid, 2, error_channel, -1, LEAF));
+
         auto weighted_rms_error = VolumeWeightedNorm(grid, 2, error_channel, -1, LEAF);
         if (weighted_rms_error < 1e-4) {
-            Pass("Test passed with Linf norm of grdt-x: {}\n\n", weighted_rms_error);
+            Pass("Test passed with weighted_rms_error of grdt-x: {}\n\n", weighted_rms_error);
         }
         else {
-            Warn("Test failed with Linf norm of grdt-x: {}\n\n", weighted_rms_error);
+            Warn("Test failed with weighted_rms_error of grdt-x: {}\n\n", weighted_rms_error);
         }
     }
 

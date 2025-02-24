@@ -377,19 +377,19 @@ double VelocityLinfSync(HADeviceGrid<Tile>& grid, const int u_channel, const uin
 //    CheckCudaError("SingleChannelLinfAsync end");
 //}
 
-// Synchronous function to compute Linf norm for a single channel
-double SingleChannelLinfSync(HADeviceGrid<Tile>& grid, const int channel, const uint8_t launch_tile_types) {
-    double* d_result;
-    cudaMalloc(&d_result, sizeof(double));
-
-    SingleChannelLinfAsync(d_result, grid, channel, launch_tile_types);
-
-    double result;
-    cudaMemcpy(&result, d_result, sizeof(double), cudaMemcpyDeviceToHost);
-    cudaFree(d_result);
-
-    return result;
-}
+//// Synchronous function to compute Linf norm for a single channel
+//double SingleChannelLinfSync(HADeviceGrid<Tile>& grid, const int channel, const uint8_t launch_tile_types) {
+//    double* d_result;
+//    cudaMalloc(&d_result, sizeof(double));
+//
+//    SingleChannelLinfAsync(d_result, grid, channel, launch_tile_types);
+//
+//    double result;
+//    cudaMemcpy(&result, d_result, sizeof(double), cudaMemcpyDeviceToHost);
+//    cudaFree(d_result);
+//
+//    return result;
+//}
 
 
 
@@ -504,7 +504,7 @@ double VolumeWeightedNorm(HADeviceGrid<Tile>& grid, const int order, const int i
     else {
         auto norm = ws / w;
         if (order == 1) {
-
+            //pass
         }
         else if (order == 2) {
 			norm = sqrt(norm);

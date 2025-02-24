@@ -462,7 +462,7 @@ __device__ void LoadAMGLaplacianTileData(const HATileAccessor<Tile>& acc, const 
             //{
             //    T vH = ninfo.tile()(x_channel, nl_ijk);//larger cell center, which is a corner of the ghost cell
 
-            //    //next we extrapolate the opposite corner of the ghost cell
+            //    //next we e0xtrapolate the opposite corner of the ghost cell
             //    //Afivo: a framework for quadtree/octree AMR with shared-memory parallelization and geometric multigrid methods
 
             //    //for example, for positive boundary, fl_ijk may be (8,j,k), and the cell inside the center tile is (7,j,k)
