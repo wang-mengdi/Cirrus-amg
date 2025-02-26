@@ -185,7 +185,7 @@ namespace SolverTests {
         );
         polyscope::show();
 
-		auto linf_norm = VolumeWeightedNorm(grid, -1, diff_channel, -1, LEAF);
+		auto linf_norm = NormSync(grid, -1, diff_channel, false);
         if (linf_norm < 1e-5) {
             Pass("Test passed with Linf norm of grdt-x: {}\n\n", linf_norm);
         }
@@ -317,11 +317,11 @@ namespace SolverTests {
         }, LEAF
         );
 
-        Info("linf: {}", VolumeWeightedNorm(grid, -1, Tile::r_channel, -1, LEAF));
-        Info("weighted L1: {}", VolumeWeightedNorm(grid, 1, Tile::r_channel, -1, LEAF));
-        Info("weighted rms: {}", VolumeWeightedNorm(grid, 2, Tile::r_channel, -1, LEAF));
+        Info("linf: {}", NormSync(grid, -1, Tile::r_channel, false));
+        Info("weighted L1: {}", NormSync(grid, 1, Tile::r_channel, true));
+        Info("weighted rms: {}", NormSync(grid, 2, Tile::r_channel, true));
 
-        auto linf_norm = VolumeWeightedNorm(grid, -1, Tile::r_channel, -1, LEAF);
+        auto linf_norm = NormSync(grid, -1, Tile::r_channel, true);
         if (linf_norm < 1e-4) {
 			Pass("Test passed with Linf norm of grdt-x: {}\n\n", linf_norm);
 		}
@@ -446,7 +446,7 @@ namespace SolverTests {
             }
         }, LEAF
         );
-        auto linf_norm = VolumeWeightedNorm(grid, -1, Tile::r_channel, -1, LEAF);
+        auto linf_norm = NormSync(grid, -1, Tile::r_channel, false);
         if (linf_norm < 1e-5) {
             Pass("Test passed with Linf norm of grdt-x: {}\n\n", linf_norm);
         }
@@ -1089,15 +1089,14 @@ namespace SolverTests {
    //     }
 
 
-        Info("linf: {}", VolumeWeightedNorm(grid, -1, error_channel, -1, LEAF));
-        Info("weighted L1: {}", VolumeWeightedNorm(grid, 1, error_channel, -1, LEAF));
-        Info("weighted rms: {}", VolumeWeightedNorm(grid, 2, error_channel, -1, LEAF));
+        Info("volume weighted L1: {}", VolumeWeightedNorm(grid, 1, error_channel));
+        Info("volume weighted L2: {}", VolumeWeightedNorm(grid, 2, error_channel));
 
         Info("linf: {}", NormSync(grid, -1, error_channel, false));
-        Info("weighted L1: {}", NormSync(grid, 1, error_channel, true));
-        Info("weighted rms: {}", NormSync(grid, 2, error_channel, true));
+        Info("weighted L1: {}", NormSync(grid, 1, error_channel, true, INTERIOR | NEUMANN | DIRICHLET));
+        Info("weighted rms: {}", NormSync(grid, 2, error_channel, true, INTERIOR | NEUMANN | DIRICHLET));
 
-        auto weighted_rms_error = VolumeWeightedNorm(grid, 2, error_channel, -1, LEAF);
+        auto weighted_rms_error = NormSync(grid, 2, error_channel, true, INTERIOR | NEUMANN | DIRICHLET);
         if (weighted_rms_error < 1e-4) {
             Pass("Test passed with weighted_rms_error of grdt-x: {}\n\n", weighted_rms_error);
         }
@@ -1161,7 +1160,7 @@ namespace SolverTests {
         
         Info("Test Laplacian linf error on grid {} levels {}~{}", grid_name, min_level, max_level);
         //auto linf_norm = SingleChannelLinfSync(grid, residual_channel, LEAF);
-        auto linf_norm = VolumeWeightedNorm(grid, -1, residual_channel, -1, LEAF);
+        auto linf_norm = NormSync(grid, -1, residual_channel, false);
         if (linf_norm < 1e-4) {
             Pass("Test passed with Linf norm of grdt-x: {}\n\n", linf_norm);
         }

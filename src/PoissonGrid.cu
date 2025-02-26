@@ -205,7 +205,11 @@ __global__ void ChannelPowerSumKernel128(const int order, HATileAccessor<Poisson
 	data.y = (type.y & launch_cell_types) ? data.y : 0;
 	data.z = (type.z & launch_cell_types) ? data.z : 0;
 	data.w = (type.w & launch_cell_types) ? data.w : 0;
-    int thread_cnt = (type.x & launch_cell_types) + (type.y & launch_cell_types) + (type.z & launch_cell_types) + (type.w & launch_cell_types);
+    int thread_cnt =
+        ((type.x & launch_cell_types) != 0) +
+        ((type.y & launch_cell_types) != 0) +
+        ((type.z & launch_cell_types) != 0) +
+        ((type.w & launch_cell_types) != 0);
 
 
     if (use_abs) {
@@ -254,11 +258,14 @@ __global__ void ChannelPowerSumKernel128(const int order, HATileAccessor<Poisson
         T single_weight = volume_weighted ? h * h * h : 1;
         value_sum[bi] = block_value_sum * single_weight;
 		if (weights_sum) weights_sum[bi] = block_weight_sum * single_weight;
+
+		//printf("tile level %d coord %d %d %d value_sum %f weights_sum %f wingle weight %f bloick_weight_sum %f thread cnt %d type %x\n", info.mLevel, info.mTileCoord[0], info.mTileCoord[1], info.mTileCoord[2], value_sum[bi], weights_sum ? weights_sum[bi] : 0, single_weight, block_weight_sum, thread_cnt, type);
+
     }
 }
 
 //on LEAF tiles and INTERIOR cells
-double NormSync(HADeviceGrid<Tile>& grid, const int order, const int in_channel, bool volume_weighted) {
+double NormSync(HADeviceGrid<Tile>& grid, const int order, const int in_channel, bool volume_weighted, uint8_t launch_cell_types) {
     if (order == -1) {
         Assert(!volume_weighted, "Linf norm does not support volume weighted, it only works with point-wise norm");
     }
@@ -274,7 +281,7 @@ double NormSync(HADeviceGrid<Tile>& grid, const int order, const int in_channel,
                 grid.dAllTilesReducer.data(), nullptr,
                 false, //volume weighted
                 true, //use_abs
-                INTERIOR // cell types
+                launch_cell_types // cell types
                 );
             return grid.dAllTilesReducer.maxSync();
         }
@@ -288,10 +295,13 @@ double NormSync(HADeviceGrid<Tile>& grid, const int order, const int in_channel,
                 grid.dAllTilesReducer.data(), weights_sum_reducer.data(),
                 volume_weighted, //volume weighted
                 true, //use_abs
-                INTERIOR // cell types
+                launch_cell_types // cell types
                 );
             double value_sum = CUBDeviceArraySum(grid.dAllTilesReducer.data(), num_tiles);
             double weights_sum = CUBDeviceArraySum(weights_sum_reducer.data(), num_tiles);
+
+			//Info("NormSync order: {} volume_weighted {} value_sum {} weights_sum {}", order,volume_weighted, value_sum, weights_sum);
+
             if (order == 1) return value_sum / weights_sum;
             else if (order == 2) return sqrt(value_sum / weights_sum);
             else return pow(value_sum / weights_sum, 1.0 / order);
@@ -300,71 +310,12 @@ double NormSync(HADeviceGrid<Tile>& grid, const int order, const int in_channel,
     else return 0;
 }
 
-// Kernel to compute the maximum absolute value (Linf norm) across three channels
-__global__ void VelocityLinfKernel(HATileAccessor<PoissonTile<T>> acc, HATileInfo<PoissonTile<T>>* infos, const int u_channel, double* max_values, int subtree_level, uint8_t launch_types) {
-    int bi = blockIdx.x;
-    int ti = threadIdx.x;
-    const HATileInfo<PoissonTile<T>>& info = infos[bi];
-
-    if (!(info.subtreeType(subtree_level) & launch_types)) {
-        if (ti == 0) max_values[bi] = 0.0;
-        return;
-    }
-
-    auto& tile = info.tile();
-	auto uAsVec4 = reinterpret_cast<typename Vec4Type<T>::Type*>(tile.mData[u_channel]);
-	auto vAsVec4 = reinterpret_cast<typename Vec4Type<T>::Type*>(tile.mData[u_channel + 1]);
-	auto wAsVec4 = reinterpret_cast<typename Vec4Type<T>::Type*>(tile.mData[u_channel + 2]);
-
-    auto u = uAsVec4[ti];
-    auto v = vAsVec4[ti];
-    auto w = wAsVec4[ti];
-
-    // Compute max abs value for this thread
-    double thread_max = max(max(fabs(u.x), fabs(u.y)), max(fabs(u.z), fabs(u.w)));
-    thread_max = max(thread_max, max(max(fabs(v.x), fabs(v.y)), max(fabs(v.z), fabs(v.w))));
-    thread_max = max(thread_max, max(max(fabs(w.x), fabs(w.y)), max(fabs(w.z), fabs(w.w))));
-
-    // Use CUB to perform block-wide reduction to find the maximum
-    typedef cub::BlockReduce<double, 128> BlockReduce;
-    __shared__ typename BlockReduce::TempStorage temp_storage;
-    double block_max = BlockReduce(temp_storage).Reduce(thread_max, cub::Max());
-
-    if (ti == 0) {
-        max_values[bi] = block_max;
-    }
-}
-
-// Launch VelocityLinfKernel asynchronously
-void VelocityLinfAsync(double* d_result, HADeviceGrid<Tile>& grid, const int u_channel, const uint8_t launch_tile_types) {
-    int num_tiles = grid.dAllTiles.size();
-    FillArray(grid.dAllTilesReducer.data(), grid.dAllTiles.size(), 0.0);
-    if (num_tiles > 0) {
-        VelocityLinfKernel << <num_tiles, 128 >> > (
-            grid.deviceAccessor(),
-            thrust::raw_pointer_cast(grid.dAllTiles.data()),
-            u_channel,
-            grid.dAllTilesReducer.data(),
-            -1, launch_tile_types
-            );
-        grid.dAllTilesReducer.maxAsyncTo(d_result);
-    }
-
-    CheckCudaError("VelocityLinfAsync end");
-}
-
 // Synchronous function to compute Linf norm
-double VelocityLinfSync(HADeviceGrid<Tile>& grid, const int u_channel, const uint8_t launch_tile_types) {
-    double* d_result;
-    cudaMalloc(&d_result, sizeof(double));
-
-    VelocityLinfAsync(d_result, grid, u_channel, launch_tile_types);
-
-    double result;
-    cudaMemcpy(&result, d_result, sizeof(double), cudaMemcpyDeviceToHost);
-    cudaFree(d_result);
-
-    return result;
+double VelocityLinfSync(HADeviceGrid<Tile>& grid, const int u_channel) {
+	double u_max = NormSync(grid, -1, u_channel, false);
+	double v_max = NormSync(grid, -1, u_channel + 1, false);
+	double w_max = NormSync(grid, -1, u_channel + 2, false);
+	return max(max(u_max, v_max), w_max);
 }
 
 //follow the same launch convention as launchVoxelFunc
@@ -574,6 +525,9 @@ std::tuple<double, double> VolumeWeightedSumAndVolume(HADeviceGrid<Tile>& grid, 
 
 double VolumeWeightedNorm(HADeviceGrid<Tile>& grid, const int order, const int in_channel, int level, const uint8_t launch_types, LaunchMode mode) {
     auto [ws, w] = VolumeWeightedSumAndVolume(grid, order, in_channel, level, launch_types, mode);
+
+    //Info("order: {} ws {} w {}", order, ws, w);
+
     if (order == -1) return ws;
     else {
         auto norm = ws / w;

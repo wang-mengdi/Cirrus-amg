@@ -431,7 +431,11 @@ public:
 		//return FLT_MAX;
 		HATileAccessor<Tile> acc = grid.deviceAccessor();
 		double dx = acc.voxelSize(acc.mMaxLevel);
-		double max_vel = VelocityLinfSync(grid, Tile::u_channel, LEAF);
+		
+		double umax = NormSync(grid, -1, Tile::u_channel, false);
+		double vmax = NormSync(grid, -1, Tile::u_channel + 1, false);
+		double wmax = NormSync(grid, -1, Tile::u_channel + 2, false);
+		double max_vel = std::max(umax, std::max(vmax, wmax));
 		return dx * cfl / max_vel;
 	}
 	virtual void Output(DriverMetaData& metadata) {

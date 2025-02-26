@@ -340,9 +340,9 @@ void Axpy(HADeviceGrid<Tile>& grid, const Tile::T alpha, const uint8_t in_channe
 
 void DotAsync(double* d_result, HADeviceGrid<Tile>& grid, const uint8_t in1_channel, const uint8_t in2_channel, const uint8_t launch_tile_types);
 double Dot(HADeviceGrid<Tile>& grid, const uint8_t in1_channel, const uint8_t in2_channel, const uint8_t launch_tile_types);
-double NormSync(HADeviceGrid<Tile>& grid, const int order, const int in_channel, bool volume_weighted);
-double VelocityLinfSync(HADeviceGrid<Tile>& grid, const int u_channel, const uint8_t launch_tile_types);
-std::tuple<double, double> VolumeWeightedSumAndVolume(HADeviceGrid<Tile>& grid, const int order, const int in_channel, int level, const uint8_t launch_types, LaunchMode mode);
+double NormSync(HADeviceGrid<Tile>& grid, const int order, const int in_channel, bool volume_weighted, uint8_t launch_cell_types = INTERIOR);
+//double VelocityLinfSync(HADeviceGrid<Tile>& grid, const int u_channel);
+//std::tuple<double, double> VolumeWeightedSumAndVolume(HADeviceGrid<Tile>& grid, const int order, const int in_channel, int level, const uint8_t launch_types, LaunchMode mode);
 double VolumeWeightedNorm(HADeviceGrid<Tile>& grid, const int order, const int in_channel, int level = -1, const uint8_t launch_types = LEAF, LaunchMode mode = LAUNCH_SUBTREE);
 
 void MeanAsync(HADeviceGrid<Tile>& grid, const int in_channel, const uint8_t launch_tile_types, double* d_mean, double* d_count);
