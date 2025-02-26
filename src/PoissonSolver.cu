@@ -276,6 +276,8 @@ void Prolongate(HADeviceGrid<Tile>& grid, const uint8_t coarse_channel, const ui
 
 //add 
 void ReCenterLeafVoxels(HADeviceGrid<Tile>& grid, const int channel, double* mean_d, double* count_d) {
+    //return;
+
     //Assert(false, "ReCenterLeafVoxels not implemented");
     ////add an offset to make the mean value of all leafs 0
     MeanAsync(grid, channel, LEAF, mean_d, count_d);
@@ -288,16 +290,4 @@ void ReCenterLeafVoxels(HADeviceGrid<Tile>& grid, const int channel, double* mea
         }
     }, LEAF, 8
     );
-
-    //double mean = Mean(grid, -1, channel);
-    //grid.launchVoxelFunc(
-    //    -1, EXEC_LEAF,
-    //    [=] __device__(HATileAccessor<Tile>&acc, HATileInfo<Tile>&info, const Coord & l_ijk) {
-    //    auto& tile = info.tile();
-    //    if (tile.isActive(l_ijk)) {
-    //        tile(channel, l_ijk) -= mean * pow(acc.voxelSize(info), 3);
-    //    }
-    //});
-
-    //Info("after centering: {}", Mean(grid, -1, channel));
 }

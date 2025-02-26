@@ -1100,8 +1100,54 @@ void AMGSolver::FASMuCycle(int repeat_times, HADeviceGrid<Tile>& grid, const int
     },
         LEAF | NONLEAF | GHOST, 4
     );
-	FASMuCycleStep(grid.mMaxLevel, repeat_times, grid, x_channel, rhs_channel, x0_channel, coeff_channel, level_iters, coarsest_iters);
     FASMuCycleStep(grid.mMaxLevel, repeat_times, grid, x_channel, rhs_channel, x0_channel, coeff_channel, level_iters, coarsest_iters);
+}
+
+std::tuple<int, double> AMGSolver::FASMuCycleSolve(int repeat_times, HADeviceGrid<Tile>& grid, int max_iters, double relative_tolerance, int level_iters, int coarsest_iters)
+{
+    auto x_channel = Tile::x_channel;//0
+    auto rhs_channel = Tile::b_channel;//1
+    auto x0_channel = Tile::p_channel;//2
+
+    //set initial guess to 0
+    grid.launchVoxelFuncOnAllTiles(
+        [=]__device__(HATileAccessor<Tile>&acc, HATileInfo<Tile>&info, const Coord & l_ijk) {
+        auto& tile = info.tile();
+        int vi = acc.localCoordToOffset(l_ijk);
+        //initial guess is 0 for LEAF | NONLEAF | GHOST cells
+        tile(x_channel, vi) = 0;
+    },
+        LEAF | NONLEAF | GHOST, 4
+    );
+
+	double rhs_norm = sqrt(Dot(grid, rhs_channel, rhs_channel, LEAF));
+	double threshold_norm = relative_tolerance * rhs_norm;
+	threshold_norm = std::max(threshold_norm, std::numeric_limits<double>::min());
+
+	Info("FASMuCycleSolve iter 0 norm {}", rhs_norm);
+
+    int i = 0;
+    double residual_norm;
+	for (i = 0; i < max_iters; i++) {
+        FASMuCycleStep(grid.mMaxLevel, repeat_times, grid, x_channel, rhs_channel, x0_channel, coeff_channel, level_iters, coarsest_iters);
+        //calculate residual to x0 channel
+        //x0=-lap(x)
+		AMGFullNegativeLaplacianOnLeafs(grid, x_channel, coeff_channel, x0_channel);
+		//r=x0-b
+        grid.launchVoxelFuncOnAllTiles(
+            [=]__device__(HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const Coord& l_ijk) {
+            auto& tile = info.tile();
+            tile(x0_channel, l_ijk) = tile(rhs_channel, l_ijk) - tile(x0_channel, l_ijk);
+        }, LEAF, 4);
+		
+		residual_norm = sqrt(Dot(grid, x0_channel, x0_channel, LEAF));
+		Info("FASMuCycleSolve iter {} norm {}", i + 1, residual_norm);
+		if (residual_norm < threshold_norm) {
+			break;
+		}
+	}
+
+	return std::make_tuple(i, residual_norm / rhs_norm);
 }
 
 void AMGSolver::prepareTypesAndCoeffs(HADeviceGrid<Tile>& grid)

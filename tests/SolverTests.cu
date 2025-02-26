@@ -1032,6 +1032,24 @@ namespace SolverTests {
             Info("Total {:.5}M cells, AMGPCG Async speed {:.5} M cells /s", total_cells / (1024.0 * 1024), cells_per_second / (1024.0 * 1024));
             Info("AMGPCG solved in {} iterations with error {}, average iteration throughput {:.5}M cell/s", iters, err, cells_per_second * iters / (1024.0 * 1024));
         }
+        else if (algorithm == "fas_vcycle") {
+            CalculateNeighborTiles(grid);
+            AMGSolver solver(coeff_channel, 0.5, 0.5, 1);
+            solver.prepareTypesAndCoeffs(grid);
+
+			CPUTimer<std::chrono::microseconds> timer;
+            timer.start();
+            auto [iters, err] = solver.FASMuCycleSolve(1, grid, 10, 1e-6, 2, 10);
+			CheckCudaError("FASMuCycleSolve");
+			float elapsed = timer.stop("FASMuCycleSolve");
+			int total_cells = grid.numTotalLeafTiles() * Tile::SIZE;
+			float cells_per_second = (total_cells + 0.0) / (elapsed / 1e6);
+			Info("Total {:.5}M cells, FASMuCycleSolve speed {:.5} M cells /s", total_cells / (1024.0 * 1024), cells_per_second / (1024.0 * 1024));
+			Info("FASMuCycleSolve solved in {} iterations with error {}, average iteration throughput {:.5}M cell/s", iters, err, cells_per_second * iters / (1024.0 * 1024));
+        }
+        else {
+            Assert(false, "algorithm {} not supported", algorithm);
+        }
         _sleep(200);
 
 

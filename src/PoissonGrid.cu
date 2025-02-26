@@ -331,67 +331,6 @@ double VelocityLinfSync(HADeviceGrid<Tile>& grid, const int u_channel, const uin
     return result;
 }
 
-//// Kernel to compute the maximum absolute value (Linf norm) for a single channel
-//__global__ void SingleChannelLinfKernel(HATileAccessor<PoissonTile<T>> acc, HATileInfo<PoissonTile<T>>* infos, const int channel, double* max_values, int subtree_level, uint8_t launch_types) {
-//    int bi = blockIdx.x;
-//    int ti = threadIdx.x;
-//    const HATileInfo<PoissonTile<T>>& info = infos[bi];
-//
-//    if (!(info.subtreeType(subtree_level) & launch_types)) {
-//        if (ti == 0) max_values[bi] = 0.0;
-//        return;
-//    }
-//
-//    auto& tile = info.tile();
-//    auto channelAsFloat4 = reinterpret_cast<float4*>(tile.mData[channel]);
-//    float4 values = channelAsFloat4[ti];
-//
-//    // Compute max abs value for this thread
-//    double thread_max = max(max(fabs(values.x), fabs(values.y)), max(fabs(values.z), fabs(values.w)));
-//
-//    // Use CUB to perform block-wide reduction to find the maximum
-//    typedef cub::BlockReduce<double, 128> BlockReduce;
-//    __shared__ typename BlockReduce::TempStorage temp_storage;
-//    double block_max = BlockReduce(temp_storage).Reduce(thread_max, cub::Max());
-//
-//    if (ti == 0) {
-//        max_values[bi] = block_max;
-//    }
-//}
-//
-//// Launch SingleChannelLinfKernel asynchronously
-//void SingleChannelLinfAsync(double* d_result, HADeviceGrid<Tile>& grid, const int channel, const uint8_t launch_tile_types) {
-//    int num_tiles = grid.dAllTiles.size();
-//    FillArray(grid.dAllTilesReducer.data(), grid.dAllTiles.size(), 0.0);
-//    if (num_tiles > 0) {
-//        SingleChannelLinfKernel << <num_tiles, 128 >> > (
-//            grid.deviceAccessor(),
-//            thrust::raw_pointer_cast(grid.dAllTiles.data()),
-//            channel,
-//            grid.dAllTilesReducer.data(),
-//            -1, launch_tile_types
-//            );
-//        grid.dAllTilesReducer.maxAsyncTo(d_result);
-//    }
-//
-//    CheckCudaError("SingleChannelLinfAsync end");
-//}
-
-//// Synchronous function to compute Linf norm for a single channel
-//double SingleChannelLinfSync(HADeviceGrid<Tile>& grid, const int channel, const uint8_t launch_tile_types) {
-//    double* d_result;
-//    cudaMalloc(&d_result, sizeof(double));
-//
-//    SingleChannelLinfAsync(d_result, grid, channel, launch_tile_types);
-//
-//    double result;
-//    cudaMemcpy(&result, d_result, sizeof(double), cudaMemcpyDeviceToHost);
-//    cudaFree(d_result);
-//
-//    return result;
-//}
-
-
 
 //follow the same launch convention as launchVoxelFunc
 //order=-1 means L-infinity norm
