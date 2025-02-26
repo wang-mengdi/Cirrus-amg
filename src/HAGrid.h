@@ -23,6 +23,9 @@ public:
 	size_t temp_bytes_max;                   // 最大值临时存储空间字节数
 
 	DeviceReducer() : n(0), temp_bytes_sum(0), temp_bytes_max(0) {}
+	DeviceReducer(size_t len) {
+		resize(len);
+	}
 
 	T* data(void) {
 		return thrust::raw_pointer_cast(d_data.data());
@@ -51,11 +54,37 @@ public:
 		}
 	}
 
+	T sumSync(void) {
+		T* d_result;
+		cudaMalloc((void**)&d_result, sizeof(T));
+		if (n > 0) {
+			cub::DeviceReduce::Sum(thrust::raw_pointer_cast(d_temp_sum.data()), temp_bytes_sum, data(), d_result, n);
+			CheckCudaError("DeviceReducer: cub::DeviceReduce::Sum");
+		}
+		T result;
+		cudaMemcpy(&result, d_result, sizeof(T), cudaMemcpyDeviceToHost);
+		cudaFree(d_result);
+		return result;
+	}
+
 	void maxAsyncTo(T* d_result) {
 		if (n > 0) {
 			cub::DeviceReduce::Max(thrust::raw_pointer_cast(d_temp_max.data()), temp_bytes_max, data(), d_result, n);
 			CheckCudaError("DeviceReducer: cub::DeviceReduce::Max");
 		}
+	}
+
+	T maxSync(void) {
+		T* d_result;
+		cudaMalloc((void**)&d_result, sizeof(T));
+		if (n > 0) {
+			cub::DeviceReduce::Max(thrust::raw_pointer_cast(d_temp_max.data()), temp_bytes_max, data(), d_result, n);
+			CheckCudaError("DeviceReducer: cub::DeviceReduce::Max");
+		}
+		T result;
+		cudaMemcpy(&result, d_result, sizeof(T), cudaMemcpyDeviceToHost);
+		cudaFree(d_result);
+		return result;
 	}
 
 	void printData() const {

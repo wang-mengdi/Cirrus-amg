@@ -99,7 +99,20 @@ void CalculateNeighborTiles(HADeviceGrid<Tile>& grid) {
         }
     }, -1, LEAF | GHOST | NONLEAF, LAUNCH_SUBTREE);
 }
- 
+
+template<typename T>
+struct Vec4Type;
+
+template<>
+struct Vec4Type<float> {
+    using Type = float4;
+};
+
+template<>
+struct Vec4Type<double> {
+    using Type = double4;
+};
+
 
 //follow the same launch convention as launchVoxelFunc
 __global__ void Dot128Kernel(HATileAccessor<PoissonTile<T>> acc, HATileInfo<PoissonTile<T>>* infos, const uint8_t in1_channel, const uint8_t in2_channel, double* sum, int subtree_level, uint8_t launch_types) {
@@ -114,16 +127,12 @@ __global__ void Dot128Kernel(HATileAccessor<PoissonTile<T>> acc, HATileInfo<Pois
     }
 
     auto& tile = info.tile();
-    auto data1AsFloat4 = reinterpret_cast<float4*>(tile.mData[in1_channel]);
-	auto data2AsFloat4 = reinterpret_cast<float4*>(tile.mData[in2_channel]);
-	float4 data1 = data1AsFloat4[ti];
-	float4 data2 = data2AsFloat4[ti];
+    auto data1AsVec4 = reinterpret_cast<typename Vec4Type<T>::Type*>(tile.mData[in1_channel]);
+    auto data2AsVec4 = reinterpret_cast<typename Vec4Type<T>::Type*>(tile.mData[in2_channel]);
+    auto data1 = data1AsVec4[ti];
+    auto data2 = data2AsVec4[ti];
 	double thread_dot = data1.x * data2.x + data1.y * data2.y + data1.z * data2.z + data1.w * data2.w;
     
-
-    //double thread_dot = tile.interiorValue(in1_channel, l_ijk) * tile.interiorValue(in2_channel, l_ijk);
-
-    //printf("l_ijk=%d %d %d thread_dot=%f\n", l_ijk[0], l_ijk[1], l_ijk[2], thread_dot);
 
     typedef cub::BlockReduce<double, 128> BlockReduce;
     __shared__ typename BlockReduce::TempStorage temp_storage;
@@ -131,7 +140,6 @@ __global__ void Dot128Kernel(HATileAccessor<PoissonTile<T>> acc, HATileInfo<Pois
 
     if (ti==0) {
         sum[bi] = block_sum;
-
     }
 }
 
@@ -159,6 +167,198 @@ double Dot(HADeviceGrid<Tile>& grid, const uint8_t in1_channel, const uint8_t in
     cudaMalloc(&d_result, sizeof(double));
     
 	DotAsync(d_result, grid, in1_channel, in2_channel, launch_tile_types);
+
+    double result;
+    cudaMemcpy(&result, d_result, sizeof(double), cudaMemcpyDeviceToHost);
+    cudaFree(d_result);
+
+    return result;
+}
+
+//it will calculate the ordered pointwise/volume weighted sum on launched tiles and INTERIOR cells
+//-1: linf
+//1: l1
+//2: l2
+//if weights_sum is not null, then compute the sum of weights
+//if volume_weighted is set, then weight by h^3, otherwise pointwise (weight by 1)
+//if use_abs is set, then use abs value
+__global__ void ChannelPowerSumKernel128(const int order, HATileAccessor<PoissonTile<T>> acc, HATileInfo<PoissonTile<T>>* infos, int subtree_level, uint8_t launch_tile_types, const int in_channel, double* value_sum, double* weights_sum, bool volume_weighted, bool use_abs, uint8_t launch_cell_types) {
+    int bi = blockIdx.x;
+    int ti = threadIdx.x;
+    const HATileInfo<PoissonTile<T>>& info = infos[bi];
+
+    if (!(info.subtreeType(subtree_level) & launch_tile_types)) {
+        if (ti == 0) {
+            value_sum[bi] = 0;
+            if (weights_sum) weights_sum[bi] = 0;
+        }
+        return;
+    }
+
+    auto& tile = info.tile();
+    auto tile_data_as_vec4 = reinterpret_cast<typename Vec4Type<T>::Type*>(tile.mData[in_channel]);
+    auto data = tile_data_as_vec4[ti];
+	auto tile_types_as_uchar4 = reinterpret_cast<uchar4*>(tile.mCellType);
+	auto type = tile_types_as_uchar4[ti];
+
+	data.x = (type.x & launch_cell_types) ? data.x : 0;
+	data.y = (type.y & launch_cell_types) ? data.y : 0;
+	data.z = (type.z & launch_cell_types) ? data.z : 0;
+	data.w = (type.w & launch_cell_types) ? data.w : 0;
+    int thread_cnt = (type.x & launch_cell_types) + (type.y & launch_cell_types) + (type.z & launch_cell_types) + (type.w & launch_cell_types);
+
+
+    if (use_abs) {
+		data.x = abs(data.x);
+		data.y = abs(data.y);
+		data.z = abs(data.z);
+		data.w = abs(data.w);
+    }
+
+    double thread_value_sum;
+    if (order == -1) {
+        thread_value_sum = max(max(data.x, data.y), max(data.z, data.w));
+    }
+    else if (order == 1) {
+		thread_value_sum = data.x + data.y + data.z + data.w;
+	}
+	else if (order == 2) {
+		thread_value_sum = data.x * data.x + data.y * data.y + data.z * data.z + data.w * data.w;
+	}
+    else {
+		thread_value_sum = pow(data.x, order) + pow(data.y, order) + pow(data.z, order) + pow(data.w, order);
+    }
+
+    double block_value_sum, block_weight_sum;
+
+    typedef cub::BlockReduce<double, 128> BlockReduce;
+    __shared__ typename BlockReduce::TempStorage value_sum_storage;
+    __shared__ typename BlockReduce::TempStorage weight_sum_storage;
+
+    if (order == -1) {
+        //use max instead of sum
+		block_value_sum = BlockReduce(value_sum_storage).Reduce(thread_value_sum, cub::Max());
+		if (weights_sum) {
+            block_weight_sum = 1;//maximum of count
+		}
+    }
+    else {
+        block_value_sum = BlockReduce(value_sum_storage).Sum(thread_value_sum);
+        if (weights_sum) {
+            block_weight_sum = BlockReduce(weight_sum_storage).Sum((double)thread_cnt);
+        }
+    }
+
+    if (ti == 0) {
+        T h = acc.voxelSize(info);
+        T single_weight = volume_weighted ? h * h * h : 1;
+        value_sum[bi] = block_value_sum * single_weight;
+		if (weights_sum) weights_sum[bi] = block_weight_sum * single_weight;
+    }
+}
+
+//on LEAF tiles and INTERIOR cells
+double NormSync(HADeviceGrid<Tile>& grid, const int order, const int in_channel, bool volume_weighted) {
+    if (order == -1) {
+        Assert(!volume_weighted, "Linf norm does not support volume weighted, it only works with point-wise norm");
+    }
+
+	size_t num_tiles = grid.dAllTiles.size();
+    if (num_tiles > 0) {
+        if (order == -1) {
+            ChannelPowerSumKernel128 << <num_tiles, 128 >> > (
+                order, grid.deviceAccessor(),
+                thrust::raw_pointer_cast(grid.dAllTiles.data()),
+                -1, LEAF, //subtree level and launched tile types
+                in_channel,
+                grid.dAllTilesReducer.data(), nullptr,
+                false, //volume weighted
+                true, //use_abs
+                INTERIOR // cell types
+                );
+            return grid.dAllTilesReducer.maxSync();
+        }
+        else {
+            DeviceReducer<double> weights_sum_reducer(grid.dAllTiles.size());
+            ChannelPowerSumKernel128 << <num_tiles, 128 >> > (
+                order, grid.deviceAccessor(),
+                thrust::raw_pointer_cast(grid.dAllTiles.data()),
+                -1, LEAF, //subtree level and launched tile types
+                in_channel,
+                grid.dAllTilesReducer.data(), weights_sum_reducer.data(),
+                volume_weighted, //volume weighted
+                true, //use_abs
+                INTERIOR // cell types
+                );
+            double value_sum = CUBDeviceArraySum(grid.dAllTilesReducer.data(), num_tiles);
+            double weights_sum = CUBDeviceArraySum(weights_sum_reducer.data(), num_tiles);
+            if (order == 1) return value_sum / weights_sum;
+            else if (order == 2) return sqrt(value_sum / weights_sum);
+            else return pow(value_sum / weights_sum, 1.0 / order);
+        }
+    }
+    else return 0;
+}
+
+// Kernel to compute the maximum absolute value (Linf norm) across three channels
+__global__ void VelocityLinfKernel(HATileAccessor<PoissonTile<T>> acc, HATileInfo<PoissonTile<T>>* infos, const int u_channel, double* max_values, int subtree_level, uint8_t launch_types) {
+    int bi = blockIdx.x;
+    int ti = threadIdx.x;
+    const HATileInfo<PoissonTile<T>>& info = infos[bi];
+
+    if (!(info.subtreeType(subtree_level) & launch_types)) {
+        if (ti == 0) max_values[bi] = 0.0;
+        return;
+    }
+
+    auto& tile = info.tile();
+	auto uAsVec4 = reinterpret_cast<typename Vec4Type<T>::Type*>(tile.mData[u_channel]);
+	auto vAsVec4 = reinterpret_cast<typename Vec4Type<T>::Type*>(tile.mData[u_channel + 1]);
+	auto wAsVec4 = reinterpret_cast<typename Vec4Type<T>::Type*>(tile.mData[u_channel + 2]);
+
+    auto u = uAsVec4[ti];
+    auto v = vAsVec4[ti];
+    auto w = wAsVec4[ti];
+
+    // Compute max abs value for this thread
+    double thread_max = max(max(fabs(u.x), fabs(u.y)), max(fabs(u.z), fabs(u.w)));
+    thread_max = max(thread_max, max(max(fabs(v.x), fabs(v.y)), max(fabs(v.z), fabs(v.w))));
+    thread_max = max(thread_max, max(max(fabs(w.x), fabs(w.y)), max(fabs(w.z), fabs(w.w))));
+
+    // Use CUB to perform block-wide reduction to find the maximum
+    typedef cub::BlockReduce<double, 128> BlockReduce;
+    __shared__ typename BlockReduce::TempStorage temp_storage;
+    double block_max = BlockReduce(temp_storage).Reduce(thread_max, cub::Max());
+
+    if (ti == 0) {
+        max_values[bi] = block_max;
+    }
+}
+
+// Launch VelocityLinfKernel asynchronously
+void VelocityLinfAsync(double* d_result, HADeviceGrid<Tile>& grid, const int u_channel, const uint8_t launch_tile_types) {
+    int num_tiles = grid.dAllTiles.size();
+    FillArray(grid.dAllTilesReducer.data(), grid.dAllTiles.size(), 0.0);
+    if (num_tiles > 0) {
+        VelocityLinfKernel << <num_tiles, 128 >> > (
+            grid.deviceAccessor(),
+            thrust::raw_pointer_cast(grid.dAllTiles.data()),
+            u_channel,
+            grid.dAllTilesReducer.data(),
+            -1, launch_tile_types
+            );
+        grid.dAllTilesReducer.maxAsyncTo(d_result);
+    }
+
+    CheckCudaError("VelocityLinfAsync end");
+}
+
+// Synchronous function to compute Linf norm
+double VelocityLinfSync(HADeviceGrid<Tile>& grid, const int u_channel, const uint8_t launch_tile_types) {
+    double* d_result;
+    cudaMalloc(&d_result, sizeof(double));
+
+    VelocityLinfAsync(d_result, grid, u_channel, launch_tile_types);
 
     double result;
     cudaMemcpy(&result, d_result, sizeof(double), cudaMemcpyDeviceToHost);
@@ -264,72 +464,7 @@ void MeanAsync(HADeviceGrid<Tile>& grid, const int in_channel, const uint8_t lau
     CheckCudaError("DotAsync end");
 }
 
-// Kernel to compute the maximum absolute value (Linf norm) across three channels
-__global__ void VelocityLinfKernel(HATileAccessor<PoissonTile<T>> acc, HATileInfo<PoissonTile<T>>* infos, const int u_channel, double* max_values, int subtree_level, uint8_t launch_types) {
-    int bi = blockIdx.x;
-    int ti = threadIdx.x;
-    const HATileInfo<PoissonTile<T>>& info = infos[bi];
 
-    if (!(info.subtreeType(subtree_level) & launch_types)) {
-        if (ti == 0) max_values[bi] = 0.0;
-        return;
-    }
-
-    auto& tile = info.tile();
-    auto uAsFloat4 = reinterpret_cast<float4*>(tile.mData[u_channel]);
-    auto vAsFloat4 = reinterpret_cast<float4*>(tile.mData[u_channel + 1]);
-    auto wAsFloat4 = reinterpret_cast<float4*>(tile.mData[u_channel + 2]);
-
-    float4 u = uAsFloat4[ti];
-    float4 v = vAsFloat4[ti];
-    float4 w = wAsFloat4[ti];
-
-    // Compute max abs value for this thread
-    double thread_max = max(max(fabs(u.x), fabs(u.y)), max(fabs(u.z), fabs(u.w)));
-    thread_max = max(thread_max, max(max(fabs(v.x), fabs(v.y)), max(fabs(v.z), fabs(v.w))));
-    thread_max = max(thread_max, max(max(fabs(w.x), fabs(w.y)), max(fabs(w.z), fabs(w.w))));
-
-    // Use CUB to perform block-wide reduction to find the maximum
-    typedef cub::BlockReduce<double, 128> BlockReduce;
-    __shared__ typename BlockReduce::TempStorage temp_storage;
-    double block_max = BlockReduce(temp_storage).Reduce(thread_max, cub::Max());
-
-    if (ti == 0) {
-        max_values[bi] = block_max;
-    }
-}
-
-// Launch VelocityLinfKernel asynchronously
-void VelocityLinfAsync(double* d_result, HADeviceGrid<Tile>& grid, const int u_channel, const uint8_t launch_tile_types) {
-    int num_tiles = grid.dAllTiles.size();
-    FillArray(grid.dAllTilesReducer.data(), grid.dAllTiles.size(), 0.0);
-    if (num_tiles > 0) {
-        VelocityLinfKernel << <num_tiles, 128 >> > (
-            grid.deviceAccessor(),
-            thrust::raw_pointer_cast(grid.dAllTiles.data()),
-            u_channel,
-            grid.dAllTilesReducer.data(),
-            -1, launch_tile_types
-            );
-        grid.dAllTilesReducer.maxAsyncTo(d_result);
-    }
-
-    CheckCudaError("VelocityLinfAsync end");
-}
-
-// Synchronous function to compute Linf norm
-double VelocityLinfSync(HADeviceGrid<Tile>& grid, const int u_channel, const uint8_t launch_tile_types) {
-    double* d_result;
-    cudaMalloc(&d_result, sizeof(double));
-
-    VelocityLinfAsync(d_result, grid, u_channel, launch_tile_types);
-
-    double result;
-    cudaMemcpy(&result, d_result, sizeof(double), cudaMemcpyDeviceToHost);
-    cudaFree(d_result);
-
-    return result;
-}
 
 
 //follow the same launch convention as launchVoxelFunc
@@ -454,6 +589,8 @@ double VolumeWeightedNorm(HADeviceGrid<Tile>& grid, const int order, const int i
         return norm;
     }
 }
+
+
 
 //copy values from parents for tiles specified by propagate_tile_types
 //for example, GHOST will propagate ghost values from parents

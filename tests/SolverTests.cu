@@ -1093,6 +1093,10 @@ namespace SolverTests {
         Info("weighted L1: {}", VolumeWeightedNorm(grid, 1, error_channel, -1, LEAF));
         Info("weighted rms: {}", VolumeWeightedNorm(grid, 2, error_channel, -1, LEAF));
 
+        Info("linf: {}", NormSync(grid, -1, error_channel, false));
+        Info("weighted L1: {}", NormSync(grid, 1, error_channel, true));
+        Info("weighted rms: {}", NormSync(grid, 2, error_channel, true));
+
         auto weighted_rms_error = VolumeWeightedNorm(grid, 2, error_channel, -1, LEAF);
         if (weighted_rms_error < 1e-4) {
             Pass("Test passed with weighted_rms_error of grdt-x: {}\n\n", weighted_rms_error);
