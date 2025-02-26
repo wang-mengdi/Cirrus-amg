@@ -1089,9 +1089,6 @@ namespace SolverTests {
    //     }
 
 
-        Info("volume weighted L1: {}", VolumeWeightedNorm(grid, 1, error_channel));
-        Info("volume weighted L2: {}", VolumeWeightedNorm(grid, 2, error_channel));
-
         Info("linf: {}", NormSync(grid, -1, error_channel, false));
         Info("weighted L1: {}", NormSync(grid, 1, error_channel, true, INTERIOR | NEUMANN | DIRICHLET));
         Info("weighted rms: {}", NormSync(grid, 2, error_channel, true, INTERIOR | NEUMANN | DIRICHLET));
