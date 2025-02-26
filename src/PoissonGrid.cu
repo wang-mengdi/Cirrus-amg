@@ -407,10 +407,6 @@ void MeanAsync(HADeviceGrid<Tile>& grid, const int in_channel, const uint8_t lau
     CheckCudaError("DotAsync end");
 }
 
-
-
-
-
 //copy values from parents for tiles specified by propagate_tile_types
 //for example, GHOST will propagate ghost values from parents
 //this is actually prolongation with sum kernel

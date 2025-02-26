@@ -291,3 +291,37 @@ void ReCenterLeafVoxels(HADeviceGrid<Tile>& grid, const int channel, double* mea
     }, LEAF, 8
     );
 }
+
+void ReCenterLeafCells(HADeviceGrid<Tile>& grid, const int channel, DeviceReducer<double>& cnt_reducer, double* d_mean, double* d_count) {
+    int num_tiles = grid.dAllTiles.size();
+    cnt_reducer.resize(num_tiles);
+
+    if (num_tiles > 0) {
+        ChannelPowerSumKernel128 << <num_tiles, 128 >> > (
+            1,//1st order for mean
+            grid.deviceAccessor(),
+            thrust::raw_pointer_cast(grid.dAllTiles.data()),
+            -1, LEAF, //subtree level and launched tile types
+            channel,
+            grid.dAllTilesReducer.data(), cnt_reducer.data(),
+            false, //point wise
+            false, //use_abs
+            INTERIOR // cell types
+            );
+        grid.dAllTilesReducer.sumAsyncTo(d_mean);
+        cnt_reducer.sumAsyncTo(d_count);
+        TernaryOnArray(d_mean, d_count, d_count, []__device__(double& mean, double count, double _) { mean = mean / count; });
+
+        grid.launchVoxelFuncOnAllTiles(
+            [=] __device__(HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const Coord& l_ijk) {
+            auto& tile = info.tile();
+            double mean = *d_mean;
+            if (tile.isInterior(l_ijk)) {
+                tile(channel, l_ijk) -= mean;
+            }
+        }, LEAF, 4
+        );
+
+		CheckCudaError("ReCenterLeafCells");
+    }
+}

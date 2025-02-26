@@ -28,6 +28,7 @@ int main(int argc, char** argv) {
 	for (int min_level : {5}) {
 		//SolverTests::TestDiscretizedLaplacian("uniform", min_level, min_level, "athena_sin");
 
+		SolverTests::TestSolverErrorWithAllNeumannBC("uniform", min_level, min_level, "athena_sin", "cmg");
 		SolverTests::TestSolverErrorWithAllNeumannBC("uniform", min_level, min_level, "athena_sin", "amg");
 	}
 
@@ -37,6 +38,8 @@ int main(int argc, char** argv) {
 		//SolverTests::TestDiscretizedLaplacian("sphere_solid_05", min_level, min_level + 2, "athena_sin");
 
 		//SolverTests::TestSolverErrorWithAllNeumannBC("sphere_shell_05", min_level, min_level + 2, "athena_sin", "cmg");
+		SolverTests::TestSolverErrorWithAllNeumannBC("star_shell", min_level, min_level + 2, "athena_sin", "cmg");
+
 		SolverTests::TestSolverErrorWithAllNeumannBC("star_shell", min_level, min_level + 2, "athena_sin", "amg");
 	}
 	

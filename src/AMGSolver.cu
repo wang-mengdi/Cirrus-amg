@@ -1183,8 +1183,10 @@ std::tuple<int, double> AMGSolver::solve(HADeviceGrid<Tile>& grid, bool verbose,
         threshold_norm2 = relative_tolerance * relative_tolerance * rhs_norm2;
         threshold_norm2 = std::max(threshold_norm2, std::numeric_limits<double>::min());
     }
-    if (is_pure_neumann) ReCenterLeafVoxels(grid, Tile::r_channel, mean_d, count_d);
-
+    if (is_pure_neumann) {
+        ReCenterLeafCells(grid, Tile::r_channel, cnt_reducer, mean_d, count_d);
+        //ReCenterLeafVoxels(grid, Tile::r_channel, mean_d, count_d);
+    }
     ////z0=Minv*r0
     //r_channel->z_channel
 	//muCycle(mu_cycle_repeat_times, grid, Tile::z_channel, Tile::r_channel, Tile::Ap_channel, coeff_channel, level_iters, coarsest_iters);
@@ -1248,7 +1250,10 @@ std::tuple<int, double> AMGSolver::solve(HADeviceGrid<Tile>& grid, bool verbose,
 
 
         }
-        if (is_pure_neumann) ReCenterLeafVoxels(grid, Tile::r_channel, mean_d, count_d);
+        if (is_pure_neumann) {
+            ReCenterLeafCells(grid, Tile::r_channel, cnt_reducer, mean_d, count_d);
+            //ReCenterLeafVoxels(grid, Tile::r_channel, mean_d, count_d);
+        }
 
         //z_{k+1} = Minv * r_{k+1}
         //r->z

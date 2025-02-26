@@ -54,6 +54,7 @@ public:
     std::tuple<int, double> solve(HADeviceGrid<Tile>& grid, bool verbose, int max_iters, double relative_tolerance, int level_iters, int coarsest_iters, int sync_stride, bool is_pure_neumann);
 
     int coeff_channel;//face coefficient channel
+    DeviceReducer<double> cnt_reducer;
     thrust::device_vector<double> d_tmp;
     double* gamma_d;
     double* beta_d;
