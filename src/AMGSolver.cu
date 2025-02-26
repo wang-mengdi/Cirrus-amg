@@ -986,6 +986,123 @@ void AMGSolver::muCycle(int repeat_times, HADeviceGrid<Tile>& grid, const int x_
     muCycleStep(grid.mMaxLevel, repeat_times, grid, x_channel, f_channel, rhs_channel, coeff_channel, level_iters, coarsest_iters);
 }
 
+__global__ void FASSaveSolutionAndUpdateSource128Kernel(HATileAccessor<Tile> acc, HATileInfo<Tile>* tiles, uint8_t launch_abs_tile_types, int x_channel, int coeff_channel, int rhs_channel, int x0_channel) {
+    __shared__ AMGLaplacianTileData shared_data;
+    //block idx (tile idx), distinguish from thread idx
+    int bi = blockIdx.x;
+    //thread idx
+    int ti = threadIdx.x;
+
+    auto& info = tiles[bi];
+    auto& tile = info.tile();
+
+    if (!(info.mType & launch_abs_tile_types)) return;
+
+
+    LoadAMGLaplacianTileData(acc, info, shared_data, x_channel, coeff_channel, ti);
+    __syncthreads();
+
+    //calculate residual
+    for (int i = 0; i < 4; i++) {
+        //voxel idx
+        int vi = i * 128 + ti;
+        Coord l_ijk = acc.localOffsetToCoord(vi);
+
+        //tile(rhs_channel, l_ijk) -= shared_data.negativeLap(l_ijk);
+        if (tile.type(l_ijk) & INTERIOR) {
+            tile(rhs_channel, l_ijk) = tile(rhs_channel, l_ijk) + shared_data.negativeLapOuterNonLeaf(l_ijk);
+            tile(x0_channel, l_ijk) = tile(x_channel, l_ijk);
+        }
+        else tile(rhs_channel, l_ijk) = 0;
+    }
+}
+
+void FASSaveSolutionAndUpdateSource128(HADeviceGrid<Tile>& grid, int level, int x_channel, int coeff_channel, int rhs_channel, int x0_channel) {
+    FASSaveSolutionAndUpdateSource128Kernel << <grid.hNumTiles[level], 128 >> > (
+        grid.deviceAccessor(), thrust::raw_pointer_cast(grid.dTileArrays[level].data()),
+        NONLEAF,
+        x_channel, coeff_channel, rhs_channel, x0_channel
+        );
+}
+
+__global__ void FASProlongateAndUpdateAMG128Kernel(HATileAccessor<Tile> acc, HATileInfo<Tile>* fine_tiles, int fine_level, uint8_t fine_tile_types, int coarse_x_channel, int coarse_x0_channel, int fine_x_channel, T prolong_coeff) {
+    //block idx (tile idx), distinguish from thread idx
+    int bi = blockIdx.x;
+    //thread idx
+    int ti = threadIdx.x;
+
+    auto& finfo = fine_tiles[bi];
+    auto fttype = finfo.subtreeType(fine_level);
+    if (!(fttype & fine_tile_types)) return;
+
+    for (int i = 0; i < 4; i++) {
+        int fvi = i * 128 + ti;
+        Coord fl_ijk = acc.localOffsetToCoord(fvi);
+        Coord fg_ijk = acc.localToGlobalCoord(finfo, fl_ijk);
+        auto fctype = finfo.tile().type(fvi);
+
+        Coord cg_ijk = acc.parentCoord(fg_ijk);
+        HATileInfo<Tile> cinfo; Coord cl_ijk;//coarse tile and local coord
+        acc.findVoxel(fine_level - 1, cg_ijk, cinfo, cl_ijk);
+
+        T cx = (cinfo.empty()) ? 0 : cinfo.tile()(coarse_x_channel, cl_ijk);
+		T cx0 = (cinfo.empty()) ? 0 : cinfo.tile()(coarse_x0_channel, cl_ijk);
+        //T cx = (cinfo.empty()) ? 0 : cinfo.tile().interiorValue(coarse_x_channel, cl_ijk);
+        T fx = finfo.tile()(fine_x_channel, fvi);
+
+        if (fttype & GHOST) {
+            finfo.tile()(fine_x_channel, fvi) = (fctype & INTERIOR) ? cx : 0;
+        }
+        else {
+            finfo.tile()(fine_x_channel, fvi) = (fctype & INTERIOR) ? fx + prolong_coeff * (cx - cx0) : 0;
+        }
+    }
+}
+
+void FASProlongateAndUpdateAMG128(HADeviceGrid<Tile>& grid, int coarse_x_channel, int coarse_x0_channel, int fine_x_channel, int fine_level, T prolong_coeff) {
+    FASProlongateAndUpdateAMG128Kernel << <grid.hNumTiles[fine_level], 128 >> > (
+        grid.deviceAccessor(), thrust::raw_pointer_cast(grid.dTileArrays[fine_level].data()),
+        fine_level, LEAF | GHOST,
+        coarse_x_channel, coarse_x0_channel, fine_x_channel, prolong_coeff);
+}
+
+void AMGSolver::FASMuCycleStep(int current_level, int repeat_times, HADeviceGrid<Tile>& grid, const int x_channel, const int rhs_channel, const int x0_channel, const int coeff_channel, int level_iters, int coarsest_iters)
+{
+    if (current_level == 0) {
+        GaussSeidelAMG(coarsest_iters / 2, 0, grid, 0, x_channel, coeff_channel, rhs_channel);
+        GaussSeidelAMG(coarsest_iters / 2, 1, grid, 0, x_channel, coeff_channel, rhs_channel);
+        return;
+    }
+
+    GaussSeidelAMG(level_iters, 0, grid, current_level, x_channel, coeff_channel, rhs_channel);
+
+    //will set initial guess of coarser level to 0
+    ResidualAndRestrictAMG(grid, x_channel, coeff_channel, rhs_channel, x_channel, rhs_channel, current_level, LEAF, R_restrict_coeff);
+    FASSaveSolutionAndUpdateSource128(grid, current_level - 1, x_channel, coeff_channel, rhs_channel, x0_channel);
+
+    for (int i = 0; i < repeat_times; i++) {
+        FASMuCycleStep(current_level - 1, repeat_times, grid, x_channel, rhs_channel, x0_channel, coeff_channel, level_iters, coarsest_iters);
+    }
+
+    FASProlongateAndUpdateAMG128(grid, x_channel, x0_channel, x_channel, current_level, prolong_coeff);
+    GaussSeidelAMG(level_iters, 1, grid, current_level, x_channel, coeff_channel, rhs_channel);
+}
+
+void AMGSolver::FASMuCycle(int repeat_times, HADeviceGrid<Tile>& grid, const int x_channel, const int rhs_channel, const int x0_channel, const int coeff_channel, int level_iters, int coarsest_iters)
+{
+    //set initial guess to 0
+    grid.launchVoxelFuncOnAllTiles(
+        [=]__device__(HATileAccessor<Tile>&acc, HATileInfo<Tile>&info, const Coord & l_ijk) {
+        auto& tile = info.tile();
+        int vi = acc.localCoordToOffset(l_ijk);
+        //initial guess is 0 for LEAF | NONLEAF | GHOST cells
+        tile(x_channel, vi) = 0;
+    },
+        LEAF | NONLEAF | GHOST, 4
+    );
+	FASMuCycleStep(grid.mMaxLevel, repeat_times, grid, x_channel, rhs_channel, x0_channel, coeff_channel, level_iters, coarsest_iters);
+}
+
 void AMGSolver::prepareTypesAndCoeffs(HADeviceGrid<Tile>& grid)
 {
 	CoarsenTypesAndAMGCoeffs(grid, coeff_channel, R_matrix_coeff);
@@ -1005,7 +1122,8 @@ std::tuple<int, double> AMGSolver::solve(HADeviceGrid<Tile>& grid, bool verbose,
     if (sync_stride > 0) {
         //rhs_norm2=r*r
         last_residual_norm2 = rhs_norm2 = Dot(grid, Tile::r_channel, Tile::r_channel, LEAF);
-        if (verbose) Info("ConjugateGradient with initial norm of rhs: {}", sqrt(rhs_norm2));
+        //if (verbose) Info("ConjugateGradient with initial norm of rhs: {}", sqrt(rhs_norm2));
+        if (verbose) Info("ConjugateGradient iter 0 norm {}", sqrt(rhs_norm2));
 
         //if b is zero, just solve to zero
         if (rhs_norm2 == (double)0) {
@@ -1022,9 +1140,8 @@ std::tuple<int, double> AMGSolver::solve(HADeviceGrid<Tile>& grid, bool verbose,
 
     ////z0=Minv*r0
     //r_channel->z_channel
-    //VCycleMultigrid(grid, Tile::z_channel, Tile::r_channel, Tile::Ap_channel, Tile::tmp_channel, Tile::D_channel, level_iters, coarsest_iters);
-    //VCycle(grid, Tile::z_channel, Tile::r_channel, Tile::Ap_channel, coeff_channel, level_iters, coarsest_iters);
-	muCycle(mu_cycle_repeat_times, grid, Tile::z_channel, Tile::r_channel, Tile::Ap_channel, coeff_channel, level_iters, coarsest_iters);
+	//muCycle(mu_cycle_repeat_times, grid, Tile::z_channel, Tile::r_channel, Tile::Ap_channel, coeff_channel, level_iters, coarsest_iters);
+    FASMuCycle(mu_cycle_repeat_times, grid, Tile::z_channel, Tile::r_channel, Tile::Ap_channel, coeff_channel, level_iters, coarsest_iters);
 
     //p0=z0
     Copy(grid, Tile::z_channel, Tile::p_channel, -1, LEAF, LAUNCH_SUBTREE, INTERIOR | DIRICHLET | NEUMANN);
@@ -1075,7 +1192,7 @@ std::tuple<int, double> AMGSolver::solve(HADeviceGrid<Tile>& grid, bool verbose,
         if (sync_stride > 0 && (i + 1) % sync_stride == 0) {
             double residual_norm2 = Dot(grid, Tile::r_channel, Tile::r_channel, LEAF);
             if (verbose) {
-                Info("ConjugateGradient iter {} norm {:e}({:e}), convergence rate={:e}", i, sqrt(residual_norm2), sqrt(residual_norm2 / rhs_norm2), sqrt(residual_norm2 / last_residual_norm2));
+                Info("ConjugateGradient iter {} norm {:e}({:e}), convergence factor={:e}", i+1, sqrt(residual_norm2), sqrt(residual_norm2 / rhs_norm2), 1.0 / sqrt(residual_norm2 / last_residual_norm2));
                 last_residual_norm2 = residual_norm2;
             }
             if (residual_norm2 < threshold_norm2) {
@@ -1088,9 +1205,8 @@ std::tuple<int, double> AMGSolver::solve(HADeviceGrid<Tile>& grid, bool verbose,
 
         //z_{k+1} = Minv * r_{k+1}
         //r->z
-        //VCycleMultigrid(grid, Tile::z_channel, Tile::r_channel, Tile::Ap_channel, Tile::tmp_channel, Tile::D_channel, level_iters, coarsest_iters);
-		//VCycle(grid, Tile::z_channel, Tile::r_channel, Tile::Ap_channel, coeff_channel, level_iters, coarsest_iters);
-        muCycle(mu_cycle_repeat_times, grid, Tile::z_channel, Tile::r_channel, Tile::Ap_channel, coeff_channel, level_iters, coarsest_iters);
+        //muCycle(mu_cycle_repeat_times, grid, Tile::z_channel, Tile::r_channel, Tile::Ap_channel, coeff_channel, level_iters, coarsest_iters);
+        FASMuCycle(mu_cycle_repeat_times, grid, Tile::z_channel, Tile::r_channel, Tile::Ap_channel, coeff_channel, level_iters, coarsest_iters);
 
 
         //gamma_old = gamma;

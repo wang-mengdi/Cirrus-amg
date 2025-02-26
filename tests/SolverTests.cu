@@ -591,6 +591,45 @@ namespace SolverTests {
             else return CellType::INTERIOR;
         }
     };
+    class StarShellGerrisGridCase{
+    public:
+        __hostdev__ static int target(const HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const int min_level, const int max_level) {
+            auto bbox = acc.tileBBox(info);
+            auto bmin = bbox.min();
+            auto bmax = bbox.max();
+            int inside_cnt = 0;
+            for (int di : { 0, 1 }) {
+                for (int dj : { 0, 1 }) {
+                    for (int dk : { 0, 1 }) {
+                        Vec vpos;
+                        vpos[0] = bmin[0] + di * (bmax[0] - bmin[0]);
+                        vpos[1] = bmin[1] + dj * (bmax[1] - bmin[1]);
+                        vpos[2] = bmin[2] + dk * (bmax[2] - bmin[2]);
+
+						T x = vpos[0] - 0.5;
+						T y = vpos[1] - 0.5;
+						T z = vpos[2] - 0.5;
+						T r = sqrt(x * x + y * y + z * z);
+						T theta = acos(z / r);
+						T phi = atan2(y, x);
+
+                        T r0 = 0.237 + 0.079 * cos(6 * theta) * cos(6 * phi);
+
+                        //T r0 = 0.237 + 0.079 * cos(6 * theta);
+
+                        if (r < r0) {
+							inside_cnt++;
+                        }
+                    }
+                }
+            }
+            if (inside_cnt == 0 || inside_cnt == 8) return min_level;
+            else return max_level;
+        }
+        __hostdev__ static uint8_t type(const HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const nanovdb::Coord& l_ijk) {
+            return CellType::INTERIOR;
+        }
+    };
 
 
     class GerrisSinFunc {
@@ -910,6 +949,9 @@ namespace SolverTests {
         else if (grid_name == "sphere_solid_05") {
 			grid_ptr = CreateTestGridCase<SphereSolid05GridCase>(grid_name, min_level, max_level);
         }
+        else if (grid_name == "star_shell") {
+			grid_ptr = CreateTestGridCase<StarShellGerrisGridCase>(grid_name, min_level, max_level);
+		}
         else {
             Assert(false, "grid_name {} not supported", grid_name);
         }
@@ -982,7 +1024,7 @@ namespace SolverTests {
 
             CPUTimer<std::chrono::microseconds> timer;
             timer.start();
-            auto [iters, err] = solver.solve(grid, false, 1000, 1e-6, 2, 10, 1, is_pure_neumann);
+            auto [iters, err] = solver.solve(grid, true, 1000, 1e-6, 2, 10, 1, is_pure_neumann);
             CheckCudaError("AMGPCG solve");
             float elapsed = timer.stop("AMGPCG Async");
             int total_cells = grid.numTotalLeafTiles() * Tile::SIZE;
@@ -1133,7 +1175,7 @@ namespace SolverTests {
         //}
        
 
-
-        //IOFunc::OutputTilesAsVTU(holder, "output/tiles.vtu");
+		auto holder = grid.getHostTileHolderForLeafs();
+        IOFunc::OutputTilesAsVTU(holder, "output/tiles.vtu");
     }
 }
