@@ -414,7 +414,7 @@ std::tuple<int, double> CMGSolver::solve(HADeviceGrid<Tile>& grid, bool verbose,
         threshold_norm2 = relative_tolerance * relative_tolerance * rhs_norm2;
         threshold_norm2 = std::max(threshold_norm2, std::numeric_limits<double>::min());
     }
-    if (is_pure_neumann) ReCenterLeafVoxels(grid, Tile::r_channel, mean_d, count_d);
+    if (is_pure_neumann) ReCenterLeafCells(grid, Tile::r_channel, cnt_reducer, mean_d, count_d);
 
     ////z0=Minv*r0
     //r_channel->z_channel
@@ -479,7 +479,7 @@ std::tuple<int, double> CMGSolver::solve(HADeviceGrid<Tile>& grid, bool verbose,
                 return std::make_tuple(i + 1, sqrt(residual_norm2 / rhs_norm2));
             }
         }
-        if (is_pure_neumann) ReCenterLeafVoxels(grid, Tile::r_channel, mean_d, count_d);
+        if (is_pure_neumann) ReCenterLeafCells(grid, Tile::r_channel, cnt_reducer, mean_d, count_d);
 
         //z_{k+1} = Minv * r_{k+1}
         //r->z

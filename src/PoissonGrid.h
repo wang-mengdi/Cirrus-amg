@@ -343,7 +343,7 @@ double Dot(HADeviceGrid<Tile>& grid, const uint8_t in1_channel, const uint8_t in
 __global__ void ChannelPowerSumKernel128(const int order, HATileAccessor<PoissonTile<T>> acc, HATileInfo<PoissonTile<T>>* infos, int subtree_level, uint8_t launch_tile_types, const int in_channel, double* value_sum, double* weights_sum, bool volume_weighted, bool use_abs, uint8_t launch_cell_types);
 double NormSync(HADeviceGrid<Tile>& grid, const int order, const int in_channel, bool volume_weighted, uint8_t launch_cell_types = INTERIOR);
 
-void MeanAsync(HADeviceGrid<Tile>& grid, const int in_channel, const uint8_t launch_tile_types, double* d_mean, double* d_count);
+//void MeanAsync(HADeviceGrid<Tile>& grid, const int in_channel, const uint8_t launch_tile_types, double* d_mean, double* d_count);
 
 //THIS FUNCTION SHOULD BE DEPRECATED
 //In general, cell values can be propagated and accumulated casually

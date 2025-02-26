@@ -39,6 +39,7 @@ public:
     std::tuple<int, double> solve(HADeviceGrid<Tile>& grid, bool verbose, int max_iters, double relative_tolerance, int level_iters, int coarsest_iters, int sync_stride, bool is_pure_neumann);
 
     thrust::device_vector<double> d_tmp;
+    DeviceReducer<double> cnt_reducer;
     double* gamma_d;
     double* beta_d;
     double* alpha_d;
