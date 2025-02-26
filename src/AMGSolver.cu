@@ -1101,6 +1101,7 @@ void AMGSolver::FASMuCycle(int repeat_times, HADeviceGrid<Tile>& grid, const int
         LEAF | NONLEAF | GHOST, 4
     );
 	FASMuCycleStep(grid.mMaxLevel, repeat_times, grid, x_channel, rhs_channel, x0_channel, coeff_channel, level_iters, coarsest_iters);
+    FASMuCycleStep(grid.mMaxLevel, repeat_times, grid, x_channel, rhs_channel, x0_channel, coeff_channel, level_iters, coarsest_iters);
 }
 
 void AMGSolver::prepareTypesAndCoeffs(HADeviceGrid<Tile>& grid)

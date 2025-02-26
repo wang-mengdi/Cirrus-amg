@@ -25,14 +25,14 @@ int main(int argc, char** argv) {
 	//}
 
 
-	for (int min_level : {4, 5}) {
+	for (int min_level : {5}) {
 		//SolverTests::TestDiscretizedLaplacian("uniform", min_level, min_level, "athena_sin");
 
-		//SolverTests::TestSolverErrorWithAllNeumannBC("uniform", min_level, min_level, "athena_sin", "amg");
+		SolverTests::TestSolverErrorWithAllNeumannBC("uniform", min_level, min_level, "athena_sin", "amg");
 	}
 
-	for (int min_level : {4, 5}) {
-	//for (int min_level : {4}) {
+	//for (int min_level : {4, 5}) {
+	for (int min_level : {4}) {
 	//for (int min_level : {1}){
 		//SolverTests::TestDiscretizedLaplacian("sphere_solid_05", min_level, min_level + 2, "athena_sin");
 
