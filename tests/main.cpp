@@ -25,11 +25,29 @@ int main(int argc, char** argv) {
 	//}
 
 
-	for (int min_level : {5}) {
+	//{
+	//	//cg iters - error to grdt plot (set convergence test inside)
+	//	SolverTests::TestSolverErrorWithAllNeumannBC("uniform", 5, 5, "athena_sin", "amg");
+	//	SolverTests::TestSolverErrorWithAllNeumannBC("sphere_shell_05", 5, 7, "athena_sin", "amg");
+	//	SolverTests::TestSolverErrorWithAllNeumannBC("star_shell", 3, 5, "athena_sin", "amg");
+	//	SolverTests::TestSolverErrorWithAllNeumannBC("star_shell", 4, 6, "athena_sin", "amg");
+	//	SolverTests::TestSolverErrorWithAllNeumannBC("star_shell", 5, 7, "athena_sin", "amg");
+	//}
+
+	//SolverTests::TestSolverErrorWithAllNeumannBC("star_shell", 2, 4, "athena_sin", "amg");
+
+
+	for (int min_level : {2, 3, 4, 5}) {
+		//grid convergence of cg
+		SolverTests::TestSolverErrorWithAllNeumannBC("uniform", min_level, min_level, "athena_sin", "amg");
+		SolverTests::TestSolverErrorWithAllNeumannBC("sphere_shell_05", min_level, min_level + 2, "athena_sin", "amg");
+		SolverTests::TestSolverErrorWithAllNeumannBC("star_shell", min_level, min_level + 2, "athena_sin", "amg");
+
 		//SolverTests::TestDiscretizedLaplacian("uniform", min_level, min_level, "athena_sin");
 
-		SolverTests::TestSolverErrorWithAllNeumannBC("uniform", min_level, min_level, "athena_sin", "cmg");
-		SolverTests::TestSolverErrorWithAllNeumannBC("uniform", min_level, min_level, "athena_sin", "amg");
+		//SolverTests::TestSolverErrorWithAllNeumannBC("uniform", min_level, min_level, "athena_sin", "cmg");
+
+		//SolverTests::TestSolverErrorWithAllNeumannBC("uniform", min_level, min_level, "athena_sin", "amg");
 	}
 
 	//for (int min_level : {4, 5}) {
@@ -38,9 +56,9 @@ int main(int argc, char** argv) {
 		//SolverTests::TestDiscretizedLaplacian("sphere_solid_05", min_level, min_level + 2, "athena_sin");
 
 		//SolverTests::TestSolverErrorWithAllNeumannBC("sphere_shell_05", min_level, min_level + 2, "athena_sin", "cmg");
-		SolverTests::TestSolverErrorWithAllNeumannBC("star_shell", min_level, min_level + 2, "athena_sin", "cmg");
+		//SolverTests::TestSolverErrorWithAllNeumannBC("star_shell", min_level, min_level + 2, "athena_sin", "cmg");
 
-		SolverTests::TestSolverErrorWithAllNeumannBC("star_shell", min_level, min_level + 2, "athena_sin", "amg");
+		//SolverTests::TestSolverErrorWithAllNeumannBC("star_shell", min_level, min_level + 2, "athena_sin", "amg");
 	}
 	
 

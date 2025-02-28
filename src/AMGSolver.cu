@@ -1170,7 +1170,7 @@ std::tuple<int, double> AMGSolver::solve(HADeviceGrid<Tile>& grid, bool verbose,
         //rhs_norm2=r*r
         last_residual_norm2 = rhs_norm2 = Dot(grid, Tile::r_channel, Tile::r_channel, LEAF);
         //if (verbose) Info("ConjugateGradient with initial norm of rhs: {}", sqrt(rhs_norm2));
-        if (verbose) Info("ConjugateGradient iter 0 norm {}", sqrt(rhs_norm2));
+        if (verbose) Info("ConjugateGradient iter 0 norm {}(1.0)", sqrt(rhs_norm2));
 
         //if b is zero, just solve to zero
         if (rhs_norm2 == (double)0) {

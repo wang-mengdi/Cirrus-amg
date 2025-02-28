@@ -993,6 +993,65 @@ namespace SolverTests {
 		return std::make_tuple(grid_ptr, is_pure_neumann);
     }
 
+    void TestIterativeConvergenceWithAnalyticalSolution(HADeviceGrid<Tile>& grid, const std::string algorithm, const int coeff_channel, const int b0_channel, const int grdt_channel, int error_channel, bool is_pure_neumann) {
+        Info("Test Iter-Error with analytical solution on algorithm {}", algorithm);
+
+        grid.launchVoxelFuncOnAllTiles(
+            [=] __device__(HATileAccessor<Tile>&acc, HATileInfo<Tile>&info, const Coord & l_ijk) {
+            auto& tile = info.tile();
+            tile(b0_channel, l_ijk) = tile(Tile::b_channel, l_ijk);
+        }, LEAF);
+
+        if (algorithm == "amg") {
+            for (int max_iters = 0;; max_iters++) {
+                CalculateNeighborTiles(grid);
+
+                grid.launchVoxelFuncOnAllTiles(
+                    [=] __device__(HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const Coord& l_ijk) {
+                    auto& tile = info.tile();
+                    tile(Tile::b_channel, l_ijk) = tile(b0_channel, l_ijk);
+                }, LEAF);
+
+                AMGSolver solver(coeff_channel, 0.5, 1, 1);
+                solver.prepareTypesAndCoeffs(grid);
+                //AMGFullNegativeLaplacianOnLeafs(grid, grdt_channel, coeff_channel, Tile::b_channel);
+
+                _sleep(200);
+
+                CPUTimer<std::chrono::microseconds> timer;
+                timer.start();
+                auto [iters, err] = solver.solve(grid, false, max_iters, 0.0, 2, 10, 1, is_pure_neumann);
+                CheckCudaError("AMGPCG solve");
+
+                grid.launchVoxelFuncOnAllTiles(
+                    [=] __device__(HATileAccessor<Tile>&acc, HATileInfo<Tile>&info, const Coord & l_ijk) {
+                    auto& tile = info.tile();
+                    if (tile.type(l_ijk) & INTERIOR) {
+                        tile(error_channel, l_ijk) = tile(grdt_channel, l_ijk) - tile(Tile::x_channel, l_ijk);
+                    }
+                    else {
+                        tile(error_channel, l_ijk) = 0;
+                    }
+                }, LEAF
+                );
+                Info("Solve {} iters, linf {} weighted L1 {} weighted L2 {} full weighted L2 {} pointwise L2 {}",
+                    iters,
+                    NormSync(grid, -1, error_channel, false, INTERIOR),
+                    NormSync(grid, 1, error_channel, true, INTERIOR),
+                    NormSync(grid, 2, error_channel, true, INTERIOR),
+                    NormSync(grid, 2, error_channel, true, INTERIOR | NEUMANN | DIRICHLET),
+                    NormSync(grid, 2, error_channel, false, INTERIOR)
+
+                );
+
+                if (err < 1e-6) break;
+            }
+        }
+        else {
+            Assert(false, "TestIterativeConvergenceWithAnalyticalSolution algorithm {} not supported", algorithm);
+        }
+    }
+
     void TestSolverWithAnalyticalSolution(HADeviceGrid<Tile>& grid, const std::string algorithm, const int coeff_channel, const int grdt_channel, int error_channel, bool is_pure_neumann) {
         if (algorithm == "cmg") {
             CalculateNeighborTiles(grid);
@@ -1034,7 +1093,7 @@ namespace SolverTests {
         }
         else if (algorithm == "fas_vcycle") {
             CalculateNeighborTiles(grid);
-            AMGSolver solver(coeff_channel, 0.5, 0.5, 1);
+            AMGSolver solver(coeff_channel, 0.5, 1, 1);
             solver.prepareTypesAndCoeffs(grid);
 
 			CPUTimer<std::chrono::microseconds> timer;
@@ -1090,8 +1149,8 @@ namespace SolverTests {
 
 
         Info("linf: {}", NormSync(grid, -1, error_channel, false));
-        Info("weighted L1: {}", NormSync(grid, 1, error_channel, true, INTERIOR | NEUMANN | DIRICHLET));
-        Info("weighted rms: {}", NormSync(grid, 2, error_channel, true, INTERIOR | NEUMANN | DIRICHLET));
+        Info("full weighted L1: {}", NormSync(grid, 1, error_channel, true, INTERIOR | NEUMANN | DIRICHLET));
+        Info("full weighted L2: {}", NormSync(grid, 2, error_channel, true, INTERIOR | NEUMANN | DIRICHLET));
 
         auto weighted_rms_error = NormSync(grid, 2, error_channel, true, INTERIOR | NEUMANN | DIRICHLET);
         if (weighted_rms_error < 1e-4) {
@@ -1167,12 +1226,13 @@ namespace SolverTests {
     }
 
     void TestSolverErrorWithAllNeumannBC(const std::string grid_name, const int min_level, const int max_level, const std::string bc_name, const std::string algorithm) {
-		Info("TestSolverErrorWithAllNeumannBC on grid {}, {}~{} levels with given function of {} for {}", grid_name, min_level, max_level, bc_name, algorithm);
+		Info("TestSolverErrorWithAllNeumannBC on grid {}, min level {} max level {} with given function of {} for {}", grid_name, min_level, max_level, bc_name, algorithm);
 
 
         int grdt_channel = 5;
-        int coeff_channel = 6;
+        int coeff_channel = 6;//6,7,8,9
         int rhs_channel = Tile::b_channel;//1
+        int b0_channel = 10;
         //x:0
         int error_channel = 2;
 
@@ -1181,6 +1241,9 @@ namespace SolverTests {
 
 
 		TestSolverWithAnalyticalSolution(grid, algorithm, coeff_channel, grdt_channel, error_channel, is_pure_neumann);
+        //TestIterativeConvergenceWithAnalyticalSolution(grid, algorithm, coeff_channel, b0_channel, grdt_channel, error_channel, is_pure_neumann);
+
+        fmt::print("\n");
 
         //{
         //    auto holder = grid.getHostTileHolderForLeafs();
@@ -1193,7 +1256,6 @@ namespace SolverTests {
         //}
        
 
-		auto holder = grid.getHostTileHolderForLeafs();
-        IOFunc::OutputTilesAsVTU(holder, "output/tiles.vtu");
+        //IOFunc::OutputTilesAsVTU(holder, "output/tiles.vtu");
     }
 }
