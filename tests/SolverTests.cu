@@ -1083,7 +1083,8 @@ namespace SolverTests {
 
             CPUTimer<std::chrono::microseconds> timer;
             timer.start();
-            auto [iters, err] = solver.solve(grid, true, 1000, 1e-6, 2, 10, 1, is_pure_neumann);
+            auto [iters, err] = solver.solve(grid, true, 6, 1e-6, 2, 10, -1, is_pure_neumann);
+            cudaDeviceSynchronize();
             CheckCudaError("AMGPCG solve");
             float elapsed = timer.stop("AMGPCG Async");
             int total_cells = grid.numTotalLeafTiles() * Tile::SIZE;
