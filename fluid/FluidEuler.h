@@ -10,6 +10,7 @@
 //#include "Random.h"
 #include "GPUTimer.h"
 #include "PoissonSolver.h"
+#include "AMGSolver.h"
 
 //#include "AMGSolver.h"
 #include "PoissonIOFunc.h"
@@ -464,7 +465,7 @@ public:
 			//IOFunc::OutputTilesAsVTU(holder, metadata.base_path / fmt::format("tiles{:04d}.vtu", metadata.current_frame));
 
 			metadata.Append_Output_Thread(std::make_shared<std::thread>(IOFunc::OutputPoissonGridAsStructuredVTI, holder,
-				std::vector<std::pair<int, std::string>>{ {-1,"type"}, { -2, "level" }, {Tile::vor_channel, "vorticity"}},
+				std::vector<std::pair<int, std::string>>{ {-1, "type"}, { -2, "level" }, { Tile::vor_channel, "vorticity" }, {Tile::x_channel, "pressure"}},
 				//std::vector<std::pair<int, std::string>>{ },
 				std::vector<std::pair<int, std::string>>{ {cell_center_vel_channel, "velocity"} },
 				//std::vector<std::pair<int, std::string>>{ { -1, "type" }, { Tile::vor_channel, "vorticity" }, { Tile::dye_channel, "dye_density" } },
@@ -508,31 +509,88 @@ public:
 
 	void project(HADeviceGrid<Tile>& grid, int u_channel, double current_time) {
 
-		for (int axis : {0, 1, 2}) {
-			PropagateToChildren(grid, u_channel + axis, u_channel + axis, -1, GHOST, LAUNCH_SUBTREE, INTERIOR | DIRICHLET | NEUMANN);
+
+
+
+		////GMG
+		//{
+		//	for (int axis : {0, 1, 2}) {
+		//		PropagateToChildren(grid, u_channel + axis, u_channel + axis, -1, GHOST, LAUNCH_SUBTREE, INTERIOR | DIRICHLET | NEUMANN);
+		//	}
+		//	VelocityVolumeDivergenceOnLeafs(grid, u_channel, Tile::b_channel);
+		//	Info("div pt l2: {}", NormSync(grid, 2, Tile::b_channel, false));
+		//	CalculateNeighborTiles(grid);
+		//	GMGSolver solver(1., 1.);
+		//	//AMGSolver solver(Tile::c0_channel, 1., 1.);
+		//	//solver.prepareTypesAndCoeffs(grid);
+
+		//	CPUTimer timer;
+		//	timer.start();
+		//	//auto [iters, err] = ConjugateGradientSync(grid, false, 1000, 2, 10, 1e-6, false);
+		//	auto [iters, err] = solver.solve(grid, false, 1000, 1e-6, 1, 10, 1, mParams.mIsPureNeumann);
+		//	cudaDeviceSynchronize();
+		//	double elapsed = timer.stop("MGPCG");
+		//	double total_cells = grid.numTotalTiles() * Tile::SIZE;
+		//	double cells_per_second = (total_cells + 0.0) / (elapsed / 1000.0);
+		//	Info("Total {:.5}M cells, MGPCG speed {:.5} M cells /s at {} iters", total_cells / (1024.0 * 1024), cells_per_second / (1024.0 * 1024), iters);
+		//	projection_time = elapsed;
+		//	Info("pressure pt l2: {}", NormSync(grid, 2, Tile::x_channel, false));
+		//	AddGradientToFaceCenters(grid, Tile::x_channel, u_channel);
+		//	applyVelocityBC(grid, current_time);
+		//}
+
+		//AMG
+		{
+			CalculateNeighborTiles(grid);
+
+			AMGVolumeWeightedDivergenceOnLeafs(grid, u_channel, Tile::b_channel);
+			Info("div pt l2: {}", NormSync(grid, 2, Tile::b_channel, false));
+
+
+			AMGSolver solver(Tile::c0_channel, 0.5, 1, 1);
+			solver.prepareTypesAndCoeffs(grid);
+
+			CPUTimer timer;
+			timer.start();
+			auto [iters, err] = solver.solve(grid, false, 1000, 1e-6, 2, 10, 1, mParams.mIsPureNeumann);
+			cudaDeviceSynchronize();
+			double elapsed = timer.stop("AMGPCG");
+			double total_cells = grid.numTotalTiles() * Tile::SIZE;
+			double cells_per_second = (total_cells + 0.0) / (elapsed / 1000.0);
+			Info("Total {:.5}M cells, AMGPCG speed {:.5} M cells /s at {} iters", total_cells / (1024.0 * 1024), cells_per_second / (1024.0 * 1024), iters);
+			projection_time = elapsed;
+
+			Info("pressure pt l2: {}", NormSync(grid, 2, Tile::x_channel, false));
+
+			AMGAddGradientToFace(grid, -1, LEAF, Tile::x_channel, Tile::c0_channel, Tile::u_channel);
+			applyVelocityBC(grid, current_time);
+
+			AMGVolumeWeightedDivergenceOnLeafs(grid, u_channel, Tile::b_channel);
+			//for (int i : {0, 1, 2}) {
+			//	AccumulateToParents(grid, u_channel + i, u_channel + i, -1, LEAF, LAUNCH_SUBTREE, INTERIOR | DIRICHLET, 1.0 / 4.0, true);
+			//}
+			Info("div pt linf: {}", NormSync(grid, -1, Tile::b_channel, false));
+
+			VelocityVolumeDivergenceOnLeafs(grid, u_channel, Tile::b_channel);
+
+			//{
+			//	auto holder = grid.getHostTileHolderForLeafs();
+			//	polyscope::init();
+			//	IOFunc::AddPoissonGridCellCentersToPolyscopePointCloud(
+			//		holder,
+			//		{ {-1, "type" },
+			//			{ Tile::b_channel, "divergence" },
+			//			{ Tile::x_channel, "pressure" }
+			//		},
+			//		{
+			//			{ Tile::u_channel, "velocity" }
+			//		}
+			//	);
+			//	polyscope::show();
+			//}
 		}
-		VelocityVolumeDivergenceOnLeafs(grid, u_channel, Tile::b_channel);
 
-		//GMGSolver solver;
 
-		CalculateNeighborTiles(grid);
-		GMGSolver solver(1., 1.);
-		//AMGSolver solver(Tile::c0_channel, 1., 1.);
-		//solver.prepareTypesAndCoeffs(grid);
-
-		CPUTimer timer;
-		timer.start();
-		//auto [iters, err] = ConjugateGradientSync(grid, false, 1000, 2, 10, 1e-6, false);
-		auto [iters, err] = solver.solve(grid, false, 1000, 1e-6, 1, 10, 1, mParams.mIsPureNeumann);
-		cudaDeviceSynchronize();
-		double elapsed = timer.stop("MGPCG");
-		double total_cells = grid.numTotalTiles() * Tile::SIZE;
-		double cells_per_second = (total_cells + 0.0) / (elapsed / 1000.0);
-		Info("Total {:.5}M cells, MGPCG speed {:.5} M cells /s at {} iters", total_cells / (1024.0 * 1024), cells_per_second / (1024.0 * 1024), iters);
-		projection_time = elapsed;
-
-		AddGradientToFaceCenters(grid, Tile::x_channel, u_channel);
-		applyVelocityBC(grid, current_time);
 
 		//VelocityVolumeDivergenceOnLeafs(grid, u_channel, Tile::b_channel);
 		//Info("After velocity fix div linf {}", VolumeWeightedNorm(grid, -1, Tile::b_channel));

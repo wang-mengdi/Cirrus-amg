@@ -11,7 +11,7 @@
     },
     "scene": {
         "coarse_level": 1,
-        "fine_level": 7,
+        "fine_level": 5,
         "flowmap_stride": 1,
         "refine_threshold": 0.1,
         "gravity": 0.0,

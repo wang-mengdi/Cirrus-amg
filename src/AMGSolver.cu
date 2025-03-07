@@ -582,6 +582,47 @@ void AMGAddGradientToFace(HADeviceGrid<Tile>& grid, int subtree_level, uint8_t l
     AMGAddGradientToFace128Kernel << <grid.dAllTiles.size(), 128 >> > (grid.deviceAccessor(), thrust::raw_pointer_cast(grid.dAllTiles.data()), subtree_level, launch_tile_types, x_channel, coeff_channel, u_channel);
 }
 
+void AMGVolumeWeightedDivergenceOnLeafs(HADeviceGrid<Tile>& grid, int u_channel, int x_channel) {
+    for (int axis : {0, 1, 2}) {
+        PropagateToChildren(grid, u_channel + axis, u_channel + axis, -1, GHOST, LAUNCH_SUBTREE, INTERIOR | DIRICHLET | NEUMANN);
+        //AccumulateToParentsOneStep(grid, u_channel + axis, u_channel + axis, LEAF, 1. / 8, false, INTERIOR | DIRICHLET | NEUMANN);
+    }
+    AccumulateFacesToParentsOneStep(grid, u_channel, u_channel, LEAF, 1. / 4, false, INTERIOR | DIRICHLET | NEUMANN);
+
+    grid.launchVoxelFuncOnAllTiles(
+        [=] __device__(HATileAccessor<Tile>&acc, HATileInfo<Tile>&info, const Coord & l_ijk) {
+        auto h = acc.voxelSize(info);
+        Tile& tile = info.tile();
+        uint8_t ctype0 = tile.type(l_ijk);
+        T sum = 0;
+
+        //iterate neighbors
+        acc.iterateSameLevelNeighborVoxels(info, l_ijk,
+            [&]__device__(const HATileInfo<Tile>&ninfo, const Coord & nl_ijk, const int axis, const int sgn) {
+
+            T u0 = tile(u_channel + axis, l_ijk);
+            T u1;
+
+            if (ninfo.empty()) {
+                u1 = 0;
+            }
+            else {
+                auto& ntile = ninfo.tile();
+                u1 = ntile(u_channel + axis, nl_ijk);
+            }
+
+            //basically coeff is -h
+            //sum += (sgn == -1) ? u0 * coeff * h : -u1 * coeff * h;
+
+            sum += (sgn == -1) ? -u0 * h * h : u1 * h * h;
+        });
+
+        //tile(x_channel, l_ijk) = sum;
+        tile(x_channel, l_ijk) = (ctype0 & INTERIOR) ? sum : 0;
+
+    }, LEAF);
+}
+
 void AMGVolumeWeightedDivergenceOnLeafs(HADeviceGrid<Tile>& grid, int u_channel, int coeff_channel, int x_channel) {
     for (int axis : {0, 1, 2}) {
         PropagateToChildren(grid, u_channel + axis, u_channel + axis, -1, GHOST, LAUNCH_SUBTREE, INTERIOR | DIRICHLET | NEUMANN);
@@ -593,7 +634,7 @@ void AMGVolumeWeightedDivergenceOnLeafs(HADeviceGrid<Tile>& grid, int u_channel,
         [=] __device__(HATileAccessor<Tile>&acc, HATileInfo<Tile>&info, const Coord & l_ijk) {
         auto h = acc.voxelSize(info);
         Tile& tile = info.tile();
-        //uint8_t ctype0 = tile.type(l_ijk);
+        uint8_t ctype0 = tile.type(l_ijk);
         T sum = 0;
 
         //iterate neighbors
@@ -631,6 +672,8 @@ void AMGVolumeWeightedDivergenceOnLeafs(HADeviceGrid<Tile>& grid, int u_channel,
         });
 
         tile(x_channel, l_ijk) = sum;
+        //tile(x_channel, l_ijk) = (ctype0 & INTERIOR) ? sum : 0;
+
     }, LEAF);
 }
 
