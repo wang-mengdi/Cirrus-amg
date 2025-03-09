@@ -737,10 +737,10 @@ void ReCenterLeafCells(HADeviceGrid<Tile>& grid, const int channel, DeviceReduce
         TernaryOnArray(d_mean, d_count, d_count, []__device__(double& mean, double count, double _) { mean = mean / count; });
 
         grid.launchVoxelFuncOnAllTiles(
-            [=] __device__(HATileAccessor<Tile>&acc, HATileInfo<Tile>&info, const Coord & l_ijk) {
+            [=] __device__(HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const Coord& l_ijk) {
             auto& tile = info.tile();
             double mean = *d_mean;
-            if (tile.isInterior(l_ijk)) {
+            if (tile.type(l_ijk) & INTERIOR) {
                 tile(channel, l_ijk) -= mean;
             }
         }, LEAF, 4

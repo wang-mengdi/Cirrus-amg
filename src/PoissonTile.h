@@ -41,36 +41,12 @@ public:
 
     static constexpr T BACKGROUND_VALUE = 0;
 
-
-    //somehow we can't move this forward, presumably alignment issues
-
-    //alignas(16) int mStatus;//record refine and coarsen status
-    //alignas(16) int mIsInterestArea = false, mIsLockedRefine = false;
-    //alignas(16) int mSerialIdx;
-
-
     T mData[num_channels][CHNLSIZE];//9^3 =729
     HATileInfo<PoissonTile<T>> mNeighbors[6];//x-,y-,z-,x+,y+,z+
     uint8_t mCellType[SIZE];
     bool mIsInterestArea = false, mIsLockedRefine = false;
     int mStatus;//record refine and coarsen status
     int mSerialIdx;
-
-    
-
-    
-
-
-    
- //   int mSerialIdx;
- //   bool mIsInterestArea = false, mIsLockedRefine = false;
- //   uint8_t mStatus;//record refine and coarsen status
- //   HATileInfo<PoissonTile<T>> mNeighbors[6];//x-,y-,z-,x+,y+,z+
- //   uint8_t mCellType[SIZE];
-	//T mData[num_channels][CHNLSIZE];//9^3 =729
-
-    
-	
 
     PoissonTile() {
         mStatus = 0;
@@ -91,7 +67,8 @@ public:
 		return mData[channel][CoordAcc::localCoordToOffset(l_ijk)];
 	}
     __hostdev__ T interiorValue(const uint32_t channel, const Coord& l_ijk) const {
-        if (isInterior(l_ijk)) return mData[channel][CoordAcc::localCoordToOffset(l_ijk)];
+        if (mCellType[CoordAcc::localCoordToOffset(l_ijk)] & CellType::INTERIOR)
+            return mData[channel][CoordAcc::localCoordToOffset(l_ijk)];
         else return BACKGROUND_VALUE;
     }
 
@@ -100,9 +77,6 @@ public:
 
     __hostdev__ uint8_t& type(const Coord& l_ijk) { return mCellType[CoordAcc::localCoordToOffset(l_ijk)]; }
 	__hostdev__ uint8_t& type(const int idx) { return mCellType[idx]; }
-    __hostdev__ bool isInterior(const Coord& l_ijk) const { return mCellType[CoordAcc::localCoordToOffset(l_ijk)] & CellType::INTERIOR; }
-	__hostdev__ bool isDirichlet(const Coord& l_ijk) const { return mCellType[CoordAcc::localCoordToOffset(l_ijk)] & CellType::DIRICHLET; }
-	__hostdev__ bool isNeumann(const Coord& l_ijk) const { return mCellType[CoordAcc::localCoordToOffset(l_ijk)] & CellType::NEUMANN; }
 
     __hostdev__ T cellInterp(const uint32_t cell_channel, const uint32_t node_channel, const Coord& l_ijk, const VecType& frac) const {
         T node_intp = 0, node_avg = 0;
@@ -138,8 +112,6 @@ public:
 		int axj = CoordAcc::rotateAxis(axis, 1);
 		int axk = CoordAcc::rotateAxis(axis, 2);
 
-        //printf("interpolate axis %d l_ijk %d,%d,%d frac %f,%f,%f\n", axis, l_ijk[0], l_ijk[1], l_ijk[2], frac[0], frac[1], frac[2]);
-
         for (int offj : {0, 1}) {
             for (int offk : {0, 1}) {
                 Coord off_ijk = CoordAcc::rotateCoord(axis, Coord(0, offj, offk));
@@ -151,8 +123,6 @@ public:
 				node_intp += weight * val;
                 node_sum += val;
 
-				//printf("node[%d,%d,%d]=%f\n", l_ijk[0] + off_ijk[0], l_ijk[1] + off_ijk[1], l_ijk[2] + off_ijk[2], val);
-                //printf("hello\n");
             }
         }
 
@@ -162,9 +132,7 @@ public:
             if (1 - frac[ax] < frac_min) frac_min = 1 - frac[ax];
         }
 
-            
         T delta = value(u_channel + axis, l_ijk) - node_sum / 4.0;
-        //printf("face center value: %f node_avg: %f delta: %f\n", interiorValue(u_channel + axis, l_ijk), node_sum / 4.0, delta);
 		return node_intp + 2 * delta * frac_min;
 	}
 

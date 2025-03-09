@@ -1,7 +1,6 @@
 ﻿#include "AMGSolver.h"
 #include "PoissonGrid.h"
 #include "CPUTimer.h"
-#include "PoissonSolver.h"
 #include "GMGSolver.h"
 //#include "PoissonSolverOptimized.h"
 

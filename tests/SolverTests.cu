@@ -1,5 +1,4 @@
 #include "SolverTests.h"
-#include "PoissonSolver.h"
 #include "GMGSolver.h"
 #include "CMGSolver.h"
 #include "AMGSolver.h"

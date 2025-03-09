@@ -1,5 +1,4 @@
 #include "GMGSolver.h"
-#include "PoissonSolver.h"
 
 __forceinline__ __device__ T NegativeLaplacianCoeff(T one_over_h, uint8_t ttype0, uint8_t ttype1, uint8_t ctype0, const uint8_t ctype1) {
     ////tile types check

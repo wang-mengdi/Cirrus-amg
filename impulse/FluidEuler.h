@@ -9,7 +9,6 @@
 #include "FluidParams.h"
 //#include "Random.h"
 #include "GPUTimer.h"
-#include "PoissonSolver.h"
 #include "AMGSolver.h"
 
 //#include "AMGSolver.h"

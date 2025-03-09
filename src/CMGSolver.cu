@@ -1,5 +1,4 @@
 #include "CMGSolver.h"
-#include "PoissonSolver.h"
 
 __forceinline__ __device__ T NegativeLaplacianCoeff(T h, uint8_t ctype0, const uint8_t ctype1) {
     int has_neumann = int(ctype0 & NEUMANN || ctype1 & NEUMANN);
