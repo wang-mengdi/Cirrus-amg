@@ -1,9 +1,6 @@
 #include "GMGSolver.h"
 #include "PoissonSolver.h"
 
-int laplacian_total_tile_counts = 0;
-
-
 __forceinline__ __device__ T NegativeLaplacianCoeff(T one_over_h, uint8_t ttype0, uint8_t ttype1, uint8_t ctype0, const uint8_t ctype1) {
     ////tile types check
     ////we only calculate LEAF-GHOST and LEAF-LEAF terms
@@ -164,7 +161,6 @@ __global__ void NegativeLaplacianSameLevel128Kernel(HATileAccessor<Tile> acc, HA
 
 //we need to calculate laplacian either on all leafs, or on a specific level
 void NegativeLaplacianSameLevel128(HADeviceGrid<Tile>& grid, thrust::device_vector<HATileInfo<Tile>>& tiles, int launch_tile_num, int subtree_level, uint8_t launch_tile_types, int x_channel, int Ax_channel, bool calc_diag) {
-    laplacian_total_tile_counts += launch_tile_num;
     NegativeLaplacianSameLevel128Kernel << <launch_tile_num, 128 >> > (grid.deviceAccessor(), thrust::raw_pointer_cast(tiles.data()), subtree_level, launch_tile_types, x_channel, Ax_channel);
 }
 

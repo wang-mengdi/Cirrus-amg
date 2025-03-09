@@ -2,8 +2,6 @@
 #include "CPUTimer.h"
 //#include "GMGSolver.h"
 
-extern int laplacian_total_tile_counts;
-
 void CalcCellTypesFromLeafs(HADeviceGrid<Tile>& grid) {
     //We already have cell types for leafs
 
