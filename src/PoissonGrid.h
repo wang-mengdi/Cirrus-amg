@@ -416,6 +416,3 @@ __hostdev__ void IterateFaceNeighborCellTypes(const HATileAccessor<Tile>& acc, c
 }
 
 void ExtrapolateVelocity(HADeviceGrid<Tile>& grid, const int u_channel, const int num_iters);
-
-//int RefineWithValuesOneStep(HADeviceGrid<Tile>& grid, int channel, T threshold, int coarse_level, int fine_level, bool verbose);
-//int CoarsenWithValueneStep(HADeviceGrid<Tile>& grid, int channel, T threshold, int coarse_level, int fine_level, bool verbose);

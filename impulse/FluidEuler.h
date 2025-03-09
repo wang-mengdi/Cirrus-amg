@@ -366,14 +366,10 @@ public:
 			//	AccumulateToParents(grid, u_channel + i, u_channel + i, -1, LEAF, LAUNCH_SUBTREE, INTERIOR | DIRICHLET, 1.0 / 4.0, true);
 			//}
 			Info("div pt linf: {}", NormSync(grid, -1, Tile::b_channel, false));
-
-			VelocityVolumeDivergenceOnLeafs(grid, u_channel, Tile::b_channel);
 		}
 
 
 
-		//VelocityVolumeDivergenceOnLeafs(grid, u_channel, Tile::b_channel);
-		//Info("After velocity fix div linf {}", VolumeWeightedNorm(grid, -1, Tile::b_channel));
 	}
 
 	void adaptAndAdvect(DriverMetaData& metadata, std::vector<std::shared_ptr<HADeviceGrid<Tile>>> grid_ptrs) {
