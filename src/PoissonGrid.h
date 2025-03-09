@@ -334,9 +334,6 @@ void CalculateNeighborTiles(HADeviceGrid<Tile>& grid);
 
 void Copy(HADeviceGrid<Tile>& grid, const int in_channel, const int out_channel, const int level, const uint8_t launch_types, const LaunchMode mode, const uint8_t cell_types = INTERIOR);
 void Fill(HADeviceGrid<Tile>& grid, const int channel, const Tile::T val, const int level, const uint8_t launch_types, const LaunchMode mode, const uint8_t cell_types = INTERIOR);
-//running on all leafs (level=-1) or a specific level
-//out[i] += alpha * in[i]
-void Axpy(HADeviceGrid<Tile>& grid, const Tile::T alpha, const uint8_t in_channel, const uint8_t out_channel, const int level, const uint8_t launch_types, const LaunchMode mode);
 
 void DotAsync(double* d_result, HADeviceGrid<Tile>& grid, const uint8_t in1_channel, const uint8_t in2_channel, const uint8_t launch_tile_types);
 double Dot(HADeviceGrid<Tile>& grid, const uint8_t in1_channel, const uint8_t in2_channel, const uint8_t launch_tile_types);
@@ -409,5 +406,3 @@ __hostdev__ void IterateFaceNeighborCellTypes(const HATileAccessor<Tile>& acc, c
         }
     }
 }
-
-void ExtrapolateVelocity(HADeviceGrid<Tile>& grid, const int u_channel, const int num_iters);

@@ -537,39 +537,20 @@ public:
 		}
 
 		thrust::host_vector<HATileInfo<Tile>*> host_layer_hash_table_ptrs;
-		//thrust::host_vector<HATileInfo<Tile>*> host_layer_tile_array_ptrs;
 		for (int i = 0; i < mNumLevels; i++) {
 			host_layer_hash_table_ptrs.push_back(thrust::raw_pointer_cast(dHashTables[i].data()));
-			//host_layer_tile_array_ptrs.push_back(thrust::raw_pointer_cast(dTileArrays[i].data()));
 		}
 		dHashTablePtrs = host_layer_hash_table_ptrs;
-		//dTileArrayPtrs = host_layer_tile_array_ptrs;
 
-
-		//create leaf and ghost tiles list for launching
-
-		//thrust::host_vector<HATileInfo<Tile>> hostLeafTiles;
-		//thrust::host_vector<HATileInfo<Tile>> hostGhostTiles;
-		//thrust::host_vector<HATileInfo<Tile>> hAllTiles;
 
 		hAllTiles.clear();
 		for (int layer = 0; layer < mNumLevels; layer++) {
 			for (int j = 0; j < hNumTiles[layer]; j++) {
 				const HATileInfo<Tile>& info = hTileArrays[layer][j];
-				//push leaf tiles
-				//if (info.isLeaf()) {
-				//	hostLeafTiles.push_back(info);
-				//}
-				////push ghost tiles
-				//else if (info.isGhost()) {
-				//	hostGhostTiles.push_back(info);
-				//}
 				hAllTiles.push_back(info);
 			}
 		}
 
-		//dLeafTiles = hostLeafTiles;
-		//dGhostTiles = hostGhostTiles;
 		dAllTiles = hAllTiles;
 
 		dAllTilesReducer.resize(dAllTiles.size());

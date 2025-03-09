@@ -36,13 +36,6 @@ void Fill(HADeviceGrid<Tile>& grid, const int channel, const Tile::T val, const 
     UnaryTransform(grid, channel, channel, [=]__device__(Tile::T x) { return val; }, level, launch_types, mode, cell_types);
 }
 
-
-//running on all leafs (level=-1) or a specific level
-//out[i] += alpha * in[i]
-void Axpy(HADeviceGrid<Tile>& grid, const Tile::T alpha, const uint8_t in_channel, const uint8_t out_channel, const int level, const uint8_t launch_types, const LaunchMode mode) {
-    BinaryTransform(grid, in_channel, out_channel, out_channel, [=]__device__(Tile::T x, Tile::T y) { return y + alpha * x; }, level, launch_types, mode);
-}
-
 template<typename T>
 T CUBDeviceArraySum(const T* device_ptr, const int n) {
     void* d_temp_storage = nullptr;
@@ -721,63 +714,4 @@ __device__ Vec InterpolateFaceValue(const HATileAccessor<Tile>& acc, const Vec& 
         vec[axis] = (1 - w) * v0 + w * v1;
     }
     return vec;
-}
-
-void ExtrapolateVelocity(HADeviceGrid<Tile>& grid, const int u_channel, const int num_iters) {
-
-    grid.launchVoxelFunc(
-        [=] __device__(HATileAccessor<Tile>&acc, HATileInfo<Tile>&info, const Coord & l_ijk) {
-        for (int axis : {0, 1, 2}) {
-            bool to_set = false;
-            IterateFaceNeighborCellTypes(acc, info, l_ijk, axis, [&](const uint8_t type0, const uint8_t type1) {
-                if ((type0 & NEUMANN) || (type1 & NEUMANN) || ((type0 & DIRICHLET) && (type1 & DIRICHLET))) {
-                    to_set = true;
-                }
-                });
-            if (to_set) {
-                info.tile()(Tile::u_channel + axis, l_ijk) = NODATA;
-            }
-        }
-    }, -1, LEAF, LAUNCH_SUBTREE
-    );
-
-    for (int i = 0; i < num_iters; i++) {
-        grid.launchVoxelFunc(
-            [=] __device__(HATileAccessor<Tile>&acc, HATileInfo<Tile>&info, const Coord & l_ijk) {
-            auto& tile = info.tile();
-
-            for (int axis : {0, 1, 2}) {
-
-                if (tile(u_channel + axis, l_ijk) == NODATA) {
-                    T ws = 0;
-                    T vws = 0;
-                    //acc.iterateNeighborLeafFaces(axis, info, l_ijk, [&]__device__(const HATileInfo<Tile>&ninfo, const Coord & nl_ijk, const int axj, const int sgn) {
-                    acc.iterateNeighborLeafCells(info, l_ijk, [&]__device__(const HATileInfo<Tile>&ninfo, const Coord & nl_ijk, const int _, const int sgn) {
-                        auto& ntile = ninfo.tile();
-                        auto v = ntile(u_channel + axis, nl_ijk);
-                        auto h = acc.voxelSize(ninfo);
-                        if (v != NODATA) {
-                            ws += h * h * h;
-                            vws += v * h * h * h;
-                        }
-                    });
-                    if (ws > 0) {
-                        tile(u_channel + axis, l_ijk) = vws / ws;
-                    }
-                }
-            }
-        }, -1, LEAF, LAUNCH_SUBTREE
-        );
-    }
-
-    grid.launchVoxelFunc(
-        [=] __device__(HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const Coord& l_ijk) {
-        auto& tile = info.tile();
-        for (int axis : {0, 1, 2}) {
-            if (tile(u_channel + axis, l_ijk) == NODATA) {
-                tile(u_channel + axis, l_ijk) = 0;
-            }
-        }
-    }, -1, LEAF, LAUNCH_SUBTREE
-    );
 }
