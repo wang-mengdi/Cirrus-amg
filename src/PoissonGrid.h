@@ -3,9 +3,6 @@
 //#include "HAGrid.h"
 #include "PoissonTile.h"
 
-
-
-
 template <class T, typename Func3>
 __global__ void TernaryOnArrayKernel(T* a, T* b, T* c, Func3 f, int n) {
     int idx = threadIdx.x + blockIdx.x * blockDim.x;
@@ -30,6 +27,8 @@ std::vector<int> CoarsenStep(HADeviceGrid<Tile>& grid, ABFunc level_target, bool
     //level_target function is only available on leaf tiles
     //COARSEN_FLAG means you can delete its children and make the tile a LEAF
     //DELETE_FLAG means you can delete the tile itself
+
+    constexpr int blockSize = 512;
 
     //upstroke from fine to coarse, calculate COARSEN flags based on DELETE flags
     for (int level = grid.mNumLevels - 1; level >= 0; level--) {
@@ -65,27 +64,35 @@ std::vector<int> CoarsenStep(HADeviceGrid<Tile>& grid, ABFunc level_target, bool
         );
 
         //2: calculate DELETE flags for LEAF tiles, and unset COARSEN flags for convenience
-        grid.launchTileFunc(
-            [=] __device__(HATileAccessor<Tile>&acc, uint32_t tile_idx, HATileInfo<Tile>&info) {
-            auto& tile = info.tile();
-            bool to_delete = level_target(acc, info) < info.mLevel;
+        if (grid.hNumTiles[level] == 0) continue;
+        MarkCoarsenAndDeleteFlagOnLeafsWithLevelTargetHelperKernel << <grid.hNumTiles[level] / blockSize + 1, blockSize >> > (
+            grid.deviceAccessor(),
+            level_target,
+            thrust::raw_pointer_cast(grid.dTileArrays[level].data()),
+            grid.hNumTiles[level]
+            );
 
-            //if there is a same-level NONLEAF neighbor that cannot be coarsen, cannot delete
-            acc.iterateNeighborCoords(info.mTileCoord, [&](const Coord& nb_ijk) {//nb for neighbor block
-                auto ninfo = acc.tileInfoCopy(info.mLevel, nb_ijk);
-                if (ninfo.mType & NONLEAF) {
-                    auto& ntile = ninfo.tile();
-                    if (!(ntile.mStatus & COARSEN_FLAG)) {
-                        to_delete = false;
-                    }
-                }
-                });
+        //grid.launchTileFunc(
+        //    [=] __device__(HATileAccessor<Tile>&acc, uint32_t tile_idx, HATileInfo<Tile>&info) {
+        //    auto& tile = info.tile();
+        //    bool to_delete = level_target(acc, info) < info.mLevel;
 
-            tile.setMask(COARSEN_FLAG, false);
-            tile.setMask(DELETE_FLAG, to_delete);
-        },
-            level, LEAF, LAUNCH_LEVEL
-        );
+        //    //if there is a same-level NONLEAF neighbor that cannot be coarsen, cannot delete
+        //    acc.iterateNeighborCoords(info.mTileCoord, [&](const Coord& nb_ijk) {//nb for neighbor block
+        //        auto ninfo = acc.tileInfoCopy(info.mLevel, nb_ijk);
+        //        if (ninfo.mType & NONLEAF) {
+        //            auto& ntile = ninfo.tile();
+        //            if (!(ntile.mStatus & COARSEN_FLAG)) {
+        //                to_delete = false;
+        //            }
+        //        }
+        //        });
+
+        //    tile.setMask(COARSEN_FLAG, false);
+        //    tile.setMask(DELETE_FLAG, to_delete);
+        //},
+        //    level, LEAF, LAUNCH_LEVEL
+        //);
     }
 
     //downstroke from coarse to fine, propagate DELETE flags from COARSEN flags

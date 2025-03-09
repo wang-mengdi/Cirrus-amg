@@ -276,6 +276,38 @@ __global__ void MarkRefineFlagOnLeafsWithLevelTargetHelperKernel(HATileAccessor<
 	}
 }
 
+//calculate DELETE flags for LEAF tiles, and unset COARSEN flags for convenience
+template<class Tile, class FuncAB>
+__global__ void MarkCoarsenAndDeleteFlagOnLeafsWithLevelTargetHelperKernel(HATileAccessor<Tile> acc, FuncAB level_target, HATileInfo<Tile>* tiles, int num_tiles) {
+	using Coord = typename Tile::Coord;
+	auto idx = blockIdx.x * blockDim.x + threadIdx.x;
+	if (idx < num_tiles) {
+		HATileInfo<Tile> info = tiles[idx];
+		int i = info.mLevel;
+		if (!(info.mType & LEAF)) {
+			return;
+		}
+
+		auto& tile = info.tile();
+
+		bool to_delete = level_target(acc, info) < info.mLevel;
+
+		//if there is a same-level NONLEAF neighbor that cannot be coarsen, cannot delete
+		acc.iterateNeighborCoords(info.mTileCoord, [&](const Coord& nb_ijk) {//nb for neighbor block
+			auto ninfo = acc.tileInfoCopy(info.mLevel, nb_ijk);
+			if (ninfo.mType & NONLEAF) {
+				auto& ntile = ninfo.tile();
+				if (!(ntile.mStatus & COARSEN_FLAG)) {
+					to_delete = false;
+				}
+			}
+			});
+
+		tile.setMask(COARSEN_FLAG, false);
+		tile.setMask(DELETE_FLAG, to_delete);
+	}
+}
+
 template<class Tile>
 class HADeviceGrid {
 	static constexpr DataHolder AllocSide = DEVICE;
@@ -832,7 +864,7 @@ public:
 
 			auto refine_flg_dev_ptr = thrust::raw_pointer_cast(refine_flg_dev.data());
 			
-			//first, launch on all 
+			//mark refine flags on leafs
 			MarkRefineFlagOnLeafsWithLevelTargetHelperKernel << <(hNumTiles[i] + blockSize - 1) / blockSize, blockSize >> > (
 				deviceAccessor(),
 				level_target,
@@ -842,6 +874,7 @@ public:
 				);
 			refine_host = refine_flg_dev;
 
+			//mark refine flags on ghosts, they will be passed to parents
 			launchTileFunc(
 				[=]__device__(HATileAccessor<Tile>&acc, const uint32_t tile_idx, HATileInfo<Tile>&info) {
 				auto& tile = info.tile();
