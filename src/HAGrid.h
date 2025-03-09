@@ -938,6 +938,146 @@ public:
 			if (cnt == 0) break;
 		}
 	}
+
+	//return number of deleted tiles each layer
+	template<class ABFunc>
+	std::vector<int> coarsenStep(ABFunc level_target, bool verbose) {
+		//level_target function is only available on leaf tiles
+		//COARSEN_FLAG means you can delete its children and make the tile a LEAF
+		//DELETE_FLAG means you can delete the tile itself
+
+		constexpr int blockSize = 512;
+
+		//upstroke from fine to coarse, calculate COARSEN flags based on DELETE flags
+		for (int level = mNumLevels - 1; level >= 0; level--) {
+			//mark DELETE flag for leaf tiles and COARSEN flag for non-leaf tiles
+			//we're not launching GHOST here
+			//if there is a same-level neighbor NONLEAF tile that can't be coarsen, we can't delete a LEAF
+			//therefore, COARSEN flags are calculated prior to DELETE
+
+			//1: calculate COARSEN flags for NONLEAF tiles and unset DELETE flags for convenience
+			//if all 8 children are deletable LEAF tiles, we can mark COARSEN flag
+			launchTileFunc(
+				[=] __device__(HATileAccessor<Tile>&acc, uint32_t tile_idx, HATileInfo<Tile>&info) {
+				auto& tile = info.tile();
+				bool to_coarsen = true;
+				acc.iterateChildCoords(info.mTileCoord, [&](const Coord& c_ijk) {
+					auto cinfo = acc.tileInfoCopy(info.mLevel + 1, c_ijk);//c for child
+					if (cinfo.isLeaf()) {
+						const auto& ctile = cinfo.tile();
+						if (!(ctile.mStatus & DELETE_FLAG)) {
+							to_coarsen = false;
+						}
+					}
+					else {
+						//we're only launching NONLEAF tiles so the child here must be NONLEAF
+						//and its DELETE flag is false
+						to_coarsen = false;
+					}
+					});
+				tile.setMask(COARSEN_FLAG, to_coarsen);
+				tile.setMask(DELETE_FLAG, false);
+			},
+				level, NONLEAF, LAUNCH_LEVEL
+			);
+
+			//2: calculate DELETE flags for LEAF tiles, and unset COARSEN flags for convenience
+			if (hNumTiles[level] == 0) continue;
+			MarkCoarsenAndDeleteFlagOnLeafsWithLevelTargetHelperKernel << <hNumTiles[level] / blockSize + 1, blockSize >> > (
+				deviceAccessor(),
+				level_target,
+				thrust::raw_pointer_cast(dTileArrays[level].data()),
+				hNumTiles[level]
+				);
+		}
+
+		//downstroke from coarse to fine, propagate DELETE flags from COARSEN flags
+		for (int level = 0; level < mNumLevels; level++) {
+			//3: propagate DELETE flags for LEAF and GHOST based on COASREN flags
+			//in the upstroke pass, COARSEN flag is calculated on all NONLEAF tiles and unset on all LEAF tiles
+			//if a tile is marked as COARSEN, we can delete its children and mark it as LEAF
+			//if DELETE flag is set for a tile, we also set the COARSEN to further delete its children
+			launchTileFunc(
+				[=] __device__(HATileAccessor<Tile>&acc, uint32_t tile_idx, HATileInfo<Tile>&info) {
+				auto& tile = info.tile();
+				bool to_delete = false;
+
+				auto pb_ijk = acc.parentCoord(info.mTileCoord);
+				auto pinfo = acc.tileInfoCopy(info.mLevel - 1, pb_ijk);
+				if (!pinfo.empty()) {
+					auto& ptile = pinfo.tile();
+					if (ptile.mStatus & COARSEN_FLAG) {
+						to_delete = true;
+					}
+				}
+
+				tile.setMask(DELETE_FLAG, to_delete);
+				if (to_delete) {
+					tile.setMask(COARSEN_FLAG, true);
+				}
+			},
+				level, LEAF | GHOST, LAUNCH_LEVEL
+			);
+
+			//4: additionally update DELETE flags for GHOST tiles
+			//if a GHOST tile does not have a neighbor LEAF tile that will continue to exist, we mark it as DELETE
+			//(if the GHOST tile's parent is going to be deleted, the delete flag is already propagated to it)
+			launchTileFunc(
+				[=] __device__(HATileAccessor<Tile>&acc, uint32_t tile_idx, HATileInfo<Tile>&info) {
+				auto& tile = info.tile();
+				bool to_delete = true;
+				acc.iterateNeighborCoords(info.mTileCoord, [&](const Coord& nb_ijk) {
+					auto ninfo = acc.tileInfoCopy(info.mLevel, nb_ijk);
+					if (ninfo.mType & LEAF) {
+						auto& ntile = ninfo.tile();
+						if (!(ntile.mStatus & DELETE_FLAG)) {
+							to_delete = false;
+						}
+					}
+					});
+				if (to_delete) tile.setMask(DELETE_FLAG, true);
+			},
+				level, GHOST, LAUNCH_LEVEL
+			);
+		}
+
+		//delete tiles with DELETE flag and mark existing COARSEN tiles as leaf
+		std::vector<int> deleted_tiles(mNumLevels, 0);
+		for (int level = 0; level < mNumLevels; level++) {
+			thrust::host_vector<int> stat_h(hNumTiles[level]);
+			thrust::device_vector<int> stat_d = stat_h;
+			auto stat_d_ptr = thrust::raw_pointer_cast(stat_d.data());
+			launchTileFunc(
+				[=] __device__(HATileAccessor<Tile>&acc, uint32_t tile_idx, HATileInfo<Tile>&info) {
+				auto& tile = info.tile();
+				stat_d_ptr[tile_idx] = tile.mStatus;
+			},
+				level, LEAF | NONLEAF | GHOST, LAUNCH_LEVEL
+			);
+			stat_h = stat_d;
+
+			int level_deleted = 0;
+			auto h_acc = hostAccessor();
+			for (int i = 0; i < stat_h.size(); i++) {
+				auto b_ijk = hTileArrays[level][i].mTileCoord;
+				if (stat_h[i] & DELETE_FLAG) {
+					removeTileHost(level, b_ijk);
+					level_deleted++;
+				}
+				else if (stat_h[i] & COARSEN_FLAG) {
+					//note that compressHost will overwrite tile array with hash table
+					//so we need to modify the info in the hash table
+					auto& info = h_acc.tileInfo(level, b_ijk);
+					info.mType = LEAF;
+				}
+			}
+			deleted_tiles[level] = level_deleted;
+		}
+
+		compressHost(verbose);
+		syncHostAndDevice();
+		return deleted_tiles;
+	}
 };
 
 
