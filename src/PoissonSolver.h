@@ -25,7 +25,7 @@ void AddGradientToFaceCenters(HADeviceGrid<Tile>& grid, const int p_channel, con
 
 
 //take alpha=2 to balance laplacian operator, *2 for updating (alpha /=2), resulting alpha=1
-void Restrict(HADeviceGrid<Tile>& grid, const uint8_t fine_channel, const uint8_t coarse_channel, const int coarse_level, const uint8_t launch_types, const T one_over_alpha = 1);
-void Prolongate(HADeviceGrid<Tile>& grid, const uint8_t coarse_channel, const uint8_t fine_channel, const int fine_level, const uint8_t launch_types);
+//void Restrict(HADeviceGrid<Tile>& grid, const uint8_t fine_channel, const uint8_t coarse_channel, const int coarse_level, const uint8_t launch_types, const T one_over_alpha = 1);
+//void Prolongate(HADeviceGrid<Tile>& grid, const uint8_t coarse_channel, const uint8_t fine_channel, const int fine_level, const uint8_t launch_types);
 
 void ReCenterLeafCells(HADeviceGrid<Tile>& grid, const int channel, DeviceReducer<double>& cnt_reducer, double* d_mean, double* d_count);
