@@ -9,4 +9,4 @@ Running args: `.\scenes\smokesphere.json`
 **xmake**
 
     $ xmake -v
-    $ xmake r cirrus .\scenes\smokesphere.json
+    $ xmake r cirrus tests

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Common.h"
+#include "HAGrid.h"
 
 
 enum CellType { DIRICHLET = 0b001, INTERIOR = 0b010, NEUMANN = 0b100, SURFACE = 0b1000 };
@@ -21,11 +22,12 @@ public:
     static constexpr int w_channel = 8;
     static constexpr int vor_channel = 9;//vorticity
 	static constexpr int dye_channel = 10;//dye density
-    static constexpr int num_channels = 11;
-    //static constexpr uint32_t c0_channel = 11;
-    //static constexpr uint32_t c1_channel = 12;
-    //static constexpr uint32_t c2_channel = 13;
-    //static constexpr uint32_t c3_channel = 14;
+    //static constexpr int num_channels = 11;
+    static constexpr uint32_t c0_channel = 11;
+    static constexpr uint32_t c1_channel = 12;
+    static constexpr uint32_t c2_channel = 13;
+    static constexpr uint32_t c3_channel = 14;
+	static constexpr int num_channels = 15;
 
     using T = typename Type;
     using CoordType = typename nanovdb::Coord;
@@ -190,3 +192,9 @@ public:
         return child;
     }
 };
+
+using Tile = PoissonTile<float>;
+using T = Tile::T;
+using Coord = typename Tile::Coord;
+using Vec = Tile::VecType;
+constexpr T NODATA = FLT_MAX;

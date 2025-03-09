@@ -59,7 +59,7 @@ namespace IOFunc {
 
         // 写入简单成员变量
         out.write(reinterpret_cast<const char*>(&holder.mH0), sizeof(holder.mH0));
-        out.write(reinterpret_cast<const char*>(&holder.mNumLayers), sizeof(holder.mNumLayers));
+        out.write(reinterpret_cast<const char*>(&holder.mNumLevels), sizeof(holder.mNumLevels));
         out.write(reinterpret_cast<const char*>(&holder.mMaxLevel), sizeof(holder.mMaxLevel));
 
         // 写入 mHostTiles
@@ -102,7 +102,7 @@ namespace IOFunc {
 
         // 读取简单成员变量
         in.read(reinterpret_cast<char*>(&holder.mH0), sizeof(holder.mH0));
-        in.read(reinterpret_cast<char*>(&holder.mNumLayers), sizeof(holder.mNumLayers));
+        in.read(reinterpret_cast<char*>(&holder.mNumLevels), sizeof(holder.mNumLevels));
         in.read(reinterpret_cast<char*>(&holder.mMaxLevel), sizeof(holder.mMaxLevel));
 
         // 读取 mHostTiles
@@ -558,7 +558,7 @@ namespace IOFunc {
 
         auto acc = grid.hostAccessor();
 
-        for (int level = 0; level < grid.mNumLayers; level++) {
+        for (int level = 0; level < grid.mNumLevels; level++) {
             for (int i = 0; i < grid.hNumTiles[level]; i++) {
                 auto& info = grid.hTileArrays[level][i];
                 if (info.mType & types) {
@@ -597,7 +597,7 @@ namespace IOFunc {
         mesh->setTransparency(0.2);
     }
 
-    void AddLeveledPoissonGridCellCentersToPolyscopePointCloud(std::shared_ptr<HAHostTileHolder<Tile>> holder_ptr, const std::vector<std::pair<int, std::string>> scalar_channels, std::vector<std::pair<int, std::string>> vec_channels, const double invalid_value) {
+    void AddLeveledPoissonGridCellCentersToPolyscopePointCloud(std::shared_ptr<HAHostTileHolder<Tile>> holder_ptr, const std::vector<std::pair<int, std::string>> scalar_channels, std::vector<std::pair<int, std::string>> vec_channels, int level, const double invalid_value) {
         auto& holder = *holder_ptr;
         using Coord = typename Tile::CoordType;
 
@@ -662,10 +662,12 @@ namespace IOFunc {
             }
             };
 
-        for (int level = 0; level <= holder.mMaxLevel; level++) {
-            add_data(level, LEAF, fmt::format("Level{}LEAF", level));
-            add_data(level, GHOST, fmt::format("Level{}GHOST", level));
-            add_data(level, NONLEAF, fmt::format("Level{}NONLEAF", level));
+        int beg = 0, end = holder.mMaxLevel;
+		if (level != -1) beg = end = level;
+        for (int i = beg; i <= end; i++) {
+            add_data(i, LEAF, fmt::format("Level{}LEAF", i));
+            add_data(i, GHOST, fmt::format("Level{}GHOST", i));
+            add_data(i, NONLEAF, fmt::format("Level{}NONLEAF", i));
         }
     }
 

@@ -1,31 +1,37 @@
 add_rules("mode.debug", "mode.release", "mode.releasedbg")
 set_languages("c++17")
 
-includes("./common/xmake.lua")
-
-add_requires("eigen >=3.4.0")
-add_requires("cuda", {system = true})
-add_requires("vtk >=9.3.1", {configs = {cuda = true}})
-add_requires("polyscope =2.3")
-add_requireconfs("polyscope.imgui", {override = true, version = "1.91.1"})
+includes("./src/xmake.lua")
 
 set_rundir("$(projectdir)")
 
+add_requires("magic_enum >=0.9.7")
+
 target("cirrus")
     set_kind("binary")
-    add_headerfiles("src/*.h", "ext/*.h")
-    add_files("src/*.cpp", "src/*.cu")
-    add_includedirs("src", "ext", {public = true})
-    if is_plat("windows") then
-        set_values("build.vcxproj.includes", "$(CUDA_PATH)/include")
-    end
-
+    add_headerfiles("cirrus/*.h")
+    add_files("cirrus/*.cpp", "cirrus/*.cu")
+    add_includedirs("cirrus", {public = true})
     add_cugencodes("native")
-    add_cuflags("-extended-lambda --std=c++17 -lineinfo")
+    add_cuflags("-extended-lambda --std=c++17")
+    add_deps("src")
+    
 
-    add_packages("cuda", {public = true})
-    add_packages("eigen", {public = true})
-    add_packages("vtk", {public = true})
-    add_packages("polyscope", {public = true})
+target("impulse")
+    set_kind("binary")
+    add_headerfiles("impulse/*.h")
+    add_files("impulse/*.cpp", "impulse/*.cu")
+    add_includedirs("impulse", {public = true})
+    add_cugencodes("native")
+    add_cuflags("-extended-lambda --std=c++17")
+    add_deps("src")
 
-    add_deps("common")
+target("tests")
+    set_kind("binary")
+    add_headerfiles("tests/*.h")
+    add_files("tests/*.cpp", "tests/*.cu")
+    add_includedirs("tests", {public = true})
+    add_cugencodes("native")
+    add_cuflags("-std=c++17 --expt-relaxed-constexpr --expt-extended-lambda")
+    add_deps("src")
+    add_packages("magic_enum")

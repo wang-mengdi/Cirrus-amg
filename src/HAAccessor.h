@@ -40,10 +40,10 @@ public:
 		ijk[2] = offset & MASK;
 		return ijk;
 	}
-	__hostdev__ const int localNodeCoordToOffset(const Coord& l_ijk) const {
+	__hostdev__ int localNodeCoordToOffset(const Coord& l_ijk) const {
 		return l_ijk[0] * (DIM + 1) * (DIM + 1) + l_ijk[1] * (DIM + 1) + l_ijk[2];
 	}
-	__hostdev__ const Coord localNodeOffsetToCoord(const int offset) const {
+	__hostdev__ Coord localNodeOffsetToCoord(const int offset) const {
 		return Coord(offset / ((DIM + 1) * (DIM + 1)), (offset % ((DIM + 1) * (DIM + 1))) / (DIM + 1), offset % (DIM + 1));
 	}
 
@@ -191,7 +191,7 @@ public:
 	using Vec = typename Tile::VecType;
 	using T = typename Tile::T;
 
-	int mNumLayers;
+	int mNumLevels;
 	int mMaxLevel;
 
 	uint32_t* mLayerNumTiles;
@@ -203,7 +203,7 @@ public:
 	__hostdev__ HATileAccessor(T h0, uint32_t num_layers, int max_level, uint32_t* layer_num_tiles, uint32_t* layer_log2_hashs,
 		HATileInfo<Tile>** layer_hash_table_ptrs)://, HATileInfo<Tile>** layer_tile_array_ptrs) :
 		HACoordAccessor<Tile>(h0),
-		mNumLayers(num_layers),
+		mNumLevels(num_layers),
 		mMaxLevel(max_level),
 		mLayerNumTiles(layer_num_tiles),
 		mLayerLog2Hashs(layer_log2_hashs),
@@ -222,8 +222,8 @@ public:
 		return result & HASH_MASK;
 	}
 
-	__hostdev__ uint32_t tileIdx(const uint32_t level, const Coord& b_ijk) const {
-		if (level < 0 || level >= mNumLayers) return -1;//invalid
+	__hostdev__ int tileIdx(const int level, const Coord& b_ijk) const {
+		if (level < 0 || level >= mNumLevels) return -1;//invalid
 		auto Log2Hash = mLayerLog2Hashs[level];
 		const uint32_t HASH_MASK = (1u << Log2Hash) - 1u;
 
@@ -243,21 +243,21 @@ public:
 
 	////if doesn't exist, the returned tile info is empty, but with correct level and coord
 	//__hostdev__ HATileInfo<Tile> tileInfo(const uint32_t level, const Coord& b_ijk) const {
-	//	if (level < 0 || level >= mNumLayers) return HATileInfo<Tile>();//return an empty tile info for non-exist level
+	//	if (level < 0 || level >= mNumLevels) return HATileInfo<Tile>();//return an empty tile info for non-exist level
 	//	auto idx = tileIdx(level, b_ijk);
 	//	if (idx == -1) return HATileInfo<Tile>();//return an empty tile info for non-exist tile
 	//	return mLayerHashTablePtrs[level][idx];
 	//}
 
 	//doesn't perform valid check
-	__hostdev__ HATileInfo<Tile>& tileInfo(const uint32_t level, const Coord& b_ijk) const {
+	__hostdev__ HATileInfo<Tile>& tileInfo(const int level, const Coord& b_ijk) const {
 		auto idx = tileIdx(level, b_ijk);
 		return mLayerHashTablePtrs[level][idx];
 	}
 
 	//perform valid check, return an empty tile info for non-exist level
-	__hostdev__ HATileInfo<Tile> tileInfoCopy(const uint32_t level, const Coord& b_ijk) const {
-		if (0 <= level && level < mNumLayers) {
+	__hostdev__ HATileInfo<Tile> tileInfoCopy(const int level, const Coord& b_ijk) const {
+		if (0 <= level && level < mNumLevels) {
 			auto idx = tileIdx(level, b_ijk);
 			return mLayerHashTablePtrs[level][idx];
 		}
@@ -266,13 +266,13 @@ public:
 		}
 	}
 
-	__hostdev__ bool probeTile(const uint32_t layer, const Coord& b_ijk) const {
-		HATileInfo<Tile> info = tileInfo(layer, b_ijk);
+	__hostdev__ bool probeTile(const int level, const Coord& b_ijk) const {
+		HATileInfo<Tile> info = tileInfo(level, b_ijk);
 		return !info.empty();
 	}
 
-	__hostdev__ bool findVoxel(const uint32_t level, const Coord& g_ijk, HATileInfo<Tile>& tile_info, Coord& l_ijk) const {
-		if (level < 0 || level >= mNumLayers) {
+	__hostdev__ bool findVoxel(const int level, const Coord& g_ijk, HATileInfo<Tile>& tile_info, Coord& l_ijk) const {
+		if (level < 0 || level >= mNumLevels) {
 			tile_info = HATileInfo<Tile>();//return an empty tile info for non-exist level
 			return false;
 		}
@@ -314,50 +314,6 @@ public:
 				if (nb_info.mType & (LEAF)) break;
 			}
 			//if can't find, just return nb_info (which is empty)
-		}
-	}
-
-	//here l_ijk is node local coord, it can be in [0,8], and the coordinate calculation is correct
-	//each component in off is either -1 or 0, indicating the cell just lower or the cell just upper
-	//will try to find the neighbor cell, that:
-	//must be LEAF or GHOST
-	//is at the finest level
-	__hostdev__ void findNodeNeighborLeafOrGhost(const HATileInfo<Tile>& info, const Coord& l_ijk, const Coord& off, HATileInfo<Tile>& nb_info, Coord& nb_l_ijk) const {
-		Coord g_ijk = composeGlobalCoord(info.mTileCoord, l_ijk);
-		Coord nb_g_ijk = g_ijk + off;
-
-		int level = info.mLevel;
-		findVoxel(level, nb_g_ijk, nb_info, nb_l_ijk);
-
-		//from coarse to fine: NONLEAF, NONLEAF, NONLEAF..., LEAF, [GHOST], EMPTY, EMPTY, ...
-
-		if (!nb_info.empty()) {
-			//should go down
-			HATileInfo<Tile> tmp_info; Coord tmp_l_ijk;
-			while (level <= mMaxLevel) {
-				Coord child_offset(0, 0, 0);
-				//if off is -1, the child offset is 1, because we are looking for the face just lower
-				//if off is 0, the child offset is 0, because we are looking for the face just upper
-				child_offset[0] = (off[0] == 0) ? 0 : 1;
-				child_offset[1] = (off[1] == 0) ? 0 : 1;
-				child_offset[2] = (off[2] == 0) ? 0 : 1;
-				nb_g_ijk = childCoord(nb_g_ijk, child_offset);
-				findVoxel(++level, nb_g_ijk, tmp_info, tmp_l_ijk);
-				if (tmp_info.empty()) break;
-				//the last recorded nb_info, nb_l_ijk is the correct one
-				//it must be either LEAF or GHOST
-				nb_info = tmp_info;
-				nb_l_ijk = tmp_l_ijk;
-			}
-		}
-		else {
-			//should go up
-			while (level > 0) {
-				nb_g_ijk = parentCoord(nb_g_ijk);
-				findVoxel(--level, nb_g_ijk, nb_info, nb_l_ijk);
-				//if (nb_info.isLeaf()) break;
-				if (nb_info.mType & (LEAF | GHOST)) break;
-			}
 		}
 	}
 

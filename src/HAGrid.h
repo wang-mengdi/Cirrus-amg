@@ -23,6 +23,9 @@ public:
 	size_t temp_bytes_max;                   // 最大值临时存储空间字节数
 
 	DeviceReducer() : n(0), temp_bytes_sum(0), temp_bytes_max(0) {}
+	DeviceReducer(size_t len) {
+		resize(len);
+	}
 
 	T* data(void) {
 		return thrust::raw_pointer_cast(d_data.data());
@@ -51,11 +54,37 @@ public:
 		}
 	}
 
+	T sumSync(void) {
+		T* d_result;
+		cudaMalloc((void**)&d_result, sizeof(T));
+		if (n > 0) {
+			cub::DeviceReduce::Sum(thrust::raw_pointer_cast(d_temp_sum.data()), temp_bytes_sum, data(), d_result, n);
+			CheckCudaError("DeviceReducer: cub::DeviceReduce::Sum");
+		}
+		T result;
+		cudaMemcpy(&result, d_result, sizeof(T), cudaMemcpyDeviceToHost);
+		cudaFree(d_result);
+		return result;
+	}
+
 	void maxAsyncTo(T* d_result) {
 		if (n > 0) {
 			cub::DeviceReduce::Max(thrust::raw_pointer_cast(d_temp_max.data()), temp_bytes_max, data(), d_result, n);
 			CheckCudaError("DeviceReducer: cub::DeviceReduce::Max");
 		}
+	}
+
+	T maxSync(void) {
+		T* d_result;
+		cudaMalloc((void**)&d_result, sizeof(T));
+		if (n > 0) {
+			cub::DeviceReduce::Max(thrust::raw_pointer_cast(d_temp_max.data()), temp_bytes_max, data(), d_result, n);
+			CheckCudaError("DeviceReducer: cub::DeviceReduce::Max");
+		}
+		T result;
+		cudaMemcpy(&result, d_result, sizeof(T), cudaMemcpyDeviceToHost);
+		cudaFree(d_result);
+		return result;
 	}
 
 	void printData() const {
@@ -78,7 +107,7 @@ public:
 	using T = typename Tile::T;
 
 	T mH0;
-	int mNumLayers;
+	int mNumLevels;
 	int mMaxLevel;
 
 	std::vector<Tile> mHostTiles;
@@ -86,7 +115,7 @@ public:
 
 	HAHostTileHolder() {}
 	HAHostTileHolder(const T h0, const int num_layers, const int max_level) :
-		mH0(h0), mNumLayers(num_layers), mMaxLevel(max_level)
+		mH0(h0), mNumLevels(num_layers), mMaxLevel(max_level)
 	{
 		mHostLevels.resize(num_layers);
 	}
@@ -211,7 +240,7 @@ public:
 
 	cudaStream_t mStream;
 	T mH0;
-	uint32_t mNumLayers = 0;
+	uint32_t mNumLevels = 0;
 	int mMaxLevel;
 
 	bool mCompressedFlag = true;
@@ -256,7 +285,7 @@ public:
 
 	HADeviceGrid() :
 		mH0(0),
-		mNumLayers(0),
+		mNumLevels(0),
 		mMaxLevel(-1),
 		mCompressedFlag(true)
 	{
@@ -270,19 +299,19 @@ public:
 	{
 		cudaStreamCreate(&mStream);
 
-		mNumLayers = levels_log2_hash.size();
+		mNumLevels = levels_log2_hash.size();
 
-		hNumTiles.resize(mNumLayers);
-		hLog2Hashes.resize(mNumLayers);
-		hHashTables.resize(mNumLayers);
-		hTileArrays.resize(mNumLayers);
-		hHashTablePtrs.resize(mNumLayers);
-		//hTileArrayPtrs.resize(mNumLayers);
+		hNumTiles.resize(mNumLevels);
+		hLog2Hashes.resize(mNumLevels);
+		hHashTables.resize(mNumLevels);
+		hTileArrays.resize(mNumLevels);
+		hHashTablePtrs.resize(mNumLevels);
+		//hTileArrayPtrs.resize(mNumLevels);
 
 		//hLog2Hashes = std::vector<uint32_t>(levels_log2_hash);
 		hLog2Hashes = levels_log2_hash;
 
-		for (int i = 0; i < mNumLayers; i++) {
+		for (int i = 0; i < mNumLevels; i++) {
 			hNumTiles[i] = 0;
 			hHashTables[i].resize(1u << hLog2Hashes[i]);
 			hTileArrays[i].resize(1u << hLog2Hashes[i]);
@@ -301,7 +330,7 @@ public:
 
 	~HADeviceGrid() {
 		Assert(mCompressedFlag, "Grid must be compressed before destruction");
-		for (int i = 0; i < mNumLayers; i++) {
+		for (int i = 0; i < mNumLevels; i++) {
 			for (int j = 0; j < hNumTiles[i]; j++) {
 				auto info = hTileArrays[i][j];
 				if (!info.empty()) {
@@ -315,12 +344,12 @@ public:
 
 	void setTilesFromHolder(const HAHostTileHolder<Tile>& holder) {
 		Assert(mCompressedFlag, "setTilesFromHolder requires compressed grid");
-		Assert(holder.mNumLayers == mNumLayers, "setTilesFromHolder: num layers mismatch");
+		Assert(holder.mNumLevels == mNumLevels, "setTilesFromHolder: num layers mismatch");
 		mH0 = holder.mH0;
-		mNumLayers = holder.mNumLayers;
+		mNumLevels = holder.mNumLevels;
 		mMaxLevel = holder.mMaxLevel;
 		mCompressedFlag = false;
-		for (int i = 0; i < mNumLayers; i++) {
+		for (int i = 0; i < mNumLevels; i++) {
 			hNumTiles[i] = holder.mHostLevels[i].size();
 			for (int j = 0; j < hNumTiles[i]; j++) {
 				auto& info = holder.mHostLevels[i][j];
@@ -346,26 +375,14 @@ public:
 		}
 		grid1.compressHost();
 		grid1.syncHostAndDevice();
-		SpawnGhostTiles(grid1);
+		grid1.spawnGhostTiles();
 		return ptr;
-
-
-		//double h = 1.0 / 8;
-		//auto grid_ptr = std::make_shared<HADeviceGrid<Tile> >(h, std::initializer_list<uint32_t>({ 16, 16, 16, 16, 16, 16, 18, 16, 16, 16 }));
-		//auto& grid = *grid_ptr;
-
-		//	grid.setTileHost(0, nanovdb::Coord(0, 0, 0), Tile(), LEAF);
-		//	grid.setTileHost(0, nanovdb::Coord(1, 0, 0), Tile(), LEAF);
-		//grid.compressHost();
-		//grid.syncHostAndDevice();
-		//SpawnGhostTiles(grid);
-		//return grid_ptr;
 	}
 
 	int numTotalTiles(void) const {
 		Assert(mCompressedFlag, "numTotalTiles requires compressed grid");
 		int num = 0;
-		for (int i = 0; i < mNumLayers; i++) {
+		for (int i = 0; i < mNumLevels; i++) {
 			num += hNumTiles[i];
 		}
 		return num;
@@ -373,7 +390,7 @@ public:
 	int numTotalLeafTiles(void) const {
 		Assert(mCompressedFlag, "numTotalLeafs requires compressed grid");
 		int num = 0;
-		for (int i = 0; i < mNumLayers; i++) {
+		for (int i = 0; i < mNumLevels; i++) {
 			for (int j = 0; j < hNumTiles[i]; j++) {
 				if (hTileArrays[i][j].isLeaf()) num++;
 			}
@@ -432,7 +449,7 @@ public:
 
 	std::shared_ptr<HAHostTileHolder<Tile>> getHostTileHolder(const uint8_t tile_types, int max_level = -1) {
 		if (max_level == -1) max_level = mMaxLevel;
-		auto holder = std::make_shared<HAHostTileHolder<Tile>>(mH0, mNumLayers, mMaxLevel);
+		auto holder = std::make_shared<HAHostTileHolder<Tile>>(mH0, mNumLevels, mMaxLevel);
 		holder->mHostTiles.clear();
 		int num_leafs = 0;
 		for (int i = 0; i <= max_level; i++) {
@@ -468,7 +485,7 @@ public:
 	int maxProbeLength(void) {
 		auto h_acc = hostAccessor();
 		int max_len = 0;
-		for (int i = 0; i < mNumLayers; i++) {
+		for (int i = 0; i < mNumLevels; i++) {
 			for (int j = 0; j < hNumTiles[i]; j++) {
 				auto info = hTileArrays[i][j];
 				auto hash_idx = h_acc.hash(info.mTileCoord, hLog2Hashes[i]);
@@ -482,7 +499,7 @@ public:
 
 	int hashTableDeviceBytes(void) {
 		int total_bytes = 0;
-		for (int i = 0; i < mNumLayers; i++) {
+		for (int i = 0; i < mNumLevels; i++) {
 			total_bytes += dHashTables[i].size() * sizeof(HATileInfo<Tile>);
 		}
 		return total_bytes;
@@ -491,7 +508,7 @@ public:
 	void compressHost(bool verbose = true) {
 		std::vector<int> load_rate;
 		mMaxLevel = -1;
-		for (int i = 0; i < mNumLayers; i++) {
+		for (int i = 0; i < mNumLevels; i++) {
 			hNumTiles[i] = thrust::copy_if(
 				hHashTables[i].begin(), hHashTables[i].end(),
 				hTileArrays[i].begin(),
@@ -503,7 +520,7 @@ public:
 		}
 		mCompressedFlag = true;
 		if (verbose) {
-			Info("Grid compressed {} layers, with each {} tiles and load rate {}/%", mNumLayers, hNumTiles, load_rate);
+			Info("Grid compressed {} layers, with each {} tiles and load rate {}/%", mNumLevels, hNumTiles, load_rate);
 			Info("Max probe length: {}", maxProbeLength());
 		}
 	}
@@ -512,16 +529,16 @@ public:
 
 		dNumTiles = hNumTiles;
 		dLog2Hashes = hLog2Hashes;
-		dHashTables.resize(mNumLayers);
-		dTileArrays.resize(mNumLayers);
-		for (int i = 0; i < mNumLayers; i++) {
+		dHashTables.resize(mNumLevels);
+		dTileArrays.resize(mNumLevels);
+		for (int i = 0; i < mNumLevels; i++) {
 			dHashTables[i] = hHashTables[i];
 			dTileArrays[i] = hTileArrays[i];
 		}
 
 		thrust::host_vector<HATileInfo<Tile>*> host_layer_hash_table_ptrs;
 		//thrust::host_vector<HATileInfo<Tile>*> host_layer_tile_array_ptrs;
-		for (int i = 0; i < mNumLayers; i++) {
+		for (int i = 0; i < mNumLevels; i++) {
 			host_layer_hash_table_ptrs.push_back(thrust::raw_pointer_cast(dHashTables[i].data()));
 			//host_layer_tile_array_ptrs.push_back(thrust::raw_pointer_cast(dTileArrays[i].data()));
 		}
@@ -536,7 +553,7 @@ public:
 		//thrust::host_vector<HATileInfo<Tile>> hAllTiles;
 
 		hAllTiles.clear();
-		for (int layer = 0; layer < mNumLayers; layer++) {
+		for (int layer = 0; layer < mNumLevels; layer++) {
 			for (int j = 0; j < hNumTiles[layer]; j++) {
 				const HATileInfo<Tile>& info = hTileArrays[layer][j];
 				//push leaf tiles
@@ -560,18 +577,45 @@ public:
 		mDeviceSyncFlag = true;
 	}
 
-	//template<class FuncB>
-	//void iterateLeafTiles(FuncB f) {
-	//	Assert(mCompressedFlag, "iterateLeafTiles requires compressed grid");
-	//	for (int level = 0; level <= mMaxLevel; level++) {
-	//		for (int i = 0; i < hNumTiles[level]; i++) {
-	//			HATileInfo<Tile>& info = hTileArrays[level][i];
-	//			if (info.mType & LEAF) {
-	//				f(info);
-	//			}
-	//		}
-	//	}
-	//}
+	void spawnGhostTiles(bool verbose = false) {
+		using Acc = HACoordAccessor<Tile>;
+		//note that we will NOT spawn ghost tiles on level 0
+		//because it's the root level, and they will not have parents
+		Assert(mCompressedFlag, "Grid must be compressed and synced before spawn ghost tiles");
+		auto h_acc = hostAccessor();
+		for (int level = mMaxLevel; level > 0; level--) {
+			for (int i = 0; i < hNumTiles[level]; i++) {
+				auto& info = hTileArrays[level][i];
+				if (info.isActive()) {
+					Coord b_ijk = info.mTileCoord;
+					Acc::iterateNeighborCoords(b_ijk, [&](const Coord& n_ijk) {
+						auto& n_info = h_acc.tileInfo(level, n_ijk);
+						//auto& n_info = grid.mHostLayers[level].tileInfo(n_ijk);
+						if (n_info.empty()) {
+							Coord p_ijk = Acc::parentCoord(n_ijk);
+							auto& p_info = h_acc.tileInfo(level - 1, p_ijk);
+							//auto& p_info = grid.mHostLayers[level - 1].tileInfo(p_ijk);
+							if (p_info.isLeaf()) {
+								setTileHost(level, n_ijk, Tile(), GHOST);
+								//grid.mHostLayers[level].setTile(n_ijk, Tile(), level, GHOST);
+							}
+						}
+						}
+					);
+				}
+			}
+		}
+		compressHost(verbose);
+		syncHostAndDevice();
+	}
+
+	//should be called after each topology change
+	void rebuild(bool verbose = false) {
+		compressHost(verbose);
+		//syncHostAndDevice();
+		spawnGhostTiles(verbose);
+
+	}
 
 	template<class FuncABC>
 	void launchVoxelFunc(FuncABC f, int level, const uint8_t launch_types, LaunchMode mode = LAUNCH_LEVEL, const LaunchOrder order = COARSE_FIRST, const int num_groups = 1) {
@@ -600,7 +644,7 @@ public:
 				Info("launchVoxelFunc level=-1, overwrite mode=LAUNCH_SUBTREE");
 			}
 			mode = LAUNCH_SUBTREE;
-			level = mNumLayers - 1;
+			level = mNumLevels - 1;
 		}
 		int start, end, step;
 		if (mode == LAUNCH_LEVEL) start = level, end = level + 1, step = 1;
@@ -657,7 +701,7 @@ public:
 				Info("launchVoxelFunc level=-1, overwrite mode=LAUNCH_SUBTREE");
 			}
 			mode = LAUNCH_SUBTREE;
-			level = mNumLayers - 1;
+			level = mNumLevels - 1;
 		}
 		int start, end, step;
 		if (mode == LAUNCH_LEVEL) start = level, end = level + 1, step = 1;
@@ -695,7 +739,7 @@ public:
 
 		if (level == -1) {
 			mode = LAUNCH_SUBTREE;
-			level = mNumLayers - 1;
+			level = mNumLevels - 1;
 		}
 		int start, end, step;
 		if (mode == LAUNCH_LEVEL) start = level, end = level + 1, step = 1;
@@ -721,7 +765,7 @@ public:
 	HATileAccessor<Tile> hostAccessor(void) {
 		return HATileAccessor<Tile>(
 			mH0,
-			mNumLayers,
+			mNumLevels,
 			mMaxLevel,
 			thrust::raw_pointer_cast(hNumTiles.data()),
 			thrust::raw_pointer_cast(hLog2Hashes.data()),
@@ -734,7 +778,7 @@ public:
 	HATileAccessor<Tile> deviceAccessor(void) {
 		return HATileAccessor<Tile>(
 			mH0,
-			mNumLayers,
+			mNumLevels,
 			mMaxLevel,
 			thrust::raw_pointer_cast(dNumTiles.data()),
 			thrust::raw_pointer_cast(dLog2Hashes.data()),

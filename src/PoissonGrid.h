@@ -1,13 +1,9 @@
 #pragma once
 
-#include "HAGrid.h"
+//#include "HAGrid.h"
 #include "PoissonTile.h"
 
-using Tile = PoissonTile<float>;
-using T = Tile::T;
-using Coord = typename Tile::Coord;
-using Vec = Tile::VecType;
-constexpr T NODATA = FLT_MAX;
+
 
 
 template <class T, typename Func3>
@@ -28,8 +24,6 @@ void TernaryOnArray(T* d_a, T* d_b, T* d_c, Func3 f, int n = 1, int block_size =
     TernaryOnArrayKernel << <numBlocks, block_size >> > (d_a, d_b, d_c, f, n);
 }
 
-__host__ void SpawnGhostTiles(HADeviceGrid<Tile>& grid, bool verbose = true);
-
 template<class ABFunc>
 __host__ std::vector<int> RefineLeafsOneStep(HADeviceGrid<Tile>& grid, ABFunc level_target, bool verbose) {
     //must be called after ghost tiles are properly spawned
@@ -37,7 +31,7 @@ __host__ std::vector<int> RefineLeafsOneStep(HADeviceGrid<Tile>& grid, ABFunc le
     //this may need to be called multiple times to reach the target level
     Assert(grid.mDeviceSyncFlag, "Grid must be synced before refine step");
 
-    std::vector<int> level_refine_cnts(grid.mNumLayers, 0);
+    std::vector<int> level_refine_cnts(grid.mNumLevels, 0);
 
     for (int i = grid.mMaxLevel; i >= 0; i--) {
         thrust::host_vector<int> refine_host(grid.hNumTiles[i]);
@@ -78,7 +72,7 @@ __host__ std::vector<int> RefineLeafsOneStep(HADeviceGrid<Tile>& grid, ABFunc le
             }
 
             //we will not refine if the maximum capacity of levels is reached
-            if (i + 1 >= acc.mNumLayers) to_refine = false;
+            if (i + 1 >= acc.mNumLevels) to_refine = false;
             tile.setMask(REFINE_FLAG, to_refine);
             refine_flg_dev_ptr[tile_idx] = to_refine;
         },
@@ -126,28 +120,8 @@ __host__ std::vector<int> RefineLeafsOneStep(HADeviceGrid<Tile>& grid, ABFunc le
                     Coord offset = Acc::childIndexToOffset(ci);
 					Coord c_ijk = Acc::childCoord(info.mTileCoord, offset);
 
-                    //if (info.mLevel == 2 && info.mTileCoord == Coord(0, 1, 3)) {
-                    //    Info("refine tile {} to ci {} offset {} c_ijk {}", info.mTileCoord, ci, offset, c_ijk);
-                    //}
-
                     grid.setTileHost(i + 1, c_ijk, tile.childTile(offset), LEAF);
                 }
-
-                //Acc::iterateChildCoords(info.mTileCoord,
-                //    [&](const Coord& c_ijk) {
-                //        //auto& c_info = grid.mHostLayers[i + 1].tileInfo(c_ijk);
-                //        auto& c_info = h_acc.tileInfo(i + 1, c_ijk);
-                //        if (c_info.empty()) {
-                //            //create a new tile
-                //            grid.setTileHost(i + 1, c_ijk, tile.childTile(), LEAF);
-                //            //grid.mHostLayers[i + 1].setTile(c_ijk, Tile(), i + 1, LEAF);
-                //        }
-                //        else {
-                //            //already created (for example, may be a ghost tile), set it to leaf
-                //            c_info.mType = LEAF;
-                //        }
-                //    });
-
             }
         }
 
@@ -167,7 +141,7 @@ std::vector<int> CoarsenStep(HADeviceGrid<Tile>& grid, ABFunc level_target, bool
     //DELETE_FLAG means you can delete the tile itself
 
     //upstroke from fine to coarse, calculate COARSEN flags based on DELETE flags
-    for (int level = grid.mNumLayers - 1; level >= 0; level--) {
+    for (int level = grid.mNumLevels - 1; level >= 0; level--) {
         //mark DELETE flag for leaf tiles and COARSEN flag for non-leaf tiles
         //we're not launching GHOST here
         //if there is a same-level neighbor NONLEAF tile that can't be coarsen, we can't delete a LEAF
@@ -224,7 +198,7 @@ std::vector<int> CoarsenStep(HADeviceGrid<Tile>& grid, ABFunc level_target, bool
     }
 
     //downstroke from coarse to fine, propagate DELETE flags from COARSEN flags
-    for (int level = 0; level < grid.mNumLayers; level++) {
+    for (int level = 0; level < grid.mNumLevels; level++) {
         //3: propagate DELETE flags for LEAF and GHOST based on COASREN flags
         //in the upstroke pass, COARSEN flag is calculated on all NONLEAF tiles and unset on all LEAF tiles
         //if a tile is marked as COARSEN, we can delete its children and mark it as LEAF
@@ -274,8 +248,8 @@ std::vector<int> CoarsenStep(HADeviceGrid<Tile>& grid, ABFunc level_target, bool
     }
 
     //delete tiles with DELETE flag and mark existing COARSEN tiles as leaf
-    std::vector<int> deleted_tiles(grid.mNumLayers, 0);
-    for (int level = 0; level < grid.mNumLayers; level++) {
+    std::vector<int> deleted_tiles(grid.mNumLevels, 0);
+    for (int level = 0; level < grid.mNumLevels; level++) {
         thrust::host_vector<int> stat_h(grid.hNumTiles[level]);
         thrust::device_vector<int> stat_d = stat_h;
         auto stat_d_ptr = thrust::raw_pointer_cast(stat_d.data());
@@ -316,7 +290,7 @@ template<class ABFunc>
 void IterativeRefine(HADeviceGrid<Tile>& grid, ABFunc level_target, bool verbose = true) {
     while (true) {
         auto refine_cnts = RefineLeafsOneStep(grid, level_target, verbose);
-        SpawnGhostTiles(grid, verbose);
+        grid.spawnGhostTiles(verbose);
         if (verbose) Info("Refine {} tiles on each layer", refine_cnts);
         auto cnt = std::accumulate(refine_cnts.begin(), refine_cnts.end(), 0);
         if (cnt == 0) break;
@@ -356,47 +330,6 @@ void BinaryTransform(HADeviceGrid<Tile>& grid, const int in1_channel, const int 
     );
 }
 
-//apply d[i]=f(a[i],b[i],c[i]) on all interior voxels
-template<class BinaryOP>
-void TernaryTransform(HADeviceGrid<Tile>& grid, const int in1_channel, const int in2_channel, const int in3_channel, const int out_channel, BinaryOP f, const int level, const uint8_t launch_types, const LaunchMode mode, const uint8_t cell_types = INTERIOR) {
-    grid.launchVoxelFunc(
-        [=]__device__(HATileAccessor<Tile>&acc, HATileInfo<Tile>&info, const Coord & l_ijk) {
-        auto& tile = info.tile();
-        if (tile.type(l_ijk) & cell_types) {
-            tile(out_channel, l_ijk) = f(tile(in1_channel, l_ijk), tile(in2_channel, l_ijk), f(in3_channel, l_ijk));
-        }
-    },
-        level, launch_types, mode
-    );
-}
-
-template<class OP2>
-void ApplyElementWiseFunc2(HADeviceGrid<Tile>& grid, const int chn0, const int chn1, OP2 f, const int level, const uint8_t launch_types, const LaunchMode mode, const uint8_t cell_types = INTERIOR) {
-    grid.launchVoxelFunc(
-        [=]__device__(HATileAccessor<Tile>&acc, HATileInfo<Tile>&info, const Coord & l_ijk) {
-        auto& tile = info.tile();
-        if (tile.type(l_ijk) & cell_types) {
-            f(tile(chn0, l_ijk), tile(chn1, l_ijk));
-        }
-    },
-        level, launch_types, mode
-    );
-}
-
-
-template<class OP4>
-void ApplyElementWiseFunc4(HADeviceGrid<Tile>& grid, const int chn0, const int chn1, const int chn2, const int chn3, OP4 f, const int level, const uint8_t launch_types, const LaunchMode mode, const uint8_t cell_types = INTERIOR) {
-    grid.launchVoxelFunc(
-        [=]__device__(HATileAccessor<Tile>&acc, HATileInfo<Tile>&info, const Coord & l_ijk) {
-        auto& tile = info.tile();
-        if (tile.type(l_ijk) & cell_types) {
-            f(tile(chn0, l_ijk), tile(chn1, l_ijk), tile(chn2, l_ijk), tile(chn3, l_ijk));
-        }
-    },
-        level, launch_types, mode
-    );
-}
-
 void CalculateNeighborTiles(HADeviceGrid<Tile>& grid);
 
 void Copy(HADeviceGrid<Tile>& grid, const int in_channel, const int out_channel, const int level, const uint8_t launch_types, const LaunchMode mode, const uint8_t cell_types = INTERIOR);
@@ -407,14 +340,10 @@ void Axpy(HADeviceGrid<Tile>& grid, const Tile::T alpha, const uint8_t in_channe
 
 void DotAsync(double* d_result, HADeviceGrid<Tile>& grid, const uint8_t in1_channel, const uint8_t in2_channel, const uint8_t launch_tile_types);
 double Dot(HADeviceGrid<Tile>& grid, const uint8_t in1_channel, const uint8_t in2_channel, const uint8_t launch_tile_types);
-//double VelocityLinf(HADeviceGrid<Tile>& grid, const uint8_t u_channel, int level, const uint8_t launch_types, LaunchMode mode);
-double VelocityLinfSync(HADeviceGrid<Tile>& grid, const int u_channel, const uint8_t launch_tile_types);
-std::tuple<double, double> VolumeWeightedSumAndVolume(HADeviceGrid<Tile>& grid, const int order, const int in_channel, int level, const uint8_t launch_types, LaunchMode mode);
-double VolumeWeightedNorm(HADeviceGrid<Tile>& grid, const int order, const int in_channel, int level = -1, const uint8_t launch_types = LEAF, LaunchMode mode = LAUNCH_SUBTREE);
+__global__ void ChannelPowerSumKernel128(const int order, HATileAccessor<PoissonTile<T>> acc, HATileInfo<PoissonTile<T>>* infos, int subtree_level, uint8_t launch_tile_types, const int in_channel, double* value_sum, double* weights_sum, bool volume_weighted, bool use_abs, uint8_t launch_cell_types);
+double NormSync(HADeviceGrid<Tile>& grid, const int order, const int in_channel, bool volume_weighted, uint8_t launch_cell_types = INTERIOR);
 
-void MeanAsync(HADeviceGrid<Tile>& grid, const int in_channel, const uint8_t launch_tile_types, double* d_mean, double* d_count);
-
-void PropagateValuesToGhostTiles(HADeviceGrid<Tile>& grid, const int coarse_channel, const int fine_channel);
+//THIS FUNCTION SHOULD BE DEPRECATED
 //In general, cell values can be propagated and accumulated casually
 //however, we have to take caution when propagating and accumulating face values
 //because 
@@ -432,7 +361,9 @@ void PropagateToChildren(HADeviceGrid<Tile>& grid, const int coarse_channel, con
 //if additive, will add to parent value, otherwise will overwrite parent value
 void AccumulateToParents(HADeviceGrid<Tile>& grid, const int fine_channel, const int coarse_channel, const int target_subtree_level, const uint8_t target_tile_types, const LaunchMode mode, const uint8_t cell_types, const Tile::T coeff, bool additive);
 
-void AccumulateToParents128(HADeviceGrid<Tile>& grid, const int fine_channel, const int coarse_channel, const uint8_t fine_tile_types, const Tile::T coeff, bool additive, uint8_t cell_types);
+void AccumulateToParentsOneStep(HADeviceGrid<Tile>& grid, const int fine_channel, const int coarse_channel, const uint8_t fine_tile_types, const Tile::T coeff, bool additive, uint8_t cell_types);
+__global__ void AccumulateFacesToParentsOneStepKernel(HATileAccessor<Tile> acc, HATileInfo<Tile>* fine_tiles, int fine_subtree_level, uint8_t fine_tile_types, int fine_u_channel, int coarse_u_channel, Tile::T coeff, bool additive, uint8_t cell_types);
+void AccumulateFacesToParentsOneStep(HADeviceGrid<Tile>& grid, const int fine_u_channel, const int coarse_u_channel, const uint8_t fine_tile_types, const Tile::T coeff, bool additive, uint8_t cell_types);
 
 //tricky thing: there are two possibilities: (1) ghost tiles do not contain valid data, (2) ghost-leaf faces contain valid data
 //for (1), you need to (a) propagate faces before calculating velocity nodes, (b) use findNodeNeighborLeaf in CalcLeafNodeValuesFromFaceCenters
@@ -443,8 +374,6 @@ void CalcLeafNodeValuesFromCellCenters(HADeviceGrid<Tile>& grid, const int cell_
 
 __device__ Tile::T InterpolateCellValue(const HATileAccessor<Tile>& acc, const Vec& pos, const int cell_channel, const int node_channel);
 __device__ Vec InterpolateFaceValue(const HATileAccessor<Tile>& acc, const Vec& pos, const int u_channel, const int node_u_channel);
-
-__device__ thrust::tuple<uint8_t, uint8_t> FaceNeighborCellTypes(const HATileAccessor<Tile>& acc, const HATileInfo<Tile>& info, const Coord& l_ijk, const int axis);
 
 template<class FuncII>
 __hostdev__ void IterateFaceNeighborCellTypes(const HATileAccessor<Tile>& acc, const HATileInfo<Tile>& info, const Coord& l_ijk, const int axis, FuncII f) {
@@ -488,5 +417,5 @@ __hostdev__ void IterateFaceNeighborCellTypes(const HATileAccessor<Tile>& acc, c
 
 void ExtrapolateVelocity(HADeviceGrid<Tile>& grid, const int u_channel, const int num_iters);
 
-int RefineWithValuesOneStep(HADeviceGrid<Tile>& grid, int channel, T threshold, int coarse_level, int fine_level, bool verbose);
-int CoarsenWithValueneStep(HADeviceGrid<Tile>& grid, int channel, T threshold, int coarse_level, int fine_level, bool verbose);
+//int RefineWithValuesOneStep(HADeviceGrid<Tile>& grid, int channel, T threshold, int coarse_level, int fine_level, bool verbose);
+//int CoarsenWithValueneStep(HADeviceGrid<Tile>& grid, int channel, T threshold, int coarse_level, int fine_level, bool verbose);

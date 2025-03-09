@@ -6,43 +6,9 @@
 #include <cub/cub.cuh>
 #include <thrust/remove.h>
 #include <polyscope/polyscope.h>
-#include "FluidEuler.h"
+//#include "FluidEuler.h"
 #include <cub/cub.cuh>
 #include <cub/device/device_scan.cuh>
-
-
-void GenerateParticlesWithDyeDensity(std::shared_ptr<HAHostTileHolder<Tile>> holder_ptr, const int channel, const T threshold, const int number_particles_per_cell, thrust::device_vector<Particle>& particles_d) {
-	auto& holder = *holder_ptr;
-	thrust::host_vector<Particle> particles_h;
-
-	auto acc = holder.coordAccessor();
-	holder.iterateLeafCells(
-		[&](HATileInfo<Tile>& info, const Coord& l_ijk) {
-			auto& tile = info.tile();
-			if (tile(channel, l_ijk) >= threshold) {
-				auto bbox = acc.voxelBBox(info, l_ijk);
-				auto minPoint = bbox.min();
-				auto maxPoint = bbox.max();
-
-				RandomGenerator rng;
-				for (int i = 0; i < number_particles_per_cell; i++) {
-					auto x = rng.uniform(minPoint[0], maxPoint[0]);
-					auto y = rng.uniform(minPoint[1], maxPoint[1]);
-					auto z = rng.uniform(minPoint[2], maxPoint[2]);
-
-					Particle p;
-					p.pos = Vec(x, y, z);
-					p.impulse = Vec(0., 0., 0.);
-					p.matT = Eigen::Matrix3<T>::Identity();
-					p.start_time = -1;
-					particles_h.push_back(p);
-				}
-			}
-		}
-	);
-	particles_d = particles_h;
-}
-
 
 void GenerateParticlesUniformlyWithChannelValueOnLevel(std::shared_ptr<HAHostTileHolder<Tile>> holder_all_ptr, const int level, const int channel, const T threshold, const uint8_t sampled_tile_types, const int scale_ratio, thrust::device_vector<Particle>& particles_d) {
 	auto& holder_all = *holder_all_ptr;
@@ -113,36 +79,6 @@ void GenerateParticlesRandomlyInVoxels(
 
 	particles_d = particles_h;
 }
-
-
-//void GenerateParticlesUniformlyOnFinestLevel(std::shared_ptr<HAHostTileHolder<Tile>> holder_ptr, const int scale_ratio, thrust::device_vector<Particle>& particles_d) {
-//	auto& holder = *holder_ptr;
-//	thrust::host_vector<Particle> particles_h;
-//
-//	auto acc = holder.coordAccessor();
-//	holder.iterateLeafCells(
-//		[&](HATileInfo<Tile>& info, const Coord& l_ijk) {
-//			auto& tile = info.tile();
-//			if (info.mLevel == holder.mMaxLevel) {
-//				auto bbox = acc.voxelBBox(info, l_ijk);
-//				auto p_dx = acc.voxelSize(info) / scale_ratio;
-//				for (int i = 0; i < scale_ratio; i++) {
-//					for (int j = 0; j < scale_ratio; j++) {
-//						for (int k = 0; k < scale_ratio; k++) {
-//							Vec pos = bbox.min() + Vec(i, j, k) * p_dx;
-//							Particle p;
-//							p.pos = pos;
-//							p.impulse = Vec(0., 0., 0.);
-//							p.matT = Eigen::Matrix3<T>::Identity();
-//							particles_h.push_back(p);
-//						}
-//					}
-//				}
-//			}
-//		}
-//	);
-//	particles_d = particles_h;
-//}
 
 void GenerateParticlesUniformlyOnGivenLevel(std::shared_ptr<HAHostTileHolder<Tile>> holder_all_ptr, const int level, const uint8_t sampled_tile_types, const int scale_ratio, thrust::device_vector<Particle>& particles_d) {
 	auto& holder_all = *holder_all_ptr;
@@ -240,7 +176,7 @@ void CountParticleNumberInLeafCells(HADeviceGrid<Tile>& grid, const thrust::devi
 void CalcInterestAreaFlagsWithParticlesOnLeafs(const thrust::device_vector<Particle>& particles, HADeviceGrid<Tile>& grid, int tmp_channel) {
 	CountParticleNumberInLeafCells(grid, particles, tmp_channel);
 
-	for (int i = 0; i < grid.mNumLayers; i++) {
+	for (int i = 0; i < grid.mNumLevels; i++) {
 		if (grid.hNumTiles[i] == 0) continue;
 		auto info_ptr = thrust::raw_pointer_cast(grid.dTileArrays[i].data());
 		MarkInterestAreaKernel << <grid.hNumTiles[i], dim3(Tile::DIM, Tile::DIM, Tile::DIM) >> > (grid.deviceAccessor(), info_ptr, tmp_channel, -1, LEAF);
@@ -257,12 +193,11 @@ void CoarsenWithParticles(HADeviceGrid<Tile>& grid, const thrust::device_vector<
 	while (true) {
 		CalcInterestAreaFlagsWithParticlesOnLeafs(particles, grid, counter_channel);
 		auto coarsen_cnts = CoarsenStep(grid, levelTarget, verbose);
-		//SpawnGhostTiles(grid, verbose);
 		if (verbose) Info("Deleted {} tiles on each layer", coarsen_cnts);
 		auto cnt = std::accumulate(coarsen_cnts.begin(), coarsen_cnts.end(), 0);
 		if (cnt == 0) break;
 	}
-	SpawnGhostTiles(grid, verbose);
+	grid.spawnGhostTiles(verbose);
 }
 
 void RefineWithParticles(HADeviceGrid<Tile>& grid, const thrust::device_vector<Particle>& particles, const int coarse_levels, const int fine_levels, const int counter_channel, bool verbose) {
@@ -280,16 +215,9 @@ void RefineWithParticles(HADeviceGrid<Tile>& grid, const thrust::device_vector<P
 		//polyscope::show();
 
 		auto refine_cnts = RefineLeafsOneStep(grid, levelTarget, verbose);
-		SpawnGhostTiles(grid, verbose);
+		grid.spawnGhostTiles(verbose);
 		if (verbose) Info("Refine {} tiles on each layer", refine_cnts);
 		auto cnt = std::accumulate(refine_cnts.begin(), refine_cnts.end(), 0);
-
-		//Info("refine leafs: {}", refine_cnts);
-		//polyscope::init();
-		//IOFunc::AddTilesToPolyscopeVolumetricMesh(grid, LEAF, "leafs");
-		//IOFunc::AddTilesToPolyscopeVolumetricMesh(grid, GHOST, "ghosts");
-		//IOFunc::AddParticleSystemToPolyscope(particles, "particles");
-		//polyscope::show();
 
 		if (cnt == 0) break;
 	}
@@ -568,7 +496,7 @@ void ParticleImpulseToGridMACIntp(HADeviceGrid<Tile>& grid, const thrust::device
 	);
 
 	//for (int axis : {0, 1, 2}) {
-	//	AccumulateToParents128(grid, u_channel + axis, u_channel + axis, GHOST, 1., true, INTERIOR | DIRICHLET | NEUMANN);
+	//	AccumulateToParentsOneStep(grid, u_channel + axis, u_channel + axis, GHOST, 1., true, INTERIOR | DIRICHLET | NEUMANN);
 	//}
 	//
 }
@@ -708,64 +636,6 @@ void AdvectParticlesAndSingleStepGradMRK4ForwardAtGivenLevel(HADeviceGrid<Tile>&
 	Info("AdvectParticlesAndSingleStepGradMRK4ForwardAtGivenLevel after erasing {} particles", particles_d.size());
 	//thrust::remove_if(particles_d.begin(), particles_d.end(), []__hostdev__(const Particle& p) { return p.pos == Vec(NODATA, NODATA, NODATA); });
 }
-
-//void CountParticleNumberInLeafCellsAndRecordToParticles(HADeviceGrid<Tile>& grid, thrust::device_vector<Particle>& particles, const int tmp_channel) {
-//	// Reset the particle count in each cell to zero
-//	
-//	grid.launchVoxelFuncOnAllTiles(
-//		[tmp_channel] __device__(HATileAccessor<Tile>&acc, HATileInfo<Tile>&info, const Coord & l_ijk) {
-//		auto& tile = info.tile();
-//		tile(tmp_channel, l_ijk) = 0;
-//	}, LEAF | NONLEAF | GHOST, 4
-//	);
-//
-//	// Get raw pointers to particle data and grid accessor
-//	auto particles_ptr = thrust::raw_pointer_cast(particles.data());
-//	auto acc = grid.deviceAccessor();
-//
-//	// Launch kernel to process each particle
-//	LaunchIndexFunc([=] __device__(int idx) {
-//		auto& p = particles_ptr[idx];
-//		HATileInfo<Tile> info; Coord l_ijk; Vec frac;
-//
-//		// Find the voxel and fractional position for the particle
-//		acc.findLeafVoxelAndFrac(p.pos, info, l_ijk, frac);
-//
-//		//printf("particle %d at %f %f %f empty %d in cell %d %d %d\n", idx, p.pos[0], p.pos[1], p.pos[2],info.empty(), l_ijk[0], l_ijk[1], l_ijk[2]);
-//
-//		if (!info.empty()) {
-//			auto& tile = info.tile();
-//
-//
-//
-//			// Atomically increment the particle count in the cell
-//			int local_offset = acc.localCoordToOffset(l_ijk);
-//			int count_in_voxel = (int)atomicAdd(&tile.mData[tmp_channel][local_offset], (T)1);
-//			//int count_in_voxel = atomicAdd(&tile(tmp_channel, l_ijk), (T)1);
-//
-//
-//			//{
-//			//	auto g_ijk = acc.localToGlobalCoord(info, l_ijk);
-//			//	printf("particle %d at %f %f %f in cell %d %d %d\n", idx, p.pos[0], p.pos[1], p.pos[2], g_ijk[0], g_ijk[1], g_ijk[2]);
-//			//}
-//
-//			// Record the particle's local index within the cell
-//			p.tile_idx = tile.mSerialIdx;
-//			p.local_offset = local_offset;
-//			p.idx_in_voxel = count_in_voxel;
-//
-//			//if (info.mTileCoord == Coord(14, 48, 21) && l_ijk == Coord(1, 0, 0)) {
-//			//	printf("particle %d at %f %f %f in cell %d %d %d count in voxel %d local offset %d tile serial idx %d\n", idx, p.pos[0], p.pos[1], p.pos[2], l_ijk[0], l_ijk[1], l_ijk[2], p.idx_in_voxel, p.local_offset, p.tile_idx);
-//			//}
-//		}
-//		else {
-//			p.tile_idx = -1;
-//			p.local_offset = -1;
-//			p.idx_in_voxel = -1;
-//			p.pos = Vec(NODATA, NODATA, NODATA);
-//		}
-//	}, particles.size());
-//}
 
 void CountParticleNumberAtGivenLevelAndRecordToParticles(HADeviceGrid<Tile>& grid, const int level, const int counter_channel, thrust::device_vector<Particle>& particles) {
 	// Reset the particle count in each cell to zero

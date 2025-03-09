@@ -6,19 +6,19 @@
         "last_frame": 400,
         "min_step_frame_fraction": 0.0,
         "output_base_dir": "./output/smokesphere",
-        "queue_size": 10,
+        "queue_size": 4,
         "snapshot_stride": 0
     },
     "scene": {
         "coarse_level": 1,
-        "fine_level": 6,
+        "fine_level": 4,
         "flowmap_stride": 5,
         "refine_threshold": 0.1,
         "gravity": 0.0,
-        "particle_life": 0.5,
+        "particle_life": 2.5,
         "test": "smokesphere",
-        "sdf_isovalue": 0.025,
-        "reserve_particles_m": 20
+        "sdf_isovalue": 0.010,
+        "reserve_particles_m": 40
     },
     "simulator": "euler"
 }

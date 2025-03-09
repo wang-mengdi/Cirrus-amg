@@ -10,6 +10,7 @@
 //#include "Random.h"
 #include "GPUTimer.h"
 #include "PoissonSolver.h"
+#include "AMGSolver.h"
 
 //#include "AMGSolver.h"
 #include "PoissonIOFunc.h"
@@ -202,80 +203,6 @@ public:
 		}
 	}
 
-	__device__ Vec freeVortexVelocityLambOseen(const Vec& position, const Vec& vortexCenter, double Gamma, double delta) {
-		Vec r_vec = position - vortexCenter;
-		r_vec[2] = 0;
-		double r = r_vec.length();
-		if (r < 1e-6) {
-			return Vec(0, 0, 0);
-		}
-
-		double v_theta = (Gamma / (2 * M_PI * r)) * (1 - std::exp(-r * r / (delta * delta)));
-		Vec tangentialVelocity(-r_vec[1] / r, r_vec[0] / r, 0);
-
-		return tangentialVelocity * v_theta;
-	}
-
-	__device__ void setFreeVortexInitialLambOseen(HATileAccessor<Tile>& acc, const HATileInfo<Tile>& info, const Coord& l_ijk, const Vec& vortexCenter, double gamma, double delta) {
-		auto pos = acc.cellCenter(info, l_ijk);
-		auto vel = freeVortexVelocityLambOseen(pos, vortexCenter, gamma, delta);
-		auto& tile = info.tile();
-		tile(Tile::u_channel, l_ijk) += vel[0];
-		tile(Tile::u_channel + 1, l_ijk) += vel[1];
-		tile(Tile::u_channel + 2, l_ijk) += vel[2];
-
-		auto r_vec = pos - vortexCenter;
-		r_vec[2] = 0;
-		if (r_vec.length() < delta) {
-			tile(Tile::dye_channel, l_ijk) = 1;
-		}
-	}
-
-	//gamma: vortex strength
-	//radius: radius of the vortex ring
-	//delta: thickness of the vortex ring
-	//center: center of the vortex ring
-	//unit_x: unit vector of vortex in the x direction
-	//unit_y: unit vector of vortex in the y direction
-	//num_samples: number of sample points on the vortex ring
-	//reference: https://github.com/zjw49246/particle-flow-maps/blob/main/3D/init_conditions.py
-	__device__ void addVortexRingInitialAndSmoke(HATileAccessor<Tile>& acc, const HATileInfo<Tile>& info, const Coord& l_ijk, double gamma, float radius, float delta, const Vec& center, const Vec& unit_x, const Vec& unit_y, int num_samples) {
-		auto pos = acc.cellCenter(info, l_ijk);
-		auto& tile = info.tile();
-
-		// Curve length per sample point
-		float curve_length = (2 * M_PI * radius) / num_samples;
-
-
-		Vec velocity(0, 0, 0);
-		float smoke = 0;
-		// Loop through each sample point on the vortex ring
-		for (int l = 0; l < num_samples; ++l) {
-			float theta = l / float(num_samples) * 2 * M_PI;
-			Vec p_sampled = radius * (cos(theta) * unit_x + sin(theta) * unit_y) + center;
-
-			Vec p_diff = pos - p_sampled;
-			float r = p_diff.length();
-
-			Vec w_vector = gamma * (-sin(theta) * unit_x + cos(theta) * unit_y);
-			float decay_factor = exp(-pow(r / delta, 3));
-
-			// Biot-Savart law contribution
-			velocity += curve_length * (-1 / (4 * M_PI * r * r * r)) * (1 - decay_factor) * p_diff.cross(w_vector);
-
-			// Smoke density update based on decay factor
-			smoke += (curve_length * decay_factor);
-		}
-
-		// Apply smoke color if the density is high enough
-		for (int axis : {0, 1, 2}) {
-			tile(Tile::u_channel + axis, l_ijk) += velocity[axis];
-		}
-		if (smoke > 0.002f) {
-			tile(Tile::dye_channel, l_ijk) = 1.0;
-		}
-	}
-
 	std::tuple<int, T> getBatAnimationFrameAndFrace(const T time) {
 		int bat_fps = 200;
 		T bat_f = time * bat_fps;
@@ -446,7 +373,7 @@ public:
 		}
 		grid.compressHost();
 		grid.syncHostAndDevice();
-		SpawnGhostTiles(grid);
+		grid.spawnGhostTiles();
 
 		{
 
@@ -479,17 +406,13 @@ public:
 					params.setInitialCondition(acc, info, l_ijk);
 				}, -1, LEAF
 				);
-				int cnt = RefineWithValuesOneStep(grid, Tile::dye_channel, params.mRefineThreshold, params.mCoarseLevel, params.mFineLevel, false);
+				//int cnt = RefineWithValuesOneStep(grid, Tile::dye_channel, params.mRefineThreshold, params.mCoarseLevel, params.mFineLevel, false);
 				int cnt1 = LockedRefineWithNonBoundaryNeumannCellsOneStep(0.0, grid, params, 0, false);
-				if (cnt + cnt1 == 0) break;
+				if (cnt1 == 0) break;
 			}
 
 			applyVelocityBC(grid, 0.0);
 			CalcCellTypesFromLeafs(grid);
-
-			//std::swap(grid_ptr, last_grid_ptr);
-			auto holder_ptr = grid.getHostTileHolderForLeafs();
-			GenerateParticlesWithDyeDensity(holder_ptr, Tile::dye_channel, mParams.mRefineThreshold, mNumParticlesPerCell, particles);
 		}
 		CalculateVorticityMagnitudeOnLeafs(*grid_ptr, mParams.mFineLevel, mParams.mCoarseLevel, Tile::u_channel, 0, Tile::vor_channel);
 
@@ -509,7 +432,11 @@ public:
 		//return FLT_MAX;
 		HATileAccessor<Tile> acc = grid.deviceAccessor();
 		double dx = acc.voxelSize(acc.mMaxLevel);
-		double max_vel = VelocityLinfSync(grid, Tile::u_channel, LEAF);
+		
+		double umax = NormSync(grid, -1, Tile::u_channel, false);
+		double vmax = NormSync(grid, -1, Tile::u_channel + 1, false);
+		double wmax = NormSync(grid, -1, Tile::u_channel + 2, false);
+		double max_vel = std::max(umax, std::max(vmax, wmax));
 		return dx * cfl / max_vel;
 	}
 	virtual void Output(DriverMetaData& metadata) {
@@ -538,7 +465,7 @@ public:
 			//IOFunc::OutputTilesAsVTU(holder, metadata.base_path / fmt::format("tiles{:04d}.vtu", metadata.current_frame));
 
 			metadata.Append_Output_Thread(std::make_shared<std::thread>(IOFunc::OutputPoissonGridAsStructuredVTI, holder,
-				std::vector<std::pair<int, std::string>>{ {-1,"type"}, { -2, "level" }, {Tile::vor_channel, "vorticity"}},
+				std::vector<std::pair<int, std::string>>{ {-1, "type"}, { -2, "level" }, { Tile::vor_channel, "vorticity" }, {Tile::x_channel, "pressure"}},
 				//std::vector<std::pair<int, std::string>>{ },
 				std::vector<std::pair<int, std::string>>{ {cell_center_vel_channel, "velocity"} },
 				//std::vector<std::pair<int, std::string>>{ { -1, "type" }, { Tile::vor_channel, "vorticity" }, { Tile::dye_channel, "dye_density" } },
@@ -582,31 +509,88 @@ public:
 
 	void project(HADeviceGrid<Tile>& grid, int u_channel, double current_time) {
 
-		for (int axis : {0, 1, 2}) {
-			PropagateToChildren(grid, u_channel + axis, u_channel + axis, -1, GHOST, LAUNCH_SUBTREE, INTERIOR | DIRICHLET | NEUMANN);
+
+
+
+		////GMG
+		//{
+		//	for (int axis : {0, 1, 2}) {
+		//		PropagateToChildren(grid, u_channel + axis, u_channel + axis, -1, GHOST, LAUNCH_SUBTREE, INTERIOR | DIRICHLET | NEUMANN);
+		//	}
+		//	VelocityVolumeDivergenceOnLeafs(grid, u_channel, Tile::b_channel);
+		//	Info("div pt l2: {}", NormSync(grid, 2, Tile::b_channel, false));
+		//	CalculateNeighborTiles(grid);
+		//	GMGSolver solver(1., 1.);
+		//	//AMGSolver solver(Tile::c0_channel, 1., 1.);
+		//	//solver.prepareTypesAndCoeffs(grid);
+
+		//	CPUTimer timer;
+		//	timer.start();
+		//	//auto [iters, err] = ConjugateGradientSync(grid, false, 1000, 2, 10, 1e-6, false);
+		//	auto [iters, err] = solver.solve(grid, false, 1000, 1e-6, 1, 10, 1, mParams.mIsPureNeumann);
+		//	cudaDeviceSynchronize();
+		//	double elapsed = timer.stop("MGPCG");
+		//	double total_cells = grid.numTotalTiles() * Tile::SIZE;
+		//	double cells_per_second = (total_cells + 0.0) / (elapsed / 1000.0);
+		//	Info("Total {:.5}M cells, MGPCG speed {:.5} M cells /s at {} iters", total_cells / (1024.0 * 1024), cells_per_second / (1024.0 * 1024), iters);
+		//	projection_time = elapsed;
+		//	Info("pressure pt l2: {}", NormSync(grid, 2, Tile::x_channel, false));
+		//	AddGradientToFaceCenters(grid, Tile::x_channel, u_channel);
+		//	applyVelocityBC(grid, current_time);
+		//}
+
+		//AMG
+		{
+			CalculateNeighborTiles(grid);
+
+			AMGVolumeWeightedDivergenceOnLeafs(grid, u_channel, Tile::b_channel);
+			Info("div pt l2: {}", NormSync(grid, 2, Tile::b_channel, false));
+
+
+			AMGSolver solver(Tile::c0_channel, 0.5, 1, 1);
+			solver.prepareTypesAndCoeffs(grid);
+
+			CPUTimer timer;
+			timer.start();
+			auto [iters, err] = solver.solve(grid, false, 1000, 1e-6, 2, 10, 1, mParams.mIsPureNeumann);
+			cudaDeviceSynchronize();
+			double elapsed = timer.stop("AMGPCG");
+			double total_cells = grid.numTotalTiles() * Tile::SIZE;
+			double cells_per_second = (total_cells + 0.0) / (elapsed / 1000.0);
+			Info("Total {:.5}M cells, AMGPCG speed {:.5} M cells /s at {} iters", total_cells / (1024.0 * 1024), cells_per_second / (1024.0 * 1024), iters);
+			projection_time = elapsed;
+
+			Info("pressure pt l2: {}", NormSync(grid, 2, Tile::x_channel, false));
+
+			AMGAddGradientToFace(grid, -1, LEAF, Tile::x_channel, Tile::c0_channel, Tile::u_channel);
+			applyVelocityBC(grid, current_time);
+
+			AMGVolumeWeightedDivergenceOnLeafs(grid, u_channel, Tile::b_channel);
+			//for (int i : {0, 1, 2}) {
+			//	AccumulateToParents(grid, u_channel + i, u_channel + i, -1, LEAF, LAUNCH_SUBTREE, INTERIOR | DIRICHLET, 1.0 / 4.0, true);
+			//}
+			Info("div pt linf: {}", NormSync(grid, -1, Tile::b_channel, false));
+
+			VelocityVolumeDivergenceOnLeafs(grid, u_channel, Tile::b_channel);
+
+			//{
+			//	auto holder = grid.getHostTileHolderForLeafs();
+			//	polyscope::init();
+			//	IOFunc::AddPoissonGridCellCentersToPolyscopePointCloud(
+			//		holder,
+			//		{ {-1, "type" },
+			//			{ Tile::b_channel, "divergence" },
+			//			{ Tile::x_channel, "pressure" }
+			//		},
+			//		{
+			//			{ Tile::u_channel, "velocity" }
+			//		}
+			//	);
+			//	polyscope::show();
+			//}
 		}
-		VelocityVolumeDivergenceOnLeafs(grid, u_channel, Tile::b_channel);
 
-		//GMGSolver solver;
 
-		CalculateNeighborTiles(grid);
-		GMGSolver solver(1., 1.);
-		//AMGSolver solver(Tile::c0_channel, 1., 1.);
-		//solver.prepareTypesAndCoeffs(grid);
-
-		CPUTimer timer;
-		timer.start();
-		//auto [iters, err] = ConjugateGradientSync(grid, false, 1000, 2, 10, 1e-6, false);
-		auto [iters, err] = solver.solve(grid, false, 1000, 1e-6, 1, 10, 1, mParams.mIsPureNeumann);
-		cudaDeviceSynchronize();
-		double elapsed = timer.stop("MGPCG");
-		double total_cells = grid.numTotalTiles() * Tile::SIZE;
-		double cells_per_second = (total_cells + 0.0) / (elapsed / 1000.0);
-		Info("Total {:.5}M cells, MGPCG speed {:.5} M cells /s at {} iters", total_cells / (1024.0 * 1024), cells_per_second / (1024.0 * 1024), iters);
-		projection_time = elapsed;
-
-		AddGradientToFaceCenters(grid, Tile::x_channel, u_channel);
-		applyVelocityBC(grid, current_time);
 
 		//VelocityVolumeDivergenceOnLeafs(grid, u_channel, Tile::b_channel);
 		//Info("After velocity fix div linf {}", VolumeWeightedNorm(grid, -1, Tile::b_channel));
