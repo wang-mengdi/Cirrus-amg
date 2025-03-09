@@ -18,7 +18,6 @@ enum DataHolder { HOST = 0, DEVICE };
 
 enum TileTypes { LEAF = 0b001, NONLEAF = 0b010, GHOST = 0b100, NEWLY_ADDED = 0b1000 };
 
-//enum LaunchPolicy { EXEC_LEAF = 0b01, EXEC_NONLEAF = 0b10, EXEC_ABOVE = 0b100, EXEC_FINEFIRST = 0b1000 };
 enum LaunchMode { LAUNCH_LEVEL = 0, LAUNCH_SUBTREE };
 enum LaunchOrder { COARSE_FIRST = 0, FINE_FIRST };
 

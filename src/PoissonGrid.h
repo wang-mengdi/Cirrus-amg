@@ -343,12 +343,6 @@ double Dot(HADeviceGrid<Tile>& grid, const uint8_t in1_channel, const uint8_t in
 __global__ void ChannelPowerSumKernel128(const int order, HATileAccessor<PoissonTile<T>> acc, HATileInfo<PoissonTile<T>>* infos, int subtree_level, uint8_t launch_tile_types, const int in_channel, double* value_sum, double* weights_sum, bool volume_weighted, bool use_abs, uint8_t launch_cell_types);
 double NormSync(HADeviceGrid<Tile>& grid, const int order, const int in_channel, bool volume_weighted, uint8_t launch_cell_types = INTERIOR);
 
-//THIS FUNCTION SHOULD BE DEPRECATED
-//In general, cell values can be propagated and accumulated casually
-//however, we have to take caution when propagating and accumulating face values
-//because 
-void PropagateValues(HADeviceGrid<Tile>& grid, const int coarse_channel, const int fine_channel, const int fine_level, const uint8_t propagated_tile_types, const LaunchMode mode);
-
 //copy values from parents for tiles specified by propagate_tile_types
 //for example, GHOST will propagate ghost values from parents
 //this is actually prolongation with sum kernel
@@ -362,6 +356,7 @@ void PropagateToChildren(HADeviceGrid<Tile>& grid, const int coarse_channel, con
 void AccumulateToParents(HADeviceGrid<Tile>& grid, const int fine_channel, const int coarse_channel, const int target_subtree_level, const uint8_t target_tile_types, const LaunchMode mode, const uint8_t cell_types, const Tile::T coeff, bool additive);
 
 void AccumulateToParentsOneStep(HADeviceGrid<Tile>& grid, const int fine_channel, const int coarse_channel, const uint8_t fine_tile_types, const Tile::T coeff, bool additive, uint8_t cell_types);
+
 __global__ void AccumulateFacesToParentsOneStepKernel(HATileAccessor<Tile> acc, HATileInfo<Tile>* fine_tiles, int fine_subtree_level, uint8_t fine_tile_types, int fine_u_channel, int coarse_u_channel, Tile::T coeff, bool additive, uint8_t cell_types);
 void AccumulateFacesToParentsOneStep(HADeviceGrid<Tile>& grid, const int fine_u_channel, const int coarse_u_channel, const uint8_t fine_tile_types, const Tile::T coeff, bool additive, uint8_t cell_types);
 

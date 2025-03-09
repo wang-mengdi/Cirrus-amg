@@ -310,34 +310,6 @@ double NormSync(HADeviceGrid<Tile>& grid, const int order, const int in_channel,
     else return 0;
 }
 
-//copy values from parents for tiles specified by propagate_tile_types
-//for example, GHOST will propagate ghost values from parents
-//this is actually prolongation with sum kernel
-//we call it propagate following the convention in SPGrid paper
-void PropagateValues(HADeviceGrid<Tile>& grid, const int coarse_channel, const int fine_channel, const int fine_level, const uint8_t propagated_tile_types, const LaunchMode mode) {
-    //can be used to propagate one single level or iterating through the whole tree
-    //if it's the whole tree, must propagate from coarse to fine
-    grid.launchVoxelFunc(
-        [=]__device__(HATileAccessor<Tile> &acc, HATileInfo<Tile> &info, const Coord & l_ijk) {
-        auto& tile = info.tile();
-        if (!tile.isInterior(l_ijk)) {
-            tile(fine_channel, l_ijk) = Tile::BACKGROUND_VALUE;
-            return;
-        }
-        auto fine_g_ijk = acc.localToGlobalCoord(info, l_ijk);
-        auto coarse_g_ijk = acc.parentCoord(fine_g_ijk);
-        HATileInfo<Tile> coarse_info; Coord coarse_l_ijk;
-        acc.findVoxel(info.mLevel - 1, coarse_g_ijk, coarse_info, coarse_l_ijk);
-        if (!coarse_info.empty()) {
-            auto& coarse_tile = coarse_info.tile();
-            tile(fine_channel, l_ijk) = coarse_tile.interiorValue(coarse_channel, coarse_l_ijk);
-        }
-        else tile(fine_channel, l_ijk) = Tile::BACKGROUND_VALUE;
-    },
-        fine_level, propagated_tile_types, mode, COARSE_FIRST);
-}
-
-
 void PropagateToChildren(HADeviceGrid<Tile>& grid, const int coarse_channel, const int fine_channel, const int target_subtree_level, const uint8_t target_tile_types, const LaunchMode mode, const uint8_t cell_types) {
     //can be used to propagate one single level or iterating through the whole tree
     //if it's the whole tree, must propagate from coarse to fine
