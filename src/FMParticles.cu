@@ -214,7 +214,8 @@ void RefineWithParticles(HADeviceGrid<Tile>& grid, const thrust::device_vector<P
 		//IOFunc::AddParticleSystemToPolyscope(particles, "particles");
 		//polyscope::show();
 
-		auto refine_cnts = RefineLeafsOneStep(grid, levelTarget, verbose);
+		//auto refine_cnts = RefineLeafsOneStep(grid, levelTarget, verbose);
+		auto refine_cnts = grid.refineStep(levelTarget, verbose);
 		grid.spawnGhostTiles(verbose);
 		if (verbose) Info("Refine {} tiles on each layer", refine_cnts);
 		auto cnt = std::accumulate(refine_cnts.begin(), refine_cnts.end(), 0);

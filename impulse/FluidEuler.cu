@@ -257,7 +257,7 @@ int LockedRefineWithNonBoundaryNeumannCellsOneStep(const T current_time, HADevic
 	//LevelTargetFunctor level_target = { coarse_level, fine_level };
 
 	//auto refine_cnts = RefineLeafsOneStep(grid, levelTarget, verbose);
-	auto refine_cnts = grid.refineLeafsOneStep(levelTarget, verbose);
+	auto refine_cnts = grid.refineStep(levelTarget, verbose);
 	//auto refine_cnts = grid.refineLeafsOneStep<LevelTargetFunctor>(level_target, verbose);
 	grid.spawnGhostTiles(verbose);
 	//SpawnGhostTiles(grid, verbose);

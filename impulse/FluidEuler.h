@@ -204,7 +204,7 @@ public:
 			auto levelTarget = [=]__device__(const HATileAccessor<Tile> &acc, HATileInfo<Tile> &info) ->int {
 				return params.initialLevelTarget(acc, info);
 			};
-			IterativeRefine(grid, levelTarget);
+			grid.iterativeRefine(levelTarget);
 
 			while (true) {
 				grid.launchVoxelFuncOnAllTiles(

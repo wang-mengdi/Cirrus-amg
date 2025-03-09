@@ -814,7 +814,7 @@ public:
 	}
 
 	template<class ABFunc>
-	std::vector<int> refineLeafsOneStep(const ABFunc& level_target, bool verbose) {
+	std::vector<int> refineStep(const ABFunc& level_target, bool verbose) {
 		//must be called after ghost tiles are properly spawned
 		//then, refine leafs for one step
 		//this may need to be called multiple times to reach the target level
@@ -892,6 +892,18 @@ public:
 		syncHostAndDevice();
 
 		return level_refine_cnts;
+	}
+
+	template<class ABFunc>
+	void iterativeRefine(ABFunc level_target, bool verbose = true) {
+		while (true) {
+			//auto refine_cnts = RefineLeafsOneStep(grid, level_target, verbose);
+			auto refine_cnts = refineStep(level_target, verbose);
+			spawnGhostTiles(verbose);
+			if (verbose) Info("Refine {} tiles on each layer", refine_cnts);
+			auto cnt = std::accumulate(refine_cnts.begin(), refine_cnts.end(), 0);
+			if (cnt == 0) break;
+		}
 	}
 };
 

@@ -24,115 +24,6 @@ void TernaryOnArray(T* d_a, T* d_b, T* d_c, Func3 f, int n = 1, int block_size =
     TernaryOnArrayKernel << <numBlocks, block_size >> > (d_a, d_b, d_c, f, n);
 }
 
-template<class ABFunc>
-__host__ std::vector<int> RefineLeafsOneStep(HADeviceGrid<Tile>& grid, ABFunc level_target, bool verbose) {
-    //must be called after ghost tiles are properly spawned
-    //then, refine leafs for one step
-    //this may need to be called multiple times to reach the target level
-    Assert(grid.mDeviceSyncFlag, "Grid must be synced before refine step");
-
-    std::vector<int> level_refine_cnts(grid.mNumLevels, 0);
-
-    for (int i = grid.mMaxLevel; i >= 0; i--) {
-        thrust::host_vector<int> refine_host(grid.hNumTiles[i]);
-        thrust::device_vector<int> refine_flg_dev = refine_host;
-        //Info("level {} numtiles {} refine_flg_dev size {}", i, grid.hNumTiles[i], refine_flg_dev.size());
-        Assert(refine_flg_dev.size() == grid.hNumTiles[i], "refine_flg_dev size {} mismatch num tiles {}", refine_flg_dev.size(), grid.hNumTiles[i]);
-
-
-        auto refine_flg_dev_ptr = thrust::raw_pointer_cast(refine_flg_dev.data());
-        //first, launch on all 
-        grid.launchTileFunc(
-            [level_target, i, refine_flg_dev_ptr]__device__(HATileAccessor<Tile>&acc, const uint32_t tile_idx, HATileInfo<Tile>&info) {
-            auto& tile = info.tile();
-            //a leaf tile need to be refined if it doesn't reach level target, or there is a neighbor leaf on +2 level
-            //that means, it has a ghost child, whose REFINE_FLAG is set
-            //the flags of ghost tiles will be set in the next step
-
-            //case 1: not reach target level
-            bool to_refine = false;
-            //case 1: if the target level is higher than the current level, refine
-            if (level_target(acc, info) > info.mLevel) {
-                to_refine = true;
-            }
-
-            //case 2: check ghost children
-            //there are no ghost children of the max level
-            if (i < acc.mMaxLevel) {
-                acc.iterateChildCoords(info.mTileCoord,
-                    [&]__device__(const Coord & child_ijk) {
-                    auto& child_info = acc.tileInfo(i + 1, child_ijk);
-                    if (child_info.isGhost()) {
-                        auto& child_tile = child_info.tile();
-                        if (child_tile.mStatus & REFINE_FLAG) {
-                            to_refine = true;
-                        }
-                    }
-                });
-            }
-
-            //we will not refine if the maximum capacity of levels is reached
-            if (i + 1 >= acc.mNumLevels) to_refine = false;
-            tile.setMask(REFINE_FLAG, to_refine);
-            refine_flg_dev_ptr[tile_idx] = to_refine;
-        },
-            i, LEAF, LAUNCH_LEVEL
-        );
-        refine_host = refine_flg_dev;
-
-        grid.launchTileFunc(
-            [=]__device__(HATileAccessor<Tile>&acc, const uint32_t tile_idx, HATileInfo<Tile>&info) {
-            auto& tile = info.tile();
-            bool refine_flag = false;
-            acc.iterateNeighborCoords(info.mTileCoord,
-                [&](const Coord& n_ijk) {
-                    auto& n_info = acc.tileInfo(i, n_ijk);
-                    if (n_info.isLeaf()) {
-                        auto& n_tile = n_info.tile();
-                        if (n_tile.mStatus & REFINE_FLAG) {
-                            refine_flag = true;
-                        }
-                    }
-                });
-            tile.setMask(REFINE_FLAG, refine_flag);
-        },
-            i, GHOST, LAUNCH_LEVEL
-        );
-
-        using Acc = HACoordAccessor<Tile>;
-        //we will refine all required tiles to the next level
-        //thrust::host_vector<int> refine_host = refine_flg_dev;
-        auto h_acc = grid.hostAccessor();
-        for (int j = 0; j < refine_host.size(); j++) {
-            if (refine_host[j]) {
-                level_refine_cnts[i]++;
-
-                //this seems strange, but the compress() function will write mHostTileArray based on hash table
-                //so we must modify the hash table element
-                auto& tmp_info = grid.hTileArrays[i][j];
-                auto& info = h_acc.tileInfo(i, tmp_info.mTileCoord);
-                //auto& info = grid.mHostLayers[i].tileInfo(tmp_info.mTileCoord);
-
-                info.mType = NONLEAF;
-                auto tile = info.getTile(DEVICE);
-
-                for (int ci = 0; ci < Acc::NUMCHILDREN; ci++) {
-                    Coord offset = Acc::childIndexToOffset(ci);
-					Coord c_ijk = Acc::childCoord(info.mTileCoord, offset);
-
-                    grid.setTileHost(i + 1, c_ijk, tile.childTile(offset), LEAF);
-                }
-            }
-        }
-
-    }
-
-    grid.compressHost(verbose);
-    grid.syncHostAndDevice();
-
-    return level_refine_cnts;
-}
-
 //return number of deleted tiles each layer
 template<class ABFunc>
 std::vector<int> CoarsenStep(HADeviceGrid<Tile>& grid, ABFunc level_target, bool verbose) {
@@ -285,17 +176,18 @@ std::vector<int> CoarsenStep(HADeviceGrid<Tile>& grid, ABFunc level_target, bool
     return deleted_tiles;
 }
 
-//do multiple spawnghost and refine steps until all tiles reach target level
-template<class ABFunc>
-void IterativeRefine(HADeviceGrid<Tile>& grid, ABFunc level_target, bool verbose = true) {
-    while (true) {
-        auto refine_cnts = RefineLeafsOneStep(grid, level_target, verbose);
-        grid.spawnGhostTiles(verbose);
-        if (verbose) Info("Refine {} tiles on each layer", refine_cnts);
-        auto cnt = std::accumulate(refine_cnts.begin(), refine_cnts.end(), 0);
-        if (cnt == 0) break;
-    }
-}
+////do multiple spawnghost and refine steps until all tiles reach target level
+//template<class ABFunc>
+//void IterativeRefine(HADeviceGrid<Tile>& grid, ABFunc level_target, bool verbose = true) {
+//    while (true) {
+//        //auto refine_cnts = RefineLeafsOneStep(grid, level_target, verbose);
+//        auto refine_cnts = grid.refineLeafsOneStep(level_target, verbose);
+//        grid.spawnGhostTiles(verbose);
+//        if (verbose) Info("Refine {} tiles on each layer", refine_cnts);
+//        auto cnt = std::accumulate(refine_cnts.begin(), refine_cnts.end(), 0);
+//        if (cnt == 0) break;
+//    }
+//}
 
 //All these operators will only perform on interior cells
 
