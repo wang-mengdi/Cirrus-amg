@@ -32,7 +32,6 @@ __device__ Vec NFMErodedAdvectionPoint(const int axis, const HATileAccessor<Tile
 
 //set all face velocities that has a neumann neighbor to 0
 void ClearAllNeumannNeighborFaces(HADeviceGrid<Tile>& grid);
-void FixIsolatedInteriorCells(HADeviceGrid<Tile>& grid, const int tmp_channel);
 
 void MarkOldParticlesAsInvalid(thrust::device_vector<Particle>& particles, const T current_time, const T particle_life);
 

@@ -59,55 +59,6 @@ void ClearAllNeumannNeighborFaces(HADeviceGrid<Tile>& grid)
 	);
 }
 
-void FixIsolatedInteriorCells(HADeviceGrid<Tile>& grid, const int tmp_channel) {
-	CalculateNeighborTiles(grid);
-
-
-	//FullNegativeLaplacian(grid, Tile::x_channel, tmp_channel, true);
-	NegativeLaplacianSameLevel128(grid, grid.dAllTiles, grid.dAllTiles.size(), -1, LEAF, Tile::x_channel, tmp_channel, true);
-	grid.launchVoxelFuncOnAllTiles(
-		[=] __device__(HATileAccessor<Tile>&acc, HATileInfo<Tile>&info, const Coord & l_ijk) {
-		auto& tile = info.tile();
-
-		//{
-		//	auto g_ijk = acc.localToGlobalCoord(info, l_ijk);
-		//	if (info.mLevel == 5 && (g_ijk == Coord(119, 123, 137) || g_ijk == Coord(119,123,138))) {
-		//		printf("level %d g_ijk %d %d %d tile type %d voxel type %d diag %f\n", info.mLevel, g_ijk[0], g_ijk[1], g_ijk[2], info.mType, tile.type(l_ijk), tile(tmp_channel, l_ijk));
-		//	}
-		//}
-
-		if (tile(tmp_channel, l_ijk) == 0 && tile.type(l_ijk) == INTERIOR) {
-			tile.type(l_ijk) = NEUMANN;
-		}
-	}, LEAF , 4);
-	CalcCellTypesFromLeafs(grid);
-
-}
-
-
-
-//must calcualte node velocities first
-__device__ Vec RK4ForwardPosition(const HATileAccessor<Tile>& acc, const Vec& pos, const double dt, const int u_channel, const int node_u_channel) {
-	double c1 = 1.0 / 6.0 * dt, c2 = 1.0 / 3.0 * dt, c3 = 1.0 / 3.0 * dt, c4 = 1.0 / 6.0 * dt;
-	Vec vel1 = InterpolateFaceValue(acc, pos, u_channel, node_u_channel);
-	Vec pos1 = pos + vel1 * 0.5 * dt;
-	Vec vel2 = InterpolateFaceValue(acc, pos1, u_channel, node_u_channel);
-	Vec pos2 = pos + vel2 * 0.5 * dt;
-	Vec vel3 = InterpolateFaceValue(acc, pos2, u_channel, node_u_channel);
-	Vec pos3 = pos + vel3 * dt;
-	Vec vel4 = InterpolateFaceValue(acc, pos3, u_channel, node_u_channel);
-	return pos + c1 * vel1 + c2 * vel2 + c3 * vel3 + c4 * vel4;
-}
-
-__device__ Vec SemiLagrangianBackwardPosition(const HATileAccessor<Tile>& acc, const Vec& pos, const T dt, const int u_channel, const int node_u_channel) {
-	auto v0 = InterpolateFaceValue(acc, pos, u_channel, node_u_channel);
-	auto pos1 = pos - 0.5 * dt * v0;
-	auto v1 = InterpolateFaceValue(acc, pos1, u_channel, node_u_channel);
-	auto pos2 = pos - dt * v1;
-	return pos2;
-}
-
-
 void MarkOldParticlesAsInvalid(thrust::device_vector<Particle>& particles, const T current_time, const T particle_life) {
 	auto particles_ptr = thrust::raw_pointer_cast(particles.data());
 	LaunchIndexFunc([=] __device__(int idx) {
@@ -119,23 +70,6 @@ void MarkOldParticlesAsInvalid(thrust::device_vector<Particle>& particles, const
 
 	}, particles.size(), 128);
 }
-
-//void AdvectParticlesRK2Forward(HADeviceGrid<Tile>& grid, const int u_channel, const int node_u_channel, const double dt, thrust::device_vector<Particle>& particles_d) {
-//	//advect particles
-//	auto particles_ptr = thrust::raw_pointer_cast(particles_d.data());
-//	auto acc = grid.deviceAccessor();
-//	LaunchIndexFunc([=] __device__(int idx) {
-//		auto& p = particles_ptr[idx];
-//
-//		RK2ForwardPositionAndT(acc, dt, u_channel, node_u_channel, p.pos, p.matT);
-//
-//		//p.pos = phi;
-//		//p.pos = RK4ForwardPosition(acc, p.pos, dt, Tile::u_channel, node_u_channel);
-//	}, particles_d.size(), 128);
-//}
-//
-//
-
 
 __global__ void CalculateReseedingNumbersOnLeafTiles128Kernel(const T current_time, HATileAccessor<Tile> acc, HATileInfo<Tile>* tile_infos, FluidParams params, const int tmp_channel, const int num_particles_per_cell, int* reseed_number_per_cell) {
 	int bidx = blockIdx.x;
@@ -151,36 +85,10 @@ __global__ void CalculateReseedingNumbersOnLeafTiles128Kernel(const T current_ti
 		auto l_ijk = acc.localOffsetToCoord(i);
 		int reseed_num = 0;
 
-		//bool has_neumann_neighbor = false;
-		//HATileInfo<Tile> ninfo; Coord nl_ijk;
-		//if (tile.type(l_ijk) == INTERIOR) {
-		//	acc.iterateSameLevelNeighborVoxels(info, l_ijk, [&]__device__(const HATileInfo<Tile>&_ninfo, const Coord & _nl_ijk, const int axis, const int sgn) {
-		//		if (!_ninfo.empty()) {
-		//			auto& ntile = _ninfo.tile();
-		//			if (ntile.type(_nl_ijk) & NEUMANN) {
-		//				has_neumann_neighbor = true;
-		//				ninfo = _ninfo;
-		//				nl_ijk = _nl_ijk;
-		//			}
-		//		}
-		//	});
-		//}
-
-		//bool inside_reseeding_region = false;
-		//if (has_neumann_neighbor) {
-		//	int boundary_axis, boundary_off;
-		//	if (!FluidParams::queryBoundaryDirection(acc, ninfo, nl_ijk, boundary_axis, boundary_off)) {
-		//		inside_reseeding_region = true;
-		//	}
-		//}
-
-		
 		if (tile.type(l_ijk) == INTERIOR && params.isInParticleGenerationRegion(current_time, acc, info, l_ijk)) {
-		//if (inside_reseeding_region) {
 			int num_particles = tile(tmp_channel, l_ijk);
 			if (num_particles < reseed_threshold) {
 				reseed_num = num_particles_per_cell - num_particles;
-				//int total_idx = bidx * Tile::SIZE + i;
 			}
 		}
 		reseed_number_per_cell[bidx * Tile::SIZE + i] = reseed_num;
@@ -249,97 +157,9 @@ void ReseedParticles(HADeviceGrid<Tile>& grid, const FluidParams& params, const 
 		}
 	}
 
-	//cudaDeviceSynchronize(); timer.stop(fmt::format("generating host reseeding list {}", reseed_particles_h.size())); timer.start();
-
 	int diff = SmartResizeParticlesForInsert(particles, reseed_particles_h.size());
-
-	//cudaDeviceSynchronize(); timer.stop(fmt::format("resize particles {} more", diff)); timer.start();
-
 	particles.insert(particles.end(), reseed_particles_h.begin(), reseed_particles_h.end());
-
-	//cudaDeviceSynchronize(); timer.stop("insert particles to device"); timer.start();
-
-	// auto holder_ptr = grid.getHostTileHolderForLeafs();
-	
-
-	// thrust::host_vector<Particle> reseed_particles_h;
-
-	// auto acc = grid.hostAccessor();
-	// holder_ptr->iterateLeafCells([&](const HATileInfo<Tile>& info, const Coord& l_ijk) {
-	// 	auto& tile = info.tile();
-	// 	Vec pos = acc.cellCenter(info, l_ijk);
-	// 	if (tile.type(l_ijk) == INTERIOR && params.isInParticleGenerationRegion(acc, info, l_ijk)) {
-
-	// 		int num_particles = tile(tmp_channel, l_ijk);
-	// 		if (num_particles < reseed_threshold) {
-	// 			//sample random particles
-	// 			auto bbox = acc.voxelBBox(info, l_ijk);
-	// 			auto minPoint = bbox.min();
-	// 			auto maxPoint = bbox.max();
-
-	// 			for (int i = 0; i < num_particles_per_cell - num_particles; i++) {
-	// 				auto x = rng.uniform(minPoint[0], maxPoint[0]);
-	// 				auto y = rng.uniform(minPoint[1], maxPoint[1]);
-	// 				auto z = rng.uniform(minPoint[2], maxPoint[2]);
-
-	// 				Particle p;
-	// 				p.pos = Vec(x, y, z);
-	// 				p.impulse = Vec(0., 0., 0.);
-	// 				p.matT = Eigen::Matrix3<T>::Identity();
-	// 				p.start_time = current_time;
-	// 				reseed_particles_h.push_back(p);
-	// 			}
-	// 		}
-	// 	}
-	// 	});
-	
-	//particles.insert(particles.end(), reseed_particles_h.begin(), reseed_particles_h.end());
 }
-
-
-////mark interested area (to refine) is min of a tile is 0 and max of a tile is greater than 0
-//__global__ void LockedMarkInterestAreaKernelMinAndMax(HATileAccessor<PoissonTile<T>> acc, HATileInfo<PoissonTile<T>>* infos, const uint8_t tmp_channel, int subtree_level, uint8_t launch_types) {
-//	const HATileInfo<PoissonTile<T>>& info = infos[blockIdx.x];
-//	Coord l_ijk = Coord(threadIdx.x, threadIdx.y, threadIdx.z);
-//
-//	if (!(info.subtreeType(subtree_level) & launch_types)) {
-//		if (l_ijk == Coord(0, 0, 0)) {
-//			auto& tile = info.tile();
-//			tile.mIsInterestArea = false;
-//		}
-//		return;
-//	}
-//
-//	auto& tile = info.tile();
-//	T value = tile(tmp_channel, l_ijk);
-//
-//	typedef cub::BlockReduce<T, Tile::DIM, cub::BLOCK_REDUCE_WARP_REDUCTIONS, Tile::DIM, Tile::DIM> BlockReduce;
-//	__shared__ typename BlockReduce::TempStorage temp_storage_min;
-//	__shared__ typename BlockReduce::TempStorage temp_storage_max;
-//
-//	T minValue = BlockReduce(temp_storage_min).Reduce(value, cub::Min());
-//	T maxValue = BlockReduce(temp_storage_max).Reduce(value, cub::Max());
-//
-//	if (l_ijk == Coord(0, 0, 0)) {
-//		auto& tile = info.tile();
-//		//if (maxValue > 0) {
-//		//	tile.mIsInterestArea = true;
-//		//}
-//		//else {
-//		//	tile.mIsInterestArea = false;
-//		//}
-//		printf("minValue: %f, maxValue: %f\n", minValue, maxValue);
-//
-//		if (minValue == 0 && maxValue > 0) {
-//			tile.mIsInterestArea = true;
-//			tile.mIsLockedRefine = true;
-//		}
-//		else {
-//			tile.mIsInterestArea = false;
-//			tile.mIsLockedRefine = false;
-//		}
-//	}
-//}
 
 // Kernel to mark the interested area based on min and max values in a tile
 __global__ void LockedMarkInterestAreaMinAndMax128Kernel(HATileAccessor<PoissonTile<T>> acc, HATileInfo<PoissonTile<T>>* infos, const uint8_t tmp_channel, int subtree_level, uint8_t launch_types) {
