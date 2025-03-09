@@ -17,6 +17,8 @@
 enum DataHolder { HOST = 0, DEVICE };
 
 enum TileTypes { LEAF = 0b001, NONLEAF = 0b010, GHOST = 0b100, NEWLY_ADDED = 0b1000 };
+enum AdaptiveStat { REFINE_FLAG = 0b001, DELETE_FLAG = 0b010, COARSEN_FLAG = 0b100, ACTIVE_FLAG = 0b1000 };
+
 
 enum LaunchMode { LAUNCH_LEVEL = 0, LAUNCH_SUBTREE };
 enum LaunchOrder { COARSE_FIRST = 0, FINE_FIRST };

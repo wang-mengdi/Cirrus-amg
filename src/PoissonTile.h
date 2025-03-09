@@ -5,7 +5,6 @@
 
 
 enum CellType { DIRICHLET = 0b001, INTERIOR = 0b010, NEUMANN = 0b100, SURFACE = 0b1000 };
-enum AdaptiveStat { REFINE_FLAG = 0b001, DELETE_FLAG = 0b010, COARSEN_FLAG = 0b100, ACTIVE_FLAG = 0b1000 };
 
 template<class Type>
 class PoissonTile {

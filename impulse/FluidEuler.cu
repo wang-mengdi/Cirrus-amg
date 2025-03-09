@@ -244,7 +244,21 @@ int LockedRefineWithNonBoundaryNeumannCellsOneStep(const T current_time, HADevic
 		LockedMarkInterestAreaMinAndMax128Kernel << <grid.dAllTiles.size(), 128 >> > (grid.deviceAccessor(), info_ptr, tmp_channel, -1, LEAF);
 	}
 
-	auto refine_cnts = RefineLeafsOneStep(grid, levelTarget, verbose);
+	//struct LevelTargetFunctor {
+	//	int coarse_level;
+	//	int fine_level;
+
+	//	__hostdev__
+	//	int operator()(const HATileAccessor<Tile>& acc, const HATileInfo<Tile>& info) const {
+	//		const auto& tile = info.tile();
+	//		return (tile.mIsInterestArea > 0) ? fine_level : coarse_level;
+	//	}
+	//};
+	//LevelTargetFunctor level_target = { coarse_level, fine_level };
+
+	//auto refine_cnts = RefineLeafsOneStep(grid, levelTarget, verbose);
+	auto refine_cnts = grid.refineLeafsOneStep(levelTarget, verbose);
+	//auto refine_cnts = grid.refineLeafsOneStep<LevelTargetFunctor>(level_target, verbose);
 	grid.spawnGhostTiles(verbose);
 	//SpawnGhostTiles(grid, verbose);
 	if (verbose) Info("Refine {} tiles on each layer", refine_cnts);

@@ -231,6 +231,51 @@ __global__ void LaunchTilesHelperKernel(HATileAccessor<Tile> acc, FuncAIB f, HAT
 	}
 }
 
+template<class Tile, class FuncAB>
+__global__ void MarkRefineFlagOnLeafsWithLevelTargetHelperKernel(HATileAccessor<Tile> acc, FuncAB level_target, HATileInfo<Tile>* tiles, int num_tiles, int* refine_flg_dev) {
+	using Coord = typename Tile::Coord;
+	auto idx = blockIdx.x * blockDim.x + threadIdx.x;
+	if (idx < num_tiles) {
+		HATileInfo<Tile> info = tiles[idx];
+		int i = info.mLevel;
+		if (!(info.mType & LEAF)) {
+			refine_flg_dev[idx] = 0;
+			return;
+		}
+
+		auto& tile = info.tile();
+		//a leaf tile need to be refined if it doesn't reach level target, or there is a neighbor leaf on +2 level
+		//that means, it has a ghost child, whose REFINE_FLAG is set
+		//the flags of ghost tiles will be set in the next step
+
+		bool to_refine = false;
+		//case 1: if the target level is higher than the current level, refine
+		if (level_target(acc, info) > info.mLevel) {
+			to_refine = true;
+		}
+
+		//case 2: check ghost children
+		//there are no ghost children of the max level
+		if (i < acc.mMaxLevel) {
+			acc.iterateChildCoords(info.mTileCoord,
+				[&]__device__(const Coord & child_ijk) {
+				auto& child_info = acc.tileInfo(i + 1, child_ijk);
+				if (child_info.isGhost()) {
+					auto& child_tile = child_info.tile();
+					if (child_tile.mStatus & REFINE_FLAG) {
+						to_refine = true;
+					}
+				}
+			});
+		}
+
+		//we will not refine if the maximum capacity of levels is reached
+		if (i + 1 >= acc.mNumLevels) to_refine = false;
+		tile.setMask(REFINE_FLAG, to_refine);
+		refine_flg_dev[idx] = to_refine;
+	}
+}
+
 template<class Tile>
 class HADeviceGrid {
 	static constexpr DataHolder AllocSide = DEVICE;
@@ -766,6 +811,87 @@ public:
 			thrust::raw_pointer_cast(dHashTablePtrs.data())//,
 			//thrust::raw_pointer_cast(dTileArrayPtrs.data())
 		);
+	}
+
+	template<class ABFunc>
+	std::vector<int> refineLeafsOneStep(const ABFunc& level_target, bool verbose) {
+		//must be called after ghost tiles are properly spawned
+		//then, refine leafs for one step
+		//this may need to be called multiple times to reach the target level
+		Assert(mDeviceSyncFlag, "Grid must be synced before refine step");
+
+		constexpr int blockSize = 512;
+		std::vector<int> level_refine_cnts(mNumLevels, 0);
+
+		for (int i = mMaxLevel; i >= 0; i--) {
+			thrust::host_vector<int> refine_host(hNumTiles[i]);
+			thrust::device_vector<int> refine_flg_dev = refine_host;
+			Assert(refine_flg_dev.size() == hNumTiles[i], "refine_flg_dev size {} mismatch num tiles {}", refine_flg_dev.size(), hNumTiles[i]);
+
+			if (hNumTiles[i] == 0) continue;
+
+			auto refine_flg_dev_ptr = thrust::raw_pointer_cast(refine_flg_dev.data());
+			
+			//first, launch on all 
+			MarkRefineFlagOnLeafsWithLevelTargetHelperKernel << <(hNumTiles[i] + blockSize - 1) / blockSize, blockSize >> > (
+				deviceAccessor(),
+				level_target,
+				thrust::raw_pointer_cast(dTileArrays[i].data()),
+				hNumTiles[i],
+				refine_flg_dev_ptr
+				);
+			refine_host = refine_flg_dev;
+
+			launchTileFunc(
+				[=]__device__(HATileAccessor<Tile>&acc, const uint32_t tile_idx, HATileInfo<Tile>&info) {
+				auto& tile = info.tile();
+				bool refine_flag = false;
+				acc.iterateNeighborCoords(info.mTileCoord,
+					[&](const Coord& n_ijk) {
+						auto& n_info = acc.tileInfo(i, n_ijk);
+						if (n_info.isLeaf()) {
+							auto& n_tile = n_info.tile();
+							if (n_tile.mStatus & REFINE_FLAG) {
+								refine_flag = true;
+							}
+						}
+					});
+				tile.setMask(REFINE_FLAG, refine_flag);
+			},
+				i, GHOST, LAUNCH_LEVEL
+			);
+
+			using Acc = HACoordAccessor<Tile>;
+			//we will refine all required tiles to the next level
+			//thrust::host_vector<int> refine_host = refine_flg_dev;
+			auto h_acc = hostAccessor();
+			for (int j = 0; j < refine_host.size(); j++) {
+				if (refine_host[j]) {
+					level_refine_cnts[i]++;
+
+					//this seems strange, but the compress() function will write mHostTileArray based on hash table
+					//so we must modify the hash table element
+					auto& tmp_info = hTileArrays[i][j];
+					auto& info = h_acc.tileInfo(i, tmp_info.mTileCoord);
+
+					info.mType = NONLEAF;
+					auto tile = info.getTile(DEVICE);
+
+					for (int ci = 0; ci < Acc::NUMCHILDREN; ci++) {
+						Coord offset = Acc::childIndexToOffset(ci);
+						Coord c_ijk = Acc::childCoord(info.mTileCoord, offset);
+
+						setTileHost(i + 1, c_ijk, tile.childTile(offset), LEAF);
+					}
+				}
+			}
+
+		}
+
+		compressHost(verbose);
+		syncHostAndDevice();
+
+		return level_refine_cnts;
 	}
 };
 
