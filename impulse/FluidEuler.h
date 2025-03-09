@@ -28,92 +28,92 @@
 #include <sys/sysinfo.h>
 #endif
 
-template<class FuncV>
-__global__ void MarkInterestAreaWithPointFunction128Kernel(FuncV point_func, HATileAccessor<PoissonTile<T>> acc, HATileInfo<PoissonTile<T>>* infos, T threshold, int subtree_level, uint8_t launch_types) {
-	int bi = blockIdx.x;
-	int ti = threadIdx.x;
-	const HATileInfo<PoissonTile<T>>& info = infos[bi];
-
-	auto& tile = info.tile();
-	if (!(info.subtreeType(subtree_level) & launch_types)) {
-		if (ti == 0) tile.mIsInterestArea = false;
-		return;
-	}
-
-	// 定义一个共享存储来存储 block 内的最大值
-	typedef cub::BlockReduce<T, 128> BlockReduce;
-	__shared__ typename BlockReduce::TempStorage temp_storage;
-
-	// 初始化当前线程的局部最大值为负无穷
-	T local_max = -FLT_MAX;
-
-	// 遍历 tile 中的 cell centers
-	for (int cell_idx = ti; cell_idx < Tile::SIZE; cell_idx += blockDim.x) {
-		Coord l_ijk = acc.localOffsetToCoord(cell_idx);
-		Vec pos = acc.cellCenter(info, l_ijk);
-		T value = point_func(pos);          // 使用 intp() 查询值
-		local_max = max(local_max, value);             // 更新局部最大值
-	}
-
-	// 计算 block 内的最大值
-	T block_max = BlockReduce(temp_storage).Reduce(local_max, cub::Max());
-
-	if (ti == 0) {
-		// 判断 block 最大值是否超过阈值
-		if (block_max > threshold) {
-			tile.mIsInterestArea = true;
-		}
-		else {
-			tile.mIsInterestArea = false;
-		}
-	}
-}
-
-template<class FuncV>
-void RefineWithPointValue(FuncV point_func, HADeviceGrid<Tile>& grid, FluidParams params, bool verbose) {
-	int coarse_level = params.mCoarseLevel;
-	int fine_level = params.mFineLevel;
-	auto levelTarget = [fine_level, coarse_level]__device__(const HATileAccessor<Tile> &acc, const HATileInfo<Tile> &info) ->int {
-		auto& tile = info.tile();
-		if (tile.mIsInterestArea) return fine_level;
-		return coarse_level;
-	};
-
-	while (true) {
-		auto info_ptr = thrust::raw_pointer_cast(grid.dAllTiles.data());
-		//calculate interest area flags on leafs
-		MarkInterestAreaWithPointFunction128Kernel << <grid.dAllTiles.size(), 128 >> > (point_func, grid.deviceAccessor(), info_ptr, params.mRefineThreshold, -1, LEAF);
-		auto refine_cnts = RefineLeafsOneStep(grid, levelTarget, verbose);
-		SpawnGhostTiles(grid, verbose);
-		if (verbose) Info("Refine {} tiles on each layer", refine_cnts);
-		int cnt = std::accumulate(refine_cnts.begin(), refine_cnts.end(), 0);
-		if (cnt == 0) break;
-	}
-}
-
-template<class FuncV>
-void CoarsenWithPointValue(FuncV point_func, HADeviceGrid<Tile>& grid, FluidParams params, bool verbose) {
-	int coarse_level = params.mCoarseLevel;
-	int fine_level = params.mFineLevel;
-	auto levelTarget = [fine_level, coarse_level]__device__(const HATileAccessor<Tile> &acc, const HATileInfo<Tile> &info) ->int {
-		auto& tile = info.tile();
-		if (tile.mIsInterestArea) return fine_level;
-		return coarse_level;
-	};
-
-	while (true) {
-		auto info_ptr = thrust::raw_pointer_cast(grid.dAllTiles.data());
-		//calculate interest area flags on leafs
-		MarkInterestAreaWithPointFunction128Kernel << <grid.dAllTiles.size(), 128 >> > (point_func, grid.deviceAccessor(), info_ptr, params.mRefineThreshold, -1, LEAF);
-		auto coarsen_cnts = CoarsenStep(grid, levelTarget, verbose);
-
-		if (verbose) Info("Coarsen {} tiles on each layer", coarsen_cnts);
-		int cnt = std::accumulate(coarsen_cnts.begin(), coarsen_cnts.end(), 0);
-		if (cnt == 0) break;
-	}
-	SpawnGhostTiles(grid, verbose);
-
-}
+//template<class FuncV>
+//__global__ void MarkInterestAreaWithPointFunction128Kernel(FuncV point_func, HATileAccessor<PoissonTile<T>> acc, HATileInfo<PoissonTile<T>>* infos, T threshold, int subtree_level, uint8_t launch_types) {
+//	int bi = blockIdx.x;
+//	int ti = threadIdx.x;
+//	const HATileInfo<PoissonTile<T>>& info = infos[bi];
+//
+//	auto& tile = info.tile();
+//	if (!(info.subtreeType(subtree_level) & launch_types)) {
+//		if (ti == 0) tile.mIsInterestArea = false;
+//		return;
+//	}
+//
+//	// 定义一个共享存储来存储 block 内的最大值
+//	typedef cub::BlockReduce<T, 128> BlockReduce;
+//	__shared__ typename BlockReduce::TempStorage temp_storage;
+//
+//	// 初始化当前线程的局部最大值为负无穷
+//	T local_max = -FLT_MAX;
+//
+//	// 遍历 tile 中的 cell centers
+//	for (int cell_idx = ti; cell_idx < Tile::SIZE; cell_idx += blockDim.x) {
+//		Coord l_ijk = acc.localOffsetToCoord(cell_idx);
+//		Vec pos = acc.cellCenter(info, l_ijk);
+//		T value = point_func(pos);          // 使用 intp() 查询值
+//		local_max = max(local_max, value);             // 更新局部最大值
+//	}
+//
+//	// 计算 block 内的最大值
+//	T block_max = BlockReduce(temp_storage).Reduce(local_max, cub::Max());
+//
+//	if (ti == 0) {
+//		// 判断 block 最大值是否超过阈值
+//		if (block_max > threshold) {
+//			tile.mIsInterestArea = true;
+//		}
+//		else {
+//			tile.mIsInterestArea = false;
+//		}
+//	}
+//}
+//
+//template<class FuncV>
+//void RefineWithPointValue(FuncV point_func, HADeviceGrid<Tile>& grid, FluidParams params, bool verbose) {
+//	int coarse_level = params.mCoarseLevel;
+//	int fine_level = params.mFineLevel;
+//	auto levelTarget = [fine_level, coarse_level]__device__(const HATileAccessor<Tile> &acc, const HATileInfo<Tile> &info) ->int {
+//		auto& tile = info.tile();
+//		if (tile.mIsInterestArea) return fine_level;
+//		return coarse_level;
+//	};
+//
+//	while (true) {
+//		auto info_ptr = thrust::raw_pointer_cast(grid.dAllTiles.data());
+//		//calculate interest area flags on leafs
+//		MarkInterestAreaWithPointFunction128Kernel << <grid.dAllTiles.size(), 128 >> > (point_func, grid.deviceAccessor(), info_ptr, params.mRefineThreshold, -1, LEAF);
+//		auto refine_cnts = RefineLeafsOneStep(grid, levelTarget, verbose);
+//		SpawnGhostTiles(grid, verbose);
+//		if (verbose) Info("Refine {} tiles on each layer", refine_cnts);
+//		int cnt = std::accumulate(refine_cnts.begin(), refine_cnts.end(), 0);
+//		if (cnt == 0) break;
+//	}
+//}
+//
+//template<class FuncV>
+//void CoarsenWithPointValue(FuncV point_func, HADeviceGrid<Tile>& grid, FluidParams params, bool verbose) {
+//	int coarse_level = params.mCoarseLevel;
+//	int fine_level = params.mFineLevel;
+//	auto levelTarget = [fine_level, coarse_level]__device__(const HATileAccessor<Tile> &acc, const HATileInfo<Tile> &info) ->int {
+//		auto& tile = info.tile();
+//		if (tile.mIsInterestArea) return fine_level;
+//		return coarse_level;
+//	};
+//
+//	while (true) {
+//		auto info_ptr = thrust::raw_pointer_cast(grid.dAllTiles.data());
+//		//calculate interest area flags on leafs
+//		MarkInterestAreaWithPointFunction128Kernel << <grid.dAllTiles.size(), 128 >> > (point_func, grid.deviceAccessor(), info_ptr, params.mRefineThreshold, -1, LEAF);
+//		auto coarsen_cnts = CoarsenStep(grid, levelTarget, verbose);
+//
+//		if (verbose) Info("Coarsen {} tiles on each layer", coarsen_cnts);
+//		int cnt = std::accumulate(coarsen_cnts.begin(), coarsen_cnts.end(), 0);
+//		if (cnt == 0) break;
+//	}
+//	SpawnGhostTiles(grid, verbose);
+//
+//}
 
 __device__ Vec NFMErodedAdvectionPoint(const int axis, const HATileAccessor<Tile>& acc, const HATileInfo<Tile>& info, const Coord& l_ijk);
 
@@ -187,18 +187,6 @@ public:
 					params.setBoundaryCondition(acc, info, l_ijk, time);
 				//}
 			}, LEAF
-			);
-		}
-	}
-
-	void applyDyeDensityBC(HADeviceGrid<Tile>& grid, const double time) {
-		//if (mParams.mTestCase == TVORTEX) {
-		{
-			auto params = mParams;
-			grid.launchVoxelFuncOnAllTiles(
-				[params] __device__(HATileAccessor<Tile>&acc, HATileInfo<Tile>&info, const Coord & l_ijk) {
-				params.enforceDyeDensityBoundaryCondition(acc, info, l_ijk);
-			}, LEAF, 1
 			);
 		}
 	}
@@ -297,48 +285,6 @@ public:
 		particles.reserve((size_t)(reserve_particles_m * 1024 * 1024));
 		mParams = FluidParams(j, mMaskGrid, mSDFGrid);
 
-		if (mParams.mTestCase == BAT) {
-			float solid_ext_isovalue = Json::Value<float>(j, "solid_ext_isovalue", 0);
-			float sdf_ext_isovalue = Json::Value<float>(j, "sdf_ext_isovalue", 0.025);
-			auto file0 = getBatCyclicAnimationFile(animation_sdf_path, 0);
-			mSDFGrid = std::make_shared<SDFGrid>(file0, solid_ext_isovalue, sdf_ext_isovalue);
-
-			//for (int axis : {0, 1, 2}) {
-			//	auto vel_file = getBatCyclicVelocityFile(animation_sdf_path, 0, axis);
-			//	mAnimationVelocityGrids[axis] = std::make_shared<SDFGrid>(vel_file, solid_ext_isovalue, sdf_ext_isovalue);
-			//}
-
-			mParams.mSDFGridAccessor = mSDFGrid->GetDeviceAccessor();
-			//auto file0 = getBatCyclicAnimationFile(animation_sdf_path, 0);
-			//auto file1 = getBatCyclicAnimationFile(animation_sdf_path, 1);
-			//mSDFGrid = std::make_shared<SDFGrid>(file0, solid_ext_isovalue, sdf_ext_isovalue);
-			//mAnimationSDFGrid0 = std::make_shared<SDFGrid>(file0, solid_ext_isovalue, sdf_ext_isovalue);
-			//mAnimationSDFGrid1 = std::make_shared<SDFGrid>(file1, solid_ext_isovalue, sdf_ext_isovalue);
-			//loaded_animated_frame = 1;
-
-			//for (int axis : {0, 1, 2}) {
-			//	mParams.mSDFVelocityAccessors[axis] = mAnimationVelocityGrids[axis]->GetDeviceAccessor();
-			//}
-		}
-		else if (mParams.mTestCase == FLAMINGO) {
-			float solid_ext_isovalue = Json::Value<float>(j, "solid_ext_isovalue", 0);
-			float sdf_ext_isovalue = Json::Value<float>(j, "sdf_ext_isovalue", 0.025);
-
-			Info("generate flamingo file");
-
-			//auto file0 = generateFlamingoFileWithPython(animation_sdf_path, 0, 0, solid_ext_isovalue);
-
-			auto file0 = getFlamingoAnimationFile(animation_sdf_path, 0);
-			mSDFGrid = std::make_shared<SDFGrid>(file0, solid_ext_isovalue, sdf_ext_isovalue);
-			mParams.mSDFGridAccessor = mSDFGrid->GetDeviceAccessor();
-
-			//auto file1 = getFlamingoAnimationFile(animation_sdf_path, 1);
-			//mAnimationSDFGrid0 = std::make_shared<SDFGrid>(file1, solid_ext_isovalue, sdf_ext_isovalue);
-			//mAnimationSDFGrid1 = std::make_shared<SDFGrid>(file1, solid_ext_isovalue, sdf_ext_isovalue);
-			
-			loaded_animated_frame = 0;
-		}
-
 		//level-resolution:
 		//0:8, 1:16, 2:32, 3:64, 4:128, 5:256, 6:512, 7:1024
 		double h = 1.0 / 8;
@@ -347,27 +293,7 @@ public:
 		grid_ptrs.push_back(grid_ptr);
 		auto& grid = *grid_ptr;
 
-		if (mParams.mTestCase == LEAP_FROG || mParams.mTestCase == BAT) {
-			grid.setTileHost(0, nanovdb::Coord(0, 0, 0), Tile(), LEAF);
-			grid.setTileHost(0, nanovdb::Coord(1, 0, 0), Tile(), LEAF);
-		}
-		else if(mParams.mTestCase == FISH){
-			grid.setTileHost(0, nanovdb::Coord(0, 0, 0), Tile(), LEAF);
-			grid.setTileHost(0, nanovdb::Coord(1, 0, 0), Tile(), LEAF);
-			grid.setTileHost(0, nanovdb::Coord(2, 0, 0), Tile(), LEAF);
-			grid.setTileHost(0, nanovdb::Coord(3, 0, 0), Tile(), LEAF);
-		}
-		else if (mParams.mTestCase == FLAMINGO) {
-			grid.setTileHost(0, nanovdb::Coord(0, 0, 0), Tile(), LEAF);
-			grid.setTileHost(0, nanovdb::Coord(0, 0, 1), Tile(), LEAF);
-			grid.setTileHost(0, nanovdb::Coord(0, 0, 2), Tile(), LEAF);
-			grid.setTileHost(0, nanovdb::Coord(0, 0, 3), Tile(), LEAF);
-		}
-		else if (mParams.mTestCase == NASA || mParams.mTestCase == WP3D || mParams.mTestCase == F1CAR) {
-			grid.setTileHost(0, nanovdb::Coord(0, 0, 0), Tile(), LEAF);
-			grid.setTileHost(0, nanovdb::Coord(0, 0, 1), Tile(), LEAF);
-		}
-		else {
+		{
 			//1*1*1
 			grid.setTileHost(0, nanovdb::Coord(0, 0, 0), Tile(), LEAF);
 		}
@@ -572,22 +498,6 @@ public:
 			Info("div pt linf: {}", NormSync(grid, -1, Tile::b_channel, false));
 
 			VelocityVolumeDivergenceOnLeafs(grid, u_channel, Tile::b_channel);
-
-			//{
-			//	auto holder = grid.getHostTileHolderForLeafs();
-			//	polyscope::init();
-			//	IOFunc::AddPoissonGridCellCentersToPolyscopePointCloud(
-			//		holder,
-			//		{ {-1, "type" },
-			//			{ Tile::b_channel, "divergence" },
-			//			{ Tile::x_channel, "pressure" }
-			//		},
-			//		{
-			//			{ Tile::u_channel, "velocity" }
-			//		}
-			//	);
-			//	polyscope::show();
-			//}
 		}
 
 
@@ -612,7 +522,6 @@ public:
 
 		//shared by two grids
 		int u_channel = Tile::u_channel;//6
-		int dye_channel = Tile::dye_channel;//10
 
 		//last_grid:
 		//012: node u
@@ -655,32 +564,13 @@ public:
 		MarkOldParticlesAsInvalid(particles, current_time, mParams.mParticleLife);
 		EraseInvalidParticles(particles);
 
-		ReseedParticles(last_grid, mParams, last_tmp_channel, current_time, mNumParticlesPerCell, particles);
-		//cudaDeviceSynchronize(); timer.stop("Reseeding particles"); timer.start();
-		
-
-
+		ReseedParticles(last_grid, mParams, last_tmp_channel, current_time, mNumParticlesPerCell, particles);		
 
 		cudaDeviceSynchronize(); reseeding_time = timer.stop("reseeding and remove particles in solid"); timer.start();
 		Info("total {:.5f}M particles, time step counter {}", particles.size() / (1024 * 1024 + 0.f), time_step_counter);
 
-		//{
-		//	polyscope::init();
-		//	IOFunc::AddTilesToPolyscopeVolumetricMesh(last_grid, LEAF, "leaf tiles");
-		//	IOFunc::AddParticleSystemToPolyscope(particles, "particles");
-		//	polyscope::show();
-		//}
-
-
 		//reset impulse for all particles
 		if (time_step_counter % mParams.mFlowMapStride == 0) {
-			//auto holder_ptr = last_grid.getHostTileHolderForLeafs();
-			//GenerateParticlesUniformlyOnFinestLevel(holder_ptr, 2, particles);
-
-			//with midpoint velocity on, we have to create a copy
-			//nfm_query_grid_ptr = grid_ptrs[n - 1]->deepCopy();
-			 
-			//without midpoint velocity, we can directly use the last grid
 			nfm_query_grid_ptr = grid_ptrs[n - 1];
 			ResetParticleImpulse(last_grid, u_channel, last_u_node_channel, particles);
 
@@ -708,70 +598,7 @@ public:
 
 			cudaDeviceSynchronize(); timer.stop("reset newly sampled particles impulse"); timer.start();
 		}
-		//cudaDeviceSynchronize(); timer.stop("Reset particle impulse"); timer.start();
 
-		//ResetParticlesGradM(last_grid, u_channel, last_u_node_channel, particles);
-		//cudaDeviceSynchronize(); timer.stop("Reset particle gradm"); timer.start();
-		//CheckCudaError("reinit");
-
-
-
-
-		////midpoint velocity
-		//{
-		//	//012: node u
-		//	//345: u copy
-		//	//678: face u
-		//	//9: node dye
-		//	//10: voxel dye
-		//	int last_u_copy_channel = 3;
-		//	for (int axis : {0, 1, 2}) {
-		//		Copy(last_grid, u_channel + axis, last_u_copy_channel + axis, -1, LEAF, LAUNCH_SUBTREE, INTERIOR | DIRICHLET | NEUMANN);
-		//	}
-		//	auto last_acc = last_grid.deviceAccessor();
-		//	int fine_level = mParams.mFineLevel;
-		//	int coarse_level = mParams.mCoarseLevel;
-		//	last_grid.launchVoxelFuncOnAllTiles(
-		//		[=] __device__(HATileAccessor<Tile>&acc, HATileInfo<Tile>&info, const Coord & l_ijk) {
-		//		auto& tile = info.tile();
-		//		for (int axis : {0, 1, 2}) {
-		//			//Vec psi = last_acc.faceCenter(axis, info, l_ijk);
-		//			Vec psi = NFMErodedAdvectionPoint(axis, acc, info, l_ijk);
-		//			Eigen::Matrix3<T> matT = Eigen::Matrix3<T>::Identity();
-
-		//			//we want forward T to calculate matT.T@m0
-		//			//and forward T equals to backward F
-		//			RK4ForwardPositionAndF(last_acc, fine_level, coarse_level, -0.5 * dt, last_u_copy_channel, last_u_node_channel, psi, matT);
-		//			Vec m0 = InterpolateFaceValue(last_acc, psi, last_u_copy_channel, last_u_node_channel);
-
-		//			Vec m1 = MatrixTimesVec(matT.transpose(), m0);
-
-		//			tile(u_channel + axis, l_ijk) = m1[axis];
-		//		}
-		//	}, LEAF, 4
-		//	);
-
-		//	//AdvectGridImpulseRK4Forward(last_grid, last_u_copy_channel, last_u_node_channel, 0.5 * dt, last_grid, u_channel);
-		//	applyVelocityBC(last_grid, current_time);
-
-		//	project(last_grid, u_channel, current_time);
-		//	//CalcLeafNodeValuesFromFaceCenters(last_grid, u_channel, last_u_node_channel);
-		//	InterpolateVelocitiesAtAllTiles(last_grid, u_channel, last_u_node_channel);
-
-		//	//CheckCudaError("project");
-		//	cudaDeviceSynchronize(); timer.stop("Midpoint"); timer.start();
-		//}
-
-		
-
-		//RemoveParticlesInNeumannCells(particles, last_grid);
-
-		//if (metadata.current_frame == 7 && time_step_counter >= 253) {
-		//	auto holder = last_grid.getHostTileHolder(LEAF | NONLEAF | GHOST);
-		//	IOFunc::WriteHAHostTileHolderToFile(*holder, fs::path(metadata.output_base_dir) / fmt::format("grid_{:03d}_{:03d}.bin", metadata.current_frame, time_step_counter));
-		//	IOFunc::WriteHostVectorToBinary<Particle>(particles, fs::path(metadata.output_base_dir) / fmt::format("particles_{:03d}_{:03d}.bin", metadata.current_frame, time_step_counter));
-		//}
-		
 
 		//AdvectParticlesRK4Forward(last_grid, u_channel, last_u_node_channel, dt, particles);
 		//AdvectParticlesAndSingleStepGradMRK4Forward(last_grid, u_channel, last_u_node_channel, dt, particles);
@@ -823,7 +650,7 @@ public:
 
 		//ParticleImpulseToGridMACIntp(grid, particles, u_channel, next_uw_channel);
 		HistogramSortParticlesAtGivenLevel(grid, mParams.mFineLevel, next_counter_channel, particles, tile_prefix_sum_d, records_d);
-		OptimizedP2GTransferAtGivenLevel(grid, mParams.mFineLevel, u_channel, next_uw_channel, tile_prefix_sum_d, records_d);
+		//OptimizedP2GTransferAtGivenLevel(grid, mParams.mFineLevel, u_channel, next_uw_channel, tile_prefix_sum_d, records_d);
 		EraseInvalidParticles(particles);
 
 		CheckCudaError("pfm p2g");
@@ -838,10 +665,6 @@ public:
 
 		//advect dye and NFM
 		{
-			CalcLeafNodeValuesFromCellCenters(last_grid, dye_channel, last_dye_node_channel);
-
-
-
 			auto last_acc = last_grid.deviceAccessor();
 			auto nfm_query_acc = nfm_query_grid_ptr->deviceAccessor();
 			auto params = mParams;
@@ -861,21 +684,7 @@ public:
 				int boundary_axis, boundary_off;
 				tile.type(l_ijk) = params.cellType(current_time, acc, info, l_ijk, boundary_axis, boundary_off);
 
-				//{
-				//	auto g_ijk = acc.localToGlobalCoord(info, l_ijk);
-				//	Coord diff = g_ijk - Coord(128, 128, 130);
-				//	if (abs(diff[0]) + abs(diff[1]) + abs(diff[2]) <= 1) {
-				//		printf("g_ijk %d %d %d type %d\n", g_ijk[0], g_ijk[1], g_ijk[2], tile.type(l_ijk));
-				//	}
-				//}
 
-				//dye density
-				{
-					auto pos = acc.cellCenter(info, l_ijk);
-					auto pos2 = SemiLagrangianBackwardPosition(last_acc, pos, dt, u_channel, last_u_node_channel);
-					auto dye2 = InterpolateCellValue(last_acc, pos2, Tile::dye_channel, last_dye_node_channel);
-					tile(Tile::dye_channel, l_ijk) = dye2;
-				}
 
 				{
 					//grid velocity advection
@@ -951,52 +760,6 @@ public:
 		CPUTimer timer;
 		timer.start();
 
-		if (mParams.mTestCase == BAT) {
-			auto [bat_frame, frac] = getBatAnimationFrameAndFrace(metadata.current_time);
-			if (loaded_animated_frame != bat_frame) {
-				{
-					auto sdf_file_n = getBatCyclicAnimationFile(animation_sdf_path, bat_frame);
-					mSDFGrid->ReloadSDFFile(sdf_file_n);
-				}
-
-				//for (int axis : {0, 1, 2}) {
-				//	auto vel_file_n = getBatCyclicVelocityFile(animation_sdf_path, bat_frame, axis);
-				//	mAnimationVelocityGrids[axis]->ReloadSDFFile(vel_file_n);
-				//}
-
-				loaded_animated_frame = bat_frame;
-			}
-
-			//auto [bat_frame, frac] = getBatAnimationFrameAndFrace(metadata.current_time);
-			//if (loaded_animated_frame != bat_frame + 1) {
-			//	auto next_file = getBatCyclicAnimationFile(animation_sdf_path, bat_frame + 1);
-			//	mAnimationSDFGrid0 = mAnimationSDFGrid1;
-			//	mAnimationSDFGrid1->ReloadSDFFile(next_file);
-			//	loaded_animated_frame = bat_frame + 1;
-			//}
-			//mSDFGrid->InterpolateFromTwoSDFGrids(*mAnimationSDFGrid0, *mAnimationSDFGrid1, frac);
-		}
-		else if (mParams.mTestCase == FLAMINGO) {
-			int frame = metadata.current_frame;
-			T time_past_frame = metadata.current_time - (frame + 0.0) / metadata.fps;
-			T frac = time_past_frame * metadata.fps;
-
-			//Info("frame {} time {} fps {} time past frame {} frac {}", frame, metadata.current_time, metadata.fps, time_past_frame, frac);
-			//auto sdf_file_n = generateFlamingoFileWithPython(animation_sdf_path, frame, frac, mParams.mSDFGridAccessor.solid_isovalue);
-			////auto sdf_file_n = getFlamingoAnimationFile(animation_sdf_path, frame);
-			//mSDFGrid->ReloadSDFFile(sdf_file_n);
-
-			if (loaded_animated_frame != frame) {
-				auto sfile0 = getFlamingoAnimationFile(animation_sdf_path, frame);
-				auto sfile1 = getFlamingoAnimationFile(animation_sdf_path, frame + 1);
-				mSDFGrid->ReloadSDFFile(sfile0);
-				//mAnimationSDFGrid0->ReloadSDFFile(sfile0);
-				//mAnimationSDFGrid1->ReloadSDFFile(sfile1);
-				loaded_animated_frame = frame;
-			}
-			//mSDFGrid->InterpolateFromTwoSDFGrids(*mAnimationSDFGrid0, *mAnimationSDFGrid1, frac);
-		}
-
 		//Info("before advance"); PrintMemoryInfo();
 
 		if (grid_ptrs.size() < mParams.mFlowMapStride + 1) {
@@ -1004,10 +767,6 @@ public:
 			auto nxt_ptr = grid_ptrs.back()->deepCopy();
 			grid_ptrs.push_back(nxt_ptr);
 			time_steps.push_back(metadata.dt);
-
-			//polyscope::init();
-			//IOFunc::AddTilesToPolyscopeVolumetricMesh(*nxt_ptr, LEAF, "next grid");
-			//polyscope::show();
 		}
 		else {
 			auto nxt_ptr = grid_ptrs[0];
@@ -1019,11 +778,6 @@ public:
 
 		auto& grid = *grid_ptrs.back();
 		auto& last_grid = *grid_ptrs[grid_ptrs.size() - 2];
-
-		//Info("grid ptrs size: {}", grid_ptrs.size());
-		//Info("grid total leafs: {}", grid.numTotalLeafTiles());
-
-
 		double dt = metadata.dt;
 
 
@@ -1031,21 +785,8 @@ public:
 
 		adaptAndAdvect(metadata, grid_ptrs);
 
-		//{
-
-		//	polyscope::init();
-		//	auto holder = grid.getHostTileHolderForLeafs();
-		//	IOFunc::AddPoissonGridCellCentersToPolyscopePointCloud(holder, { { -1,"type" }, {Tile::vor_channel, "vorticity"} ,{Tile::b_channel, "div"} }
-		//	, { {Tile::u_channel,"vel"} });
-		//	//IOFunc::AddPoissonGridNodesToPolyscope(holder, { {0,"node_vel"} }, { });
-		//	polyscope::show();
-		//}
-
-		//FixIsolatedInteriorCells(grid, Tile::b_channel);
-
 
 		applyExternalForce(grid, dt);
-		applyDyeDensityBC(grid, metadata.current_time);
 
 
 		applyVelocityBC(grid, metadata.current_time);
@@ -1054,30 +795,16 @@ public:
 		//projection
 		project(grid, Tile::u_channel, metadata.current_time);
 
-		//CalculateVorticityMagnitudeOnLeafs(grid, mParams.mFineLevel, mParams.mCoarseLevel, Tile::u_channel, 0, Tile::vor_channel);
 		CalculateVelocityAndVorticityMagnitudeOnLeafFaceCenters(grid, mParams.mFineLevel, mParams.mCoarseLevel, Tile::u_channel, 0, cell_center_vel_channel, Tile::vor_channel);
 
-		//{
-
-		//	polyscope::init();
-		//	auto holder = grid.getHostTileHolderForLeafs();
-		//	IOFunc::AddPoissonGridCellCentersToPolyscopePointCloud(holder, { { -1,"type" }, {Tile::vor_channel, "vorticity"} ,{Tile::b_channel, "div"} }
-		//	, { {Tile::u_channel,"vel"} });
-		//	//IOFunc::AddPoissonGridNodesToPolyscope(holder, { {0,"node_vel"} }, { });
-		//	polyscope::show();
-		//}
 
 		CheckCudaError("Advance");
 		time_step_counter++;
 
-		//system("pause");
 
 		PrintMemoryInfo();
-		//system("pause");
 
 		cudaDeviceSynchronize(); advance_time = timer.stop();
-
-		//writeIterVelocityField(metadata);
 	}
 
 	void WriteStatToFile(DriverMetaData& metadata) {
