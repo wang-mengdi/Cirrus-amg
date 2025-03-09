@@ -7,14 +7,14 @@ set_rundir("$(projectdir)")
 
 add_requires("magic_enum >=0.9.7")
 
-target("cirrus")
-    set_kind("binary")
-    add_headerfiles("cirrus/*.h")
-    add_files("cirrus/*.cpp", "cirrus/*.cu")
-    add_includedirs("cirrus", {public = true})
-    add_cugencodes("native")
-    add_cuflags("-extended-lambda --std=c++17")
-    add_deps("src")
+-- target("cirrus")
+--     set_kind("binary")
+--     add_headerfiles("cirrus/*.h")
+--     add_files("cirrus/*.cpp", "cirrus/*.cu")
+--     add_includedirs("cirrus", {public = true})
+--     add_cugencodes("native")
+--     add_cuflags("-extended-lambda --std=c++17")
+--     add_deps("src")
     
 
 target("impulse")

@@ -3,7 +3,7 @@
         "cfl": 0.5,
         "first_frame": 0,
         "fps": 200,
-        "last_frame": 400,
+        "last_frame": 50,
         "min_step_frame_fraction": 0.0,
         "output_base_dir": "./output/smokesphere",
         "queue_size": 4,
@@ -11,7 +11,7 @@
     },
     "scene": {
         "coarse_level": 1,
-        "fine_level": 4,
+        "fine_level": 5,
         "flowmap_stride": 5,
         "refine_threshold": 0.1,
         "gravity": 0.0,
