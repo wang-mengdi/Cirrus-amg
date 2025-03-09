@@ -11,11 +11,11 @@
     },
     "scene": {
         "coarse_level": 1,
-        "fine_level": 5,
-        "flowmap_stride": 1,
+        "fine_level": 4,
+        "flowmap_stride": 5,
         "refine_threshold": 0.1,
         "gravity": 0.0,
-        "particle_life": 0.5,
+        "particle_life": 2.5,
         "test": "smokesphere",
         "sdf_isovalue": 0.010,
         "reserve_particles_m": 40
