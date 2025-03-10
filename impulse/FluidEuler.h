@@ -51,21 +51,23 @@ namespace AdvChnls {
 }
 
 namespace OutputChnls {
+	constexpr int u_node = 0;
+	constexpr int u_cell = 3;
 	constexpr int vor = 9;
 }
 
 ////Channel allocations
 //      Buffer		Advection		Projection		Output
 // 0    u							x				node u
-// 1    v							b				node v
-// 2	w											node w
-// 3												vor
-// 4
-// 5
-// 6				u
-// 7				v
-// 8				w
-// 9
+// 1    v							b/r				node v
+// 2	w							p				node w
+// 3								Ap				cell u
+// 4								z				cell v
+// 5												cell w
+// 6				u				u				u
+// 7				v				v				v
+// 8				w				w				w
+// 9												vor
 //10
 //11								c0
 //12								c1
@@ -104,7 +106,7 @@ public:
 	fs::path flamingo_data_file = fs::path("data") / "flamingo-sdf.bin";
 	int loaded_animated_frame = -1;
 
-	int cell_center_vel_channel = 3;
+	//int cell_center_vel_channel = 3;
 
 	double advance_time = 0;
 	double projection_time = 0;
@@ -298,7 +300,7 @@ public:
 			metadata.Append_Output_Thread(std::make_shared<std::thread>(IOFunc::OutputPoissonGridAsStructuredVTI, holder,
 				std::vector<std::pair<int, std::string>>{ {-1, "type"}, { -2, "level" }, { OutputChnls::vor, "vorticity" }, {Tile::x_channel, "pressure"}},
 				//std::vector<std::pair<int, std::string>>{ },
-				std::vector<std::pair<int, std::string>>{ {cell_center_vel_channel, "velocity"} },
+				std::vector<std::pair<int, std::string>>{ {OutputChnls::u_cell, "velocity"} },
 				//std::vector<std::pair<int, std::string>>{ { -1, "type" }, { Tile::vor_channel, "vorticity" }, { Tile::dye_channel, "dye_density" } },
 				//std::vector<std::pair<int, std::string>>{ {Tile::u_channel, "velocity"} },
 				metadata.base_path / fmt::format("fluid{:04d}.vti", metadata.current_frame)));
@@ -674,7 +676,7 @@ public:
 		//projection
 		project(grid, Tile::u_channel, metadata.current_time);
 
-		CalculateVelocityAndVorticityMagnitudeOnLeafFaceCenters(grid, mParams.mFineLevel, mParams.mCoarseLevel, Tile::u_channel, 0, cell_center_vel_channel, OutputChnls::vor);
+		CalculateVelocityAndVorticityMagnitudeOnLeafFaceCenters(grid, mParams.mFineLevel, mParams.mCoarseLevel, Tile::u_channel, OutputChnls::u_node, OutputChnls::u_cell, OutputChnls::vor);
 
 
 		CheckCudaError("Advance");
