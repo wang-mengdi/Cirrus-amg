@@ -9,6 +9,7 @@ enum CellType { DIRICHLET = 0b001, INTERIOR = 0b010, NEUMANN = 0b100, SURFACE = 
 template<class Type>
 class PoissonTile {
 public:
+    //THESE CONSTANTS ARE TO BE DEPRECATED
     static constexpr int x_channel = 0;
     static constexpr int b_channel = 1;
     static constexpr int r_channel = 1;
