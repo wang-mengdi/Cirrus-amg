@@ -51,15 +51,15 @@ namespace AdvChnls {
 }
 
 namespace OutputChnls {
-	constexpr int vor = 2;
+	constexpr int vor = 9;
 }
 
 ////Channel allocations
 //      Buffer		Advection		Projection		Output
-// 0    u							x
-// 1    v							b				
-// 2	w											vor
-// 3
+// 0    u							x				node u
+// 1    v							b				node v
+// 2	w											node w
+// 3												vor
 // 4
 // 5
 // 6				u
