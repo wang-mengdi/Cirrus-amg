@@ -40,39 +40,6 @@ __device__ Vec SemiLagrangianBackwardPosition(const HATileAccessor<Tile>& acc, c
 int LockedRefineWithNonBoundaryNeumannCellsOneStep(const T current_time, HADeviceGrid<Tile>& grid, const FluidParams params, const int tmp_channel, bool verbose);
 void ReseedParticles(HADeviceGrid<Tile>& grid, const FluidParams& params, const int tmp_channel, const double current_time, const int num_particles_per_cell, thrust::device_vector<Particle>& particles);
 
-namespace ProjChnls {
-	constexpr int x = 0;
-	constexpr int b = 1;
-	constexpr int c0 = 11;
-}
-
-namespace AdvChnls {
-	constexpr int u = 6;
-}
-
-namespace OutputChnls {
-	constexpr int u_node = 0;
-	constexpr int u_cell = 3;
-	constexpr int vor = 9;
-}
-
-////Channel allocations
-//      Buffer		Advection		Projection		Output
-// 0    u							x				node u
-// 1    v							b/r				node v
-// 2	w							p				node w
-// 3								Ap				cell u
-// 4								z				cell v
-// 5												cell w
-// 6				u				u				u
-// 7				v				v				v
-// 8				w				w				w
-// 9												vor
-//10
-//11								c0
-//12								c1
-//13								c2
-//14								c3
 
 class FluidEuler : public Simulator {
 public:

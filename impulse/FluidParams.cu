@@ -68,7 +68,7 @@ __device__ void FluidParams::setInitialCondition(HATileAccessor<Tile>& acc, HATi
 
 		Tile& tile = info.tile();
 		for (int axis : {0, 1, 2}) {
-			tile(Tile::u_channel + axis, l_ijk) = initial_vel[axis];
+			tile(AdvChnls::u + axis, l_ijk) = initial_vel[axis];
 		}
 		int boundary_axis, boundary_off;
 		tile.type(l_ijk) = cellType(current_time, acc, info, l_ijk, boundary_axis, boundary_off);
@@ -78,7 +78,7 @@ __device__ void FluidParams::setInitialCondition(HATileAccessor<Tile>& acc, HATi
 
 		Tile& tile = info.tile();
 		for (int axis : {0, 1, 2}) {
-			tile(Tile::u_channel + axis, l_ijk) = initial_vel[axis];
+			tile(AdvChnls::u + axis, l_ijk) = initial_vel[axis];
 		}
 		int boundary_axis, boundary_off;
 		tile.type(l_ijk) = cellType(current_time, acc, info, l_ijk, boundary_axis, boundary_off);

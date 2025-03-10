@@ -8,6 +8,41 @@
 #define M_PI 3.14159265358979323846
 #endif
 
+namespace ProjChnls {
+	constexpr int x = 0;
+	constexpr int b = 1;
+	constexpr int c0 = 11;
+}
+
+namespace AdvChnls {
+	constexpr int u = 6;
+}
+
+namespace OutputChnls {
+	constexpr int u_node = 0;
+	constexpr int u_cell = 3;
+	constexpr int vor = 9;
+}
+
+////Channel allocations
+//      Buffer		Advection		Projection		Output
+// 0    u							x				node u
+// 1    v							b/r				node v
+// 2	w							p				node w
+// 3								Ap				cell u
+// 4								z				cell v
+// 5												cell w
+// 6				u				u				u
+// 7				v				v				v
+// 8				w				w				w
+// 9												vor
+//10
+//11								c0
+//12								c1
+//13								c2
+//14								c3
+
+
 //TVORTEX: tornado-like vortex, reference: Physically-based Simulation of Tornadoes
 enum TestCase { KARMAN = 0, SMOKESPHERE };
 
@@ -228,7 +263,7 @@ public:
 		//suppose boundary_axis=1, sgn=-1, l_ijk=(i,0,k), l1_ijk=(i,1,k)
 		Coord l1_ijk = l_ijk; l1_ijk[boundary_axis] -= boundary_off;
 		if (axis != boundary_axis) {
-			tile(Tile::u_channel + axis, l_ijk) = tile(Tile::u_channel + axis, l1_ijk);
+			tile(AdvChnls::u + axis, l_ijk) = tile(AdvChnls::u + axis, l1_ijk);
 		}
 		//otherwise there is a velocity node right on the face, should be either inflow/outflow or DIRICHLET
 	}
@@ -248,15 +283,15 @@ public:
 				auto l1_ijk = l_ijk; l1_ijk[boundary_axis] += 1;
 				auto pos = acc.faceCenter(axis, info, l1_ijk);
 				auto vel = vel_func(pos, boundary_axis, boundary_off);
-				tile(Tile::u_channel + axis, l1_ijk) = vel[axis];
+				tile(AdvChnls::u + axis, l1_ijk) = vel[axis];
 
 				Coord l2_ijk = l_ijk; l2_ijk[boundary_axis] += 2;
-				tile(Tile::u_channel + axis, l_ijk) = 2 * vel[axis] - tile(Tile::u_channel + axis, l2_ijk);
+				tile(AdvChnls::u + axis, l_ijk) = 2 * vel[axis] - tile(AdvChnls::u + axis, l2_ijk);
 			}
 			else if (boundary_off == 1) {
 				//auto pos = acc.faceCenter(axis, info, l_ijk);
 				//auto vel = vel_func(pos, boundary_axis, boundary_sgn);
-				//tile(Tile::u_channel + axis, l_ijk) = vel[axis];
+				//tile(AdvChnls::u + axis, l_ijk) = vel[axis];
 			}
 			else if (boundary_off == 2) {
 				//set cells n-1, n-2
@@ -264,12 +299,12 @@ public:
 
 				auto pos = acc.faceCenter(axis, info, l_ijk);
 				auto vel = vel_func(pos, boundary_axis, boundary_off);
-				tile(Tile::u_channel + axis, l_ijk) = vel[axis];
+				tile(AdvChnls::u + axis, l_ijk) = vel[axis];
 
 				//cell n-3
 				Coord l3_ijk = l_ijk; l3_ijk[boundary_axis] -= 1;
 				Coord l1_ijk = l_ijk; l1_ijk[boundary_axis] += 1;
-				tile(Tile::u_channel + axis, l1_ijk) = 2 * vel[axis] - tile(Tile::u_channel + axis, l3_ijk);
+				tile(AdvChnls::u + axis, l1_ijk) = 2 * vel[axis] - tile(AdvChnls::u + axis, l3_ijk);
 			}
 		}
 		else {
@@ -278,7 +313,7 @@ public:
 			auto pos1 = acc.faceCenter(axis, info, l1_ijk);
 			auto pos = (pos0 + pos1) * 0.5;
 			auto vel = vel_func(pos, boundary_axis, boundary_off);
-			tile(Tile::u_channel + axis, l_ijk) = 2 * vel[axis] - tile(Tile::u_channel + axis, l1_ijk);
+			tile(AdvChnls::u + axis, l_ijk) = 2 * vel[axis] - tile(AdvChnls::u + axis, l1_ijk);
 		}
 	}
 
@@ -311,7 +346,7 @@ public:
 				int boundary_axis, boundary_sgn;
 				if (queryEffectiveBoundaryDirection1(acc, mCoarseLevel, info, l_ijk, boundary_axis, boundary_sgn)) {
 					for (int axis : {0, 1, 2}) {
-						tile(Tile::u_channel + axis, l_ijk) = vel[axis];
+						tile(AdvChnls::u + axis, l_ijk) = vel[axis];
 					}
 				}
 			}
@@ -321,7 +356,7 @@ public:
 					int boundary_axis, boundary_sgn;
 					if (queryEffectiveBoundaryDirection1(acc, mCoarseLevel, info, nl_ijk, boundary_axis, boundary_sgn)) {
 						if (boundary_sgn == -1) {
-							tile(Tile::u_channel + axis, l_ijk) = vel[axis];
+							tile(AdvChnls::u + axis, l_ijk) = vel[axis];
 						}
 					}
 				}
