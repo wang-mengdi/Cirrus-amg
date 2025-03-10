@@ -17,13 +17,14 @@ void InterpolateVelocitiesAtAllTiles(HADeviceGrid<Tile>& grid, const int u_chann
 
 __device__ void KernelScatterVelocityComponentMAC2(const HATileAccessor<Tile>& acc, const int level, const int axis, const int u_channel, const int uw_channel, const Vec& pos, const Vec& vel, const Eigen::Matrix3<T>& gradu);
 __device__ bool KernelIntpVelocityAndJacobianMAC2AtGivenLevel(const HATileAccessor<Tile>& acc, const int level, const Vec& pos, const int u_channel, Vec& vel, Eigen::Matrix3<T>& jacobian);
+__device__ bool KernelIntpVelocityMAC2(const HATileAccessor<Tile>& acc, const int fine_level, const int coarse_level, const Vec& pos, const int u_channel, Vec& vel);
 __device__ bool KernelIntpVelocityAndJacobianMAC2(const HATileAccessor<Tile>& acc, const int fine_level, const int coarse_level, const Vec& pos, const int u_channel, Vec& vel, Eigen::Matrix3<T>& jacobian);
 
-__device__ void VelocityAndJacobian(const HATileAccessor<Tile>& acc, const Vec& pos, const int node_u_channel, Vec& vel, Eigen::Matrix3<T>& jacobian);
-__device__ void RK2ForwardPositionAndF(const HATileAccessor<Tile>& acc, const int fine_level, const int coarse_level, const T dt, const int u_channel, const int node_u_channel, Vec& pos, Eigen::Matrix3<T>& F);
+//__device__ void VelocityAndJacobian(const HATileAccessor<Tile>& acc, const Vec& pos, const int node_u_channel, Vec& vel, Eigen::Matrix3<T>& jacobian);
+//__device__ void RK2ForwardPositionAndF(const HATileAccessor<Tile>& acc, const int fine_level, const int coarse_level, const T dt, const int u_channel, const int node_u_channel, Vec& pos, Eigen::Matrix3<T>& F);
 __device__ void RK4ForwardPositionAndF(const HATileAccessor<Tile>& acc, const int fine_level, const int coarse_level, const T dt, const int u_channel, const int node_u_channel, Vec& phi, Eigen::Matrix3<T>& F);
 //__device__ bool RK4ForwardPositionAndFAtGivenLevel(const HATileAccessor<Tile>& acc, const int level, const T dt, const int u_channel, const int node_u_channel, Vec& phi, Eigen::Matrix3<T>& F, const T eps);
-__device__ void RK2ForwardPositionAndT(const HATileAccessor<Tile>& acc, const int fine_level, const int coarse_level, const T dt, const int u_channel, const int node_u_channel, Vec& pos, Eigen::Matrix3<T>& matT);
+//__device__ void RK2ForwardPositionAndT(const HATileAccessor<Tile>& acc, const int fine_level, const int coarse_level, const T dt, const int u_channel, const int node_u_channel, Vec& pos, Eigen::Matrix3<T>& matT);
 __device__ void RK4ForwardPositionAndT(const HATileAccessor<Tile>& acc, const int fine_level, const int coarse_level, const T dt, const int u_channel, const int node_u_channel, Vec& phi, Eigen::Matrix3<T>& matT);
 __device__ bool RK4ForwardPositionAndTAtGivenLevel(const HATileAccessor<Tile>& acc, const int level, const T dt, const int u_channel, const int node_u_channel, Vec& phi, Eigen::Matrix3<T>& matT);
 

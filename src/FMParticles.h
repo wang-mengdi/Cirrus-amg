@@ -2,31 +2,7 @@
 
 #include "FlowMap.h"
 
-//execuate in range [0, N)
-template <typename Func>
-__global__ void ForEachKernel(Func f, const int N, const int numGroups) {
-	int base = blockIdx.x * (blockDim.x * numGroups);
 
-	for (int i = 0; i < numGroups; i++) {
-		int idx = base + i * blockDim.x + threadIdx.x;
-		if (idx < N) {
-			f(idx);
-		}
-	}
-
-	//int idx = blockIdx.x * blockDim.x + threadIdx.x;
-	//if (idx < N) {
-	//	f(idx);
-	//}
-}
-
-template<typename Func>
-void LaunchIndexFunc(Func f, const int N, const int blockSize = 512, const int numGroups = 4) {
-	if (N == 0) return;
-	Assert(blockSize % numGroups == 0);
-	int numBlocks = (N + blockSize - 1) / blockSize;
-	ForEachKernel << <numBlocks, blockSize / numGroups >> > (f, N, numGroups);
-}
 
 class Particle {
 public:

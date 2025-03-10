@@ -1,6 +1,5 @@
 ﻿#include "FMParticles.h"
 #include "Random.h"
-
 #include "PoissonIOFunc.h"
 
 #include <cub/cub.cuh>

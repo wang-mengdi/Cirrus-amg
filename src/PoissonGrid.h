@@ -3,23 +3,7 @@
 //#include "HAGrid.h"
 #include "PoissonTile.h"
 
-template <class T, typename Func3>
-__global__ void TernaryOnArrayKernel(T* a, T* b, T* c, Func3 f, int n) {
-    int idx = threadIdx.x + blockIdx.x * blockDim.x;
-    if (idx < n) {
-        f(a[idx], b[idx], c[idx]);
-    }
-}
 
-template<class T, class Func3>
-void TernaryOnArray(T* d_a, T* d_b, T* d_c, Func3 f, int n = 1, int block_size = 512) {
-    if (n == 1) block_size = 1;
-
-    int numBlocks = (n + block_size - 1) / block_size;
-
-
-    TernaryOnArrayKernel << <numBlocks, block_size >> > (d_a, d_b, d_c, f, n);
-}
 
 //All these operators will only perform on interior cells
 

@@ -1,17 +1,8 @@
 #pragma once
 
 #include "Common.h"
+#include "GPUUtils.h"
 
-#include <cuda_runtime.h>
-#include <NanoVDB.h>
-
-
-#if defined(__CUDACC__) || defined(__HIP__)
-// Only define __hostdev__ when using NVIDIA CUDA or HIP compiler
-#define __hostdev__ __host__ __device__
-#else
-#define __hostdev__
-#endif
 
 // CUDA programming
 enum DataHolder { HOST = 0, DEVICE };

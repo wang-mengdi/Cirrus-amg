@@ -70,6 +70,64 @@ __hostdev__ Vec QuadraticKernelGradient(Vec r, T h) {
 //using quadratic kernel and calculate directly on MAC grid
 //use face center values
 //here info, l_ijk indicates which voxel 
+__device__ bool KernelIntpVelocityComponentMAC2(const HATileAccessor<Tile>& acc, const int level, const Vec& pos, const int axis, const int u_channel, T& u_i) {
+	//we're actually interpoating on the lattice grid of velocity
+	T h = acc.voxelSize(level);
+	//our kernel is truncated at 1.5
+	//therefore, one point has 3*3*3 non-zero lattice neighbors
+	Vec test_pos = pos - Vec(0.5 * h, 0.5 * h, 0.5 * h);
+	for (int ii : {0, 1, 2}) {
+		if (ii != axis) test_pos[ii] -= 0.5 * h;
+	}
+	//HATileInfo<Tile> info; Coord l_ijk; Vec frac;
+	//acc.findLeafVoxelAndFrac(test_pos, info, l_ijk, frac);
+	//auto g_ijk = acc.localToGlobalCoord(info, l_ijk);
+
+	Coord g_ijk; Vec frac;
+	acc.worldToVoxelAndFraction(level, test_pos, g_ijk, frac);
+
+	//for example, if axis==0, then test_pos=pos-Vec(0.5h, h, h)
+	//relative to the cell min, facex should be (0,0.5h,0.5h)
+	//that means, the relative position of pos to the face center should be frac+(0.5,0.5,0.5)
+	frac += Vec(0.5, 0.5, 0.5);
+
+	u_i = 0;
+
+	for (int offi = 0; offi < 3; offi++) {
+		T wi = QuadraticKernel(frac[0] - offi);
+		T dwi = QuadraticKernelDerivative(frac[0] - offi) / h;
+		for (int offj = 0; offj < 3; offj++) {
+			T wj = QuadraticKernel(frac[1] - offj);
+			T dwj = QuadraticKernelDerivative(frac[1] - offj) / h;
+			for (int offk = 0; offk < 3; offk++) {
+				T wk = QuadraticKernel(frac[2] - offk);
+				T dwk = QuadraticKernelDerivative(frac[2] - offk) / h;
+
+				auto ng_ijk = g_ijk + Coord(offi, offj, offk);
+				HATileInfo<Tile> ninfo; Coord nl_ijk; Vec n_frac;
+				acc.findVoxel(level, ng_ijk, ninfo, nl_ijk);
+				if (!ninfo.empty() && !(ninfo.mType & GHOST)) {
+					auto& ntile = ninfo.tile();
+					auto n_u_i = ntile(u_channel + axis, nl_ijk);
+
+					T w = wi * wj * wk;
+					Vec dw = Vec(dwi * wj * wk, wi * dwj * wk, wi * wj * dwk);
+
+					u_i += w * n_u_i;
+				}
+				else {
+					return false;
+				}
+			}
+		}
+	}
+
+	return true;
+}
+
+//using quadratic kernel and calculate directly on MAC grid
+//use face center values
+//here info, l_ijk indicates which voxel 
 __device__ bool KernelIntpVelocityComponentAndGradientMAC2(const HATileAccessor<Tile>& acc, const int level, const Vec& pos, const int axis, const int u_channel, T& u_i, Vec& gradu_i) {
 	//we're actually interpoating on the lattice grid of velocity
 	T h = acc.voxelSize(level);
@@ -109,26 +167,14 @@ __device__ bool KernelIntpVelocityComponentAndGradientMAC2(const HATileAccessor<
 				HATileInfo<Tile> ninfo; Coord nl_ijk; Vec n_frac;
 				acc.findVoxel(level, ng_ijk, ninfo, nl_ijk);
 				if (!ninfo.empty() && !(ninfo.mType & GHOST)) {
-				//if(!ninfo.empty()){
 					auto& ntile = ninfo.tile();
 					auto n_u_i = ntile(u_channel + axis, nl_ijk);
-
-					//printf("intp at pos %f %f %f axis %d level %d offi %d offj %d offk %d ng_ijk %d %d %d n_u_i %f\n", pos[0], pos[1], pos[2], axis, level, offi, offj, offk, ng_ijk[0], ng_ijk[1], ng_ijk[2], n_u_i);
-
-					//Vec relative_frac = frac - Vec(offi, offj, offk);
-					//auto w = QuadraticKernel(relative_frac);
-					//auto dw = QuadraticKernelGradient(relative_frac) / h;
 
 					T w = wi * wj * wk;
 					Vec dw = Vec(dwi * wj * wk, wi * dwj * wk, wi * wj * dwk);
 
-					//Vec fpos = acc.faceCenter(axis, ninfo, nl_ijk);
-					//Vec dpos = pos - fpos;
-					//auto w = QuadraticKernel(dpos, h);
-					//auto dw = QuadraticKernelGradient(dpos, h);
 					u_i += w * n_u_i;
 					gradu_i += dw * n_u_i;
-					//if (axis == 2) printf("level %d axis %d ng_ijk %d %d %d n_u_i %f\n", level, axis, ng_ijk[0], ng_ijk[1], ng_ijk[2], n_u_i);
 				}
 				else {
 					return false;
@@ -137,6 +183,13 @@ __device__ bool KernelIntpVelocityComponentAndGradientMAC2(const HATileAccessor<
 		}
 	}
 
+	return true;
+}
+
+__device__ bool KernelIntpVelocityMAC2AtGivenLevel(const HATileAccessor<Tile>& acc, const int level, const Vec& pos, const int u_channel, Vec& vel) {
+	for (int axis : {0, 1, 2}) {
+		if (!KernelIntpVelocityComponentMAC2(acc, level, pos, axis, u_channel, vel[axis])) return false;
+	}
 	return true;
 }
 
@@ -158,31 +211,18 @@ __device__ bool KernelIntpVelocityAndJacobianMAC2AtGivenLevel(const HATileAccess
 	return true;
 }
 
+__device__ bool KernelIntpVelocityMAC2(const HATileAccessor<Tile>& acc, const int fine_level, const int coarse_level, const Vec& pos, const int u_channel, Vec& vel) {
+	for (int i = fine_level; i >= coarse_level; i--) {
+		if (KernelIntpVelocityMAC2AtGivenLevel(acc, i, pos, u_channel, vel)) {
+			return true;
+		}
+	}
+
+	vel = Vec(0, 0, 0);
+	return false;
+}
+
 __device__ bool KernelIntpVelocityAndJacobianMAC2(const HATileAccessor<Tile>& acc, const int fine_level, const int coarse_level, const Vec& pos, const int u_channel, Vec& vel, Eigen::Matrix3<T>& jacobian) {
-	//bool all_success = true;
-	//for (int axis : {0, 1, 2}) {
-	//	bool success = false;
-	//	Vec gradu_i;
-	//	for (int i = fine_level; i >= coarse_level; i--) {
-	//		if (KernelIntpVelocityComponentAndGradientMAC2(acc, i, pos, axis, u_channel, vel[axis], gradu_i)) {
-	//			for (int t : {0, 1, 2}) {
-	//				jacobian(axis, t) = gradu_i[t];
-	//			}
-	//			success = true;
-	//			break;
-	//		}
-	//	}
-	//	if (!success) {
-	//		vel[axis] = 0;
-	//		jacobian(axis, 0) = 0;
-	//		jacobian(axis, 1) = 0;
-	//		jacobian(axis, 2) = 0;
-	//		all_success = false;
-	//	}
-	//}
-	//return all_success;
-
-
 	for (int i = fine_level; i >= coarse_level; i--) {
 		if (KernelIntpVelocityAndJacobianMAC2AtGivenLevel(acc, i, pos, u_channel, vel, jacobian)) {
 			return true;
@@ -314,74 +354,74 @@ __device__ void KernelScatterVelocityMAC2(const HATileAccessor<Tile>& acc, const
 	}
 }
 
-__device__ void VelocityJacobian(const HATileAccessor<Tile>& acc, const HATileInfo<Tile>& info, const Coord& l_ijk, const Vec& pos, const int node_u_channel, const T h, Eigen::Matrix3<T>& jacobian) {
-	auto& tile = info.tile();
-	jacobian.setZero();
-	for (int offi : {0, 1}) {
-		for (int offj : {0, 1}) {
-			for (int offk : {0, 1}) {
-				Coord r_ijk = l_ijk + Coord(offi, offj, offk);
-				for (int axis : {0, 1, 2}) {
-					Vec rpos = acc.cellCorner(info, r_ijk);
-					Vec dpos = pos - rpos;
-					Vec dw = QuadraticKernelGradient(dpos, h);
-					for (int t : {0, 1, 2}) {
-						jacobian(axis, t) += dw[t] * tile.node(node_u_channel + axis, r_ijk);
-					}
-				}
-			}
-		}
-	}
-}
+//__device__ void VelocityJacobian(const HATileAccessor<Tile>& acc, const HATileInfo<Tile>& info, const Coord& l_ijk, const Vec& pos, const int node_u_channel, const T h, Eigen::Matrix3<T>& jacobian) {
+//	auto& tile = info.tile();
+//	jacobian.setZero();
+//	for (int offi : {0, 1}) {
+//		for (int offj : {0, 1}) {
+//			for (int offk : {0, 1}) {
+//				Coord r_ijk = l_ijk + Coord(offi, offj, offk);
+//				for (int axis : {0, 1, 2}) {
+//					Vec rpos = acc.cellCorner(info, r_ijk);
+//					Vec dpos = pos - rpos;
+//					Vec dw = QuadraticKernelGradient(dpos, h);
+//					for (int t : {0, 1, 2}) {
+//						jacobian(axis, t) += dw[t] * tile.node(node_u_channel + axis, r_ijk);
+//					}
+//				}
+//			}
+//		}
+//	}
+//}
 
-__device__ void VelocityAndJacobian(const HATileAccessor<Tile>& acc, const HATileInfo<Tile>& info, const Coord& l_ijk, const Vec& pos, const int node_u_channel, const T h, Vec& vel, Eigen::Matrix3<T>& jacobian) {
-	auto& tile = info.tile();
-	vel = Vec(0, 0, 0);
-	jacobian.setZero();
-	for (int offi : {0, 1}) {
-		for (int offj : {0, 1}) {
-			for (int offk : {0, 1}) {
-				Coord r_ijk = l_ijk + Coord(offi, offj, offk);
-				for (int axis : {0, 1, 2}) {
-					Vec rpos = acc.cellCorner(info, r_ijk);
-					Vec dpos = pos - rpos;
-
-					vel[axis] += QuadraticKernel(dpos, h) * tile.node(node_u_channel + axis, r_ijk);
-
-
-					Vec dw = QuadraticKernelGradient(dpos, h);
-					for (int t : {0, 1, 2}) {
-						jacobian(axis, t) += dw[t] * tile.node(node_u_channel + axis, r_ijk);
-					}
-				}
-			}
-		}
-	}
-}
-
-
-
-
-__device__ Eigen::Matrix3<T> VelocityJacobian(const HATileAccessor<Tile>& acc, const Vec& pos, const int node_u_channel) {
-	Eigen::Matrix3<T> jacobian;
-	jacobian.setZero();
-	HATileInfo<Tile> info; Coord l_ijk; Vec frac;
-	acc.findLeafVoxelAndFrac(pos, info, l_ijk, frac);
-	if (!info.empty()) {
-		VelocityJacobian(acc, info, l_ijk, pos, node_u_channel, acc.voxelSize(info), jacobian);
-	}
-	return jacobian;
-}
-
-__device__ void VelocityAndJacobian(const HATileAccessor<Tile>& acc, const Vec& pos, const int node_u_channel, Vec& vel, Eigen::Matrix3<T>& jacobian) {
-	vel = Vec(0, 0, 0);
-	jacobian.setZero();
-	HATileInfo<Tile> info; Coord l_ijk; Vec frac;
-	acc.findLeafVoxelAndFrac(pos, info, l_ijk, frac);
-	if (!info.empty()) {
-		VelocityAndJacobian(acc, info, l_ijk, pos, node_u_channel, acc.voxelSize(info), vel, jacobian);
-	}
-}
+//__device__ void VelocityAndJacobian(const HATileAccessor<Tile>& acc, const HATileInfo<Tile>& info, const Coord& l_ijk, const Vec& pos, const int node_u_channel, const T h, Vec& vel, Eigen::Matrix3<T>& jacobian) {
+//	auto& tile = info.tile();
+//	vel = Vec(0, 0, 0);
+//	jacobian.setZero();
+//	for (int offi : {0, 1}) {
+//		for (int offj : {0, 1}) {
+//			for (int offk : {0, 1}) {
+//				Coord r_ijk = l_ijk + Coord(offi, offj, offk);
+//				for (int axis : {0, 1, 2}) {
+//					Vec rpos = acc.cellCorner(info, r_ijk);
+//					Vec dpos = pos - rpos;
+//
+//					vel[axis] += QuadraticKernel(dpos, h) * tile.node(node_u_channel + axis, r_ijk);
+//
+//
+//					Vec dw = QuadraticKernelGradient(dpos, h);
+//					for (int t : {0, 1, 2}) {
+//						jacobian(axis, t) += dw[t] * tile.node(node_u_channel + axis, r_ijk);
+//					}
+//				}
+//			}
+//		}
+//	}
+//}
+//
+//
+//
+//
+//__device__ Eigen::Matrix3<T> VelocityJacobian(const HATileAccessor<Tile>& acc, const Vec& pos, const int node_u_channel) {
+//	Eigen::Matrix3<T> jacobian;
+//	jacobian.setZero();
+//	HATileInfo<Tile> info; Coord l_ijk; Vec frac;
+//	acc.findLeafVoxelAndFrac(pos, info, l_ijk, frac);
+//	if (!info.empty()) {
+//		VelocityJacobian(acc, info, l_ijk, pos, node_u_channel, acc.voxelSize(info), jacobian);
+//	}
+//	return jacobian;
+//}
+//
+//__device__ void VelocityAndJacobian(const HATileAccessor<Tile>& acc, const Vec& pos, const int node_u_channel, Vec& vel, Eigen::Matrix3<T>& jacobian) {
+//	vel = Vec(0, 0, 0);
+//	jacobian.setZero();
+//	HATileInfo<Tile> info; Coord l_ijk; Vec frac;
+//	acc.findLeafVoxelAndFrac(pos, info, l_ijk, frac);
+//	if (!info.empty()) {
+//		VelocityAndJacobian(acc, info, l_ijk, pos, node_u_channel, acc.voxelSize(info), vel, jacobian);
+//	}
+//}
 
 __hostdev__ Vec MatrixTimesVec(const Eigen::Matrix3<T>& A, const Vec& b) {
 	return Vec(
@@ -408,23 +448,23 @@ void InterpolateVelocitiesAtAllTiles(HADeviceGrid<Tile>& grid, const int u_chann
 	);
 }
 
-__device__ void RK2ForwardPositionAndF(const HATileAccessor<Tile>& acc, const int fine_level, const int coarse_level, const T dt, const int u_channel, const int node_u_channel, Vec& pos, Eigen::Matrix3<T>& F) {
-	//Vec vel1 = InterpolateFaceValue(acc, pos, u_channel, node_u_channel);
-	Vec u1; Eigen::Matrix3<T> gradu1;
-	//VelocityAndJacobian(acc, pos, node_u_channel, u1, gradu1);
-	KernelIntpVelocityAndJacobianMAC2(acc, fine_level, coarse_level, pos, u_channel, u1, gradu1);
-
-	Vec pos1 = pos + u1 * 0.5 * dt;
-	//Vec vel2 = InterpolateFaceValue(acc, pos1, u_channel, node_u_channel);
-	//auto gradu2 = VelocityJacobian(acc, pos1, node_u_channel);
-
-	Vec u2; Eigen::Matrix3<T> gradu2;
-	//VelocityAndJacobian(acc, pos1, node_u_channel, u2, gradu2);
-	KernelIntpVelocityAndJacobianMAC2(acc, fine_level, coarse_level, pos1, u_channel, u2, gradu2);
-	auto dFdt2 = gradu2 * F;
-	pos = pos + dt * u2;
-	F = F + dt * dFdt2;
-}
+//__device__ void RK2ForwardPositionAndF(const HATileAccessor<Tile>& acc, const int fine_level, const int coarse_level, const T dt, const int u_channel, const int node_u_channel, Vec& pos, Eigen::Matrix3<T>& F) {
+//	//Vec vel1 = InterpolateFaceValue(acc, pos, u_channel, node_u_channel);
+//	Vec u1; Eigen::Matrix3<T> gradu1;
+//	//VelocityAndJacobian(acc, pos, node_u_channel, u1, gradu1);
+//	KernelIntpVelocityAndJacobianMAC2(acc, fine_level, coarse_level, pos, u_channel, u1, gradu1);
+//
+//	Vec pos1 = pos + u1 * 0.5 * dt;
+//	//Vec vel2 = InterpolateFaceValue(acc, pos1, u_channel, node_u_channel);
+//	//auto gradu2 = VelocityJacobian(acc, pos1, node_u_channel);
+//
+//	Vec u2; Eigen::Matrix3<T> gradu2;
+//	//VelocityAndJacobian(acc, pos1, node_u_channel, u2, gradu2);
+//	KernelIntpVelocityAndJacobianMAC2(acc, fine_level, coarse_level, pos1, u_channel, u2, gradu2);
+//	auto dFdt2 = gradu2 * F;
+//	pos = pos + dt * u2;
+//	F = F + dt * dFdt2;
+//}
 
 __device__ void RK4ForwardPositionAndF(const HATileAccessor<Tile>& acc, const int fine_level, const int coarse_level, const T dt, const int u_channel, const int node_u_channel, Vec& phi, Eigen::Matrix3<T>& F) {
 	Vec u1; Eigen::Matrix3<T> gradu1;
@@ -501,23 +541,23 @@ __device__ void RK4ForwardPositionAndF(const HATileAccessor<Tile>& acc, const in
 //	return true;
 //}
 
-__device__ void RK2ForwardPositionAndT(const HATileAccessor<Tile>& acc, const int fine_level, const int coarse_level, const T dt, const int u_channel, const int node_u_channel, Vec& pos, Eigen::Matrix3<T>& matT) {
-	//Vec vel1 = InterpolateFaceValue(acc, pos, u_channel, node_u_channel);
-	Vec u1; Eigen::Matrix3<T> gradu1;
-	//VelocityAndJacobian(acc, pos, node_u_channel, u1, gradu1);
-	KernelIntpVelocityAndJacobianMAC2(acc, fine_level, coarse_level, pos, u_channel, u1, gradu1);
-
-	Vec pos1 = pos + u1 * 0.5 * dt;
-	//Vec vel2 = InterpolateFaceValue(acc, pos1, u_channel, node_u_channel);
-	//auto gradu2 = VelocityJacobian(acc, pos1, node_u_channel);
-
-	Vec u2; Eigen::Matrix3<T> gradu2;
-	//VelocityAndJacobian(acc, pos1, node_u_channel, u2, gradu2);
-	KernelIntpVelocityAndJacobianMAC2(acc, fine_level, coarse_level, pos1, u_channel, u2, gradu2);
-	auto dTdt2 = -matT * gradu2;
-	pos = pos + dt * u2;
-	matT = matT + dt * dTdt2;
-}
+//__device__ void RK2ForwardPositionAndT(const HATileAccessor<Tile>& acc, const int fine_level, const int coarse_level, const T dt, const int u_channel, const int node_u_channel, Vec& pos, Eigen::Matrix3<T>& matT) {
+//	//Vec vel1 = InterpolateFaceValue(acc, pos, u_channel, node_u_channel);
+//	Vec u1; Eigen::Matrix3<T> gradu1;
+//	//VelocityAndJacobian(acc, pos, node_u_channel, u1, gradu1);
+//	KernelIntpVelocityAndJacobianMAC2(acc, fine_level, coarse_level, pos, u_channel, u1, gradu1);
+//
+//	Vec pos1 = pos + u1 * 0.5 * dt;
+//	//Vec vel2 = InterpolateFaceValue(acc, pos1, u_channel, node_u_channel);
+//	//auto gradu2 = VelocityJacobian(acc, pos1, node_u_channel);
+//
+//	Vec u2; Eigen::Matrix3<T> gradu2;
+//	//VelocityAndJacobian(acc, pos1, node_u_channel, u2, gradu2);
+//	KernelIntpVelocityAndJacobianMAC2(acc, fine_level, coarse_level, pos1, u_channel, u2, gradu2);
+//	auto dTdt2 = -matT * gradu2;
+//	pos = pos + dt * u2;
+//	matT = matT + dt * dTdt2;
+//}
 
 __device__ void RK4ForwardPositionAndT(const HATileAccessor<Tile>& acc, const int fine_level, const int coarse_level, const T dt, const int u_channel, const int node_u_channel, Vec& phi, Eigen::Matrix3<T>& matT) {
 	Vec u1; Eigen::Matrix3<T> gradu1;

@@ -1,5 +1,4 @@
 ﻿#include "PoissonGrid.h"
-
 #include <cub/cub.cuh>
 #include <cub/block/block_reduce.cuh>
 #include <thrust/execution_policy.h>
