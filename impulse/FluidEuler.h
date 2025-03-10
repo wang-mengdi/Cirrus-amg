@@ -256,7 +256,7 @@ public:
 			applyVelocityBC(grid, 0.0);
 			CalcCellTypesFromLeafs(grid);
 		}
-		CalculateVorticityMagnitudeOnLeafs(*grid_ptr, mParams.mFineLevel, mParams.mCoarseLevel, Tile::u_channel, 0, OutputChnls::vor);
+		CalculateVorticityMagnitudeOnLeafs(*grid_ptr, mParams.mFineLevel, mParams.mCoarseLevel, AdvChnls::u, OutputChnls::u_node, OutputChnls::vor);
 
 	}
 
@@ -266,9 +266,9 @@ public:
 		HATileAccessor<Tile> acc = grid.deviceAccessor();
 		double dx = acc.voxelSize(acc.mMaxLevel);
 		
-		double umax = NormSync(grid, -1, Tile::u_channel, false);
-		double vmax = NormSync(grid, -1, Tile::u_channel + 1, false);
-		double wmax = NormSync(grid, -1, Tile::u_channel + 2, false);
+		double umax = NormSync(grid, -1, AdvChnls::u, false);
+		double vmax = NormSync(grid, -1, AdvChnls::u + 1, false);
+		double wmax = NormSync(grid, -1, AdvChnls::u + 2, false);
 		double max_vel = std::max(umax, std::max(vmax, wmax));
 		return dx * cfl / max_vel;
 	}
@@ -395,7 +395,7 @@ public:
 
 			Info("pressure pt l2: {}", NormSync(grid, 2, Tile::x_channel, false));
 
-			AMGAddGradientToFace(grid, -1, LEAF, Tile::x_channel, c0_channel, Tile::u_channel);
+			AMGAddGradientToFace(grid, -1, LEAF, Tile::x_channel, c0_channel, AdvChnls::u);
 			applyVelocityBC(grid, current_time);
 
 			AMGVolumeWeightedDivergenceOnLeafs(grid, u_channel, Tile::b_channel);
@@ -424,7 +424,7 @@ public:
 		//3: temporary node dye density
 
 		//shared by two grids
-		int u_channel = Tile::u_channel;//6
+		int u_channel = AdvChnls::u;//6
 
 		//last_grid:
 		//012: node u
@@ -585,7 +585,7 @@ public:
 
 							Vec m1 = MatrixTimesVec(matT.transpose(), m0);
 
-							tile(Tile::u_channel + axis, l_ijk) = m1[axis];
+							tile(AdvChnls::u + axis, l_ijk) = m1[axis];
 
 							//if (m1[axis] > 1e5) {
 							//	auto g_ijk = acc.localToGlobalCoord(info, l_ijk);
@@ -627,7 +627,7 @@ public:
 
 				nanovdb::Vec3R a = gravity;
 				//a[1] += buoyancy;
-				tile(Tile::u_channel + axis, l_ijk) += a[axis] * dt;
+				tile(AdvChnls::u + axis, l_ijk) += a[axis] * dt;
 			}
 		}, -1, LEAF, LAUNCH_SUBTREE
 		);
@@ -674,9 +674,9 @@ public:
 
 
 		//projection
-		project(grid, Tile::u_channel, metadata.current_time);
+		project(grid, AdvChnls::u, metadata.current_time);
 
-		CalculateVelocityAndVorticityMagnitudeOnLeafFaceCenters(grid, mParams.mFineLevel, mParams.mCoarseLevel, Tile::u_channel, OutputChnls::u_node, OutputChnls::u_cell, OutputChnls::vor);
+		CalculateVelocityAndVorticityMagnitudeOnLeafFaceCenters(grid, mParams.mFineLevel, mParams.mCoarseLevel, AdvChnls::u, OutputChnls::u_node, OutputChnls::u_cell, OutputChnls::vor);
 
 
 		CheckCudaError("Advance");
