@@ -265,7 +265,7 @@ public:
 			//IOFunc::OutputTilesAsVTU(holder, metadata.base_path / fmt::format("tiles{:04d}.vtu", metadata.current_frame));
 
 			metadata.Append_Output_Thread(std::make_shared<std::thread>(IOFunc::OutputPoissonGridAsStructuredVTI, holder,
-				std::vector<std::pair<int, std::string>>{ {-1, "type"}, { -2, "level" }, { OutputChnls::vor, "vorticity" }, {Tile::x_channel, "pressure"}},
+				std::vector<std::pair<int, std::string>>{ {-1, "type"}, { -2, "level" }, { OutputChnls::vor, "vorticity" }},
 				//std::vector<std::pair<int, std::string>>{ },
 				std::vector<std::pair<int, std::string>>{ {OutputChnls::u_cell, "velocity"} },
 				//std::vector<std::pair<int, std::string>>{ { -1, "type" }, { Tile::vor_channel, "vorticity" }, { Tile::dye_channel, "dye_density" } },
@@ -343,8 +343,8 @@ public:
 		{
 			CalculateNeighborTiles(grid);
 
-			AMGVolumeWeightedDivergenceOnLeafs(grid, u_channel, Tile::b_channel);
-			Info("div pt l2: {}", NormSync(grid, 2, Tile::b_channel, false));
+			AMGVolumeWeightedDivergenceOnLeafs(grid, u_channel, ProjChnls::b);
+			Info("div pt l2: {}", NormSync(grid, 2, ProjChnls::b, false));
 
 
 			AMGSolver solver(c0_channel, 0.5, 1, 1);
@@ -360,16 +360,16 @@ public:
 			Info("Total {:.5}M cells, AMGPCG speed {:.5} M cells /s at {} iters", total_cells / (1024.0 * 1024), cells_per_second / (1024.0 * 1024), iters);
 			projection_time = elapsed;
 
-			Info("pressure pt l2: {}", NormSync(grid, 2, Tile::x_channel, false));
+			Info("pressure pt l2: {}", NormSync(grid, 2, ProjChnls::x, false));
 
-			AMGAddGradientToFace(grid, -1, LEAF, Tile::x_channel, c0_channel, AdvChnls::u);
+			AMGAddGradientToFace(grid, -1, LEAF, ProjChnls::x, c0_channel, AdvChnls::u);
 			applyVelocityBC(grid, current_time);
 
-			AMGVolumeWeightedDivergenceOnLeafs(grid, u_channel, Tile::b_channel);
+			AMGVolumeWeightedDivergenceOnLeafs(grid, u_channel, ProjChnls::b);
 			//for (int i : {0, 1, 2}) {
 			//	AccumulateToParents(grid, u_channel + i, u_channel + i, -1, LEAF, LAUNCH_SUBTREE, INTERIOR | DIRICHLET, 1.0 / 4.0, true);
 			//}
-			Info("div pt linf: {}", NormSync(grid, -1, Tile::b_channel, false));
+			Info("div pt linf: {}", NormSync(grid, -1, ProjChnls::b, false));
 		}
 
 

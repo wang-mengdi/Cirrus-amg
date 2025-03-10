@@ -15,7 +15,7 @@ public:
     static constexpr int p_channel = 2;
     static constexpr int Ap_channel = 3;
     static constexpr int z_channel = 4;
-    static constexpr int tmp_channel = 5;
+    //static constexpr int tmp_channel = 5;
     //static constexpr int u_channel = 6;
     //static constexpr int v_channel = 7;
     //static constexpr int w_channel = 8;
