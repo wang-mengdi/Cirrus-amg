@@ -254,7 +254,7 @@ public:
 			applyVelocityBC(grid, 0.0);
 			CalcCellTypesFromLeafs(grid);
 		}
-		CalculateVorticityMagnitudeOnLeafs(*grid_ptr, mParams.mFineLevel, mParams.mCoarseLevel, Tile::u_channel, 0, Tile::vor_channel);
+		CalculateVorticityMagnitudeOnLeafs(*grid_ptr, mParams.mFineLevel, mParams.mCoarseLevel, Tile::u_channel, 0, OutputChnls::vor);
 
 	}
 
@@ -296,7 +296,7 @@ public:
 			//IOFunc::OutputTilesAsVTU(holder, metadata.base_path / fmt::format("tiles{:04d}.vtu", metadata.current_frame));
 
 			metadata.Append_Output_Thread(std::make_shared<std::thread>(IOFunc::OutputPoissonGridAsStructuredVTI, holder,
-				std::vector<std::pair<int, std::string>>{ {-1, "type"}, { -2, "level" }, { Tile::vor_channel, "vorticity" }, {Tile::x_channel, "pressure"}},
+				std::vector<std::pair<int, std::string>>{ {-1, "type"}, { -2, "level" }, { OutputChnls::vor, "vorticity" }, {Tile::x_channel, "pressure"}},
 				//std::vector<std::pair<int, std::string>>{ },
 				std::vector<std::pair<int, std::string>>{ {cell_center_vel_channel, "velocity"} },
 				//std::vector<std::pair<int, std::string>>{ { -1, "type" }, { Tile::vor_channel, "vorticity" }, { Tile::dye_channel, "dye_density" } },
@@ -432,7 +432,7 @@ public:
 		//10: voxel dye
 		int last_tmp_channel = 3;
 		int last_u_node_channel = 0;//on last_grid
-		int last_dye_node_channel = Tile::vor_channel;//on last_grid
+		//int last_dye_node_channel = Tile::vor_channel;//on last_grid
 		
 		//next grid:
 		//012: uw
@@ -674,7 +674,7 @@ public:
 		//projection
 		project(grid, Tile::u_channel, metadata.current_time);
 
-		CalculateVelocityAndVorticityMagnitudeOnLeafFaceCenters(grid, mParams.mFineLevel, mParams.mCoarseLevel, Tile::u_channel, 0, cell_center_vel_channel, Tile::vor_channel);
+		CalculateVelocityAndVorticityMagnitudeOnLeafFaceCenters(grid, mParams.mFineLevel, mParams.mCoarseLevel, Tile::u_channel, 0, cell_center_vel_channel, OutputChnls::vor);
 
 
 		CheckCudaError("Advance");
