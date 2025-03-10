@@ -22,10 +22,10 @@ public:
     static constexpr int vor_channel = 9;//vorticity
 	//static constexpr int dye_channel = 10;//dye density
     //static constexpr int num_channels = 11;
-    static constexpr uint32_t c0_channel = 11;
-    static constexpr uint32_t c1_channel = 12;
-    static constexpr uint32_t c2_channel = 13;
-    static constexpr uint32_t c3_channel = 14;
+    //static constexpr uint32_t c0_channel = 11;
+    //static constexpr uint32_t c1_channel = 12;
+    //static constexpr uint32_t c2_channel = 13;
+    //static constexpr uint32_t c3_channel = 14;
 	static constexpr int num_channels = 15;
 
     using T = typename Type;
