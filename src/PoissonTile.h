@@ -16,9 +16,9 @@ public:
     static constexpr int Ap_channel = 3;
     static constexpr int z_channel = 4;
     static constexpr int tmp_channel = 5;
-    static constexpr int u_channel = 6;
-    static constexpr int v_channel = 7;
-    static constexpr int w_channel = 8;
+    //static constexpr int u_channel = 6;
+    //static constexpr int v_channel = 7;
+    //static constexpr int w_channel = 8;
     //static constexpr int vor_channel = 9;//vorticity
 	//static constexpr int dye_channel = 10;//dye density
     //static constexpr int num_channels = 11;
