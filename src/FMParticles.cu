@@ -111,8 +111,8 @@ void GenerateParticlesUniformlyOnGivenLevel(std::shared_ptr<HAHostTileHolder<Til
 	particles_d = particles_h;
 }
 
-__global__ void MarkInterestAreaKernel(HATileAccessor<PoissonTile<T>> acc, HATileInfo<PoissonTile<T>>* infos, const uint8_t tmp_channel, int subtree_level, uint8_t launch_types) {
-	const HATileInfo<PoissonTile<T>>& info = infos[blockIdx.x];
+__global__ void MarkInterestAreaKernel(HATileAccessor<Tile> acc, HATileInfo<Tile>* infos, const uint8_t tmp_channel, int subtree_level, uint8_t launch_types) {
+	const HATileInfo<Tile>& info = infos[blockIdx.x];
 	Coord l_ijk = Coord(threadIdx.x, threadIdx.y, threadIdx.z);
 
 	if (!(info.subtreeType(subtree_level) & launch_types)) {

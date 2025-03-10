@@ -108,10 +108,10 @@ struct Vec4Type<double> {
 
 
 //follow the same launch convention as launchVoxelFunc
-__global__ void Dot128Kernel(HATileAccessor<PoissonTile<T>> acc, HATileInfo<PoissonTile<T>>* infos, const uint8_t in1_channel, const uint8_t in2_channel, double* sum, int subtree_level, uint8_t launch_types) {
+__global__ void Dot128Kernel(HATileAccessor<Tile> acc, HATileInfo<Tile>* infos, const uint8_t in1_channel, const uint8_t in2_channel, double* sum, int subtree_level, uint8_t launch_types) {
     int bi = blockIdx.x;
     int ti = threadIdx.x;
-    const HATileInfo<PoissonTile<T>>& info = infos[bi];
+    const auto& info = infos[bi];
     
 
     if (!(info.subtreeType(subtree_level) & launch_types)) {
@@ -175,10 +175,10 @@ double Dot(HADeviceGrid<Tile>& grid, const uint8_t in1_channel, const uint8_t in
 //if weights_sum is not null, then compute the sum of weights
 //if volume_weighted is set, then weight by h^3, otherwise pointwise (weight by 1)
 //if use_abs is set, then use abs value
-__global__ void ChannelPowerSumKernel128(const int order, HATileAccessor<PoissonTile<T>> acc, HATileInfo<PoissonTile<T>>* infos, int subtree_level, uint8_t launch_tile_types, const int in_channel, double* value_sum, double* weights_sum, bool volume_weighted, bool use_abs, uint8_t launch_cell_types) {
+__global__ void ChannelPowerSumKernel128(const int order, HATileAccessor<Tile> acc, HATileInfo<Tile>* infos, int subtree_level, uint8_t launch_tile_types, const int in_channel, double* value_sum, double* weights_sum, bool volume_weighted, bool use_abs, uint8_t launch_cell_types) {
     int bi = blockIdx.x;
     int ti = threadIdx.x;
-    const HATileInfo<PoissonTile<T>>& info = infos[bi];
+    const auto& info = infos[bi];
 
     if (!(info.subtreeType(subtree_level) & launch_tile_types)) {
         if (ti == 0) {

@@ -6,7 +6,7 @@
 
 enum CellType { DIRICHLET = 0b001, INTERIOR = 0b010, NEUMANN = 0b100, SURFACE = 0b1000 };
 
-template<class Type>
+template<class Type, int NUMCHNLS>
 class PoissonTile {
 public:
     //THESE CONSTANTS ARE TO BE DEPRECATED
@@ -27,13 +27,13 @@ public:
     //static constexpr uint32_t c1_channel = 12;
     //static constexpr uint32_t c2_channel = 13;
     //static constexpr uint32_t c3_channel = 14;
-	static constexpr int num_channels = 15;
+	static constexpr int num_channels = NUMCHNLS;
 
     using T = typename Type;
     using CoordType = typename nanovdb::Coord;
     using Coord = typename CoordType;
     using VecType = typename nanovdb::Vec3<T>;
-    using CoordAcc = typename HACoordAccessor<PoissonTile<T>>;
+    using CoordAcc = typename HACoordAccessor<PoissonTile<T, num_channels>>;
     constexpr static uint32_t LOG2DIM = 3;
     constexpr static uint32_t DIM = 1u << LOG2DIM; // this tile stores (DIM*DIM*DIM) voxels (default 8^3=512)
     static constexpr uint32_t SIZE = 1u << (3 * LOG2DIM); // total number of voxels
@@ -43,7 +43,7 @@ public:
     static constexpr T BACKGROUND_VALUE = 0;
 
     T mData[num_channels][CHNLSIZE];//9^3 =729
-    HATileInfo<PoissonTile<T>> mNeighbors[6];//x-,y-,z-,x+,y+,z+
+    HATileInfo<PoissonTile<T, num_channels>> mNeighbors[6];//x-,y-,z-,x+,y+,z+
     uint8_t mCellType[SIZE];
     bool mIsInterestArea = false, mIsLockedRefine = false;
     int mStatus;//record refine and coarsen status
@@ -161,7 +161,7 @@ public:
     }
 };
 
-using Tile = PoissonTile<float>;
+using Tile = PoissonTile<float, 15>;
 using T = Tile::T;
 using Coord = typename Tile::Coord;
 using Vec = Tile::VecType;

@@ -202,11 +202,11 @@ void ReseedParticles(HADeviceGrid<Tile>& grid, const FluidParams& params, const 
 }
 
 // Kernel to mark the interested area based on min and max values in a tile
-__global__ void LockedMarkInterestAreaMinAndMax128Kernel(HATileAccessor<PoissonTile<T>> acc, HATileInfo<PoissonTile<T>>* infos, const uint8_t tmp_channel, int subtree_level, uint8_t launch_types) {
+__global__ void LockedMarkInterestAreaMinAndMax128Kernel(HATileAccessor<Tile> acc, HATileInfo<Tile>* infos, const uint8_t tmp_channel, int subtree_level, uint8_t launch_types) {
 	int bi = blockIdx.x;  // Block index
 	int ti = threadIdx.x; // Thread index within the block
 
-	const HATileInfo<PoissonTile<T>>& info = infos[bi];
+	const auto& info = infos[bi];
 
 	// Early exit if the subtree type does not match the launch type
 	if (!(info.subtreeType(subtree_level) & launch_types)) {

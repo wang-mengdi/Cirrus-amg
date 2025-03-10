@@ -43,7 +43,7 @@ void ReseedParticles(HADeviceGrid<Tile>& grid, const FluidParams& params, const 
 
 class FluidEuler : public Simulator {
 public:
-	using Tile = PoissonTile<T>;
+	//using Tile = PoissonTile<T>;
 	using Coord = nanovdb::Coord;
 
 	//projection:
