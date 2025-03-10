@@ -30,7 +30,7 @@
 __device__ Vec NFMErodedAdvectionPoint(const int axis, const HATileAccessor<Tile>& acc, const HATileInfo<Tile>& info, const Coord& l_ijk);
 
 //set all face velocities that has a neumann neighbor to 0
-void ClearAllNeumannNeighborFaces(HADeviceGrid<Tile>& grid);
+void ClearAllNeumannNeighborFaces(HADeviceGrid<Tile>& grid, const int u_channel);
 
 void MarkOldParticlesAsInvalid(thrust::device_vector<Particle>& particles, const T current_time, const T particle_life);
 
@@ -119,7 +119,7 @@ public:
 	void applyVelocityBC(HADeviceGrid<Tile>& grid, const double time) {
 		//if (mParams.mTestCase == TVORTEX || mParams.mTestCase==FORCE_) 
 		{
-			ClearAllNeumannNeighborFaces(grid);
+			ClearAllNeumannNeighborFaces(grid, AdvChnls::u);
 			auto params = mParams;
 			grid.launchVoxelFuncOnAllTiles(
 				[params, time] __device__(HATileAccessor<Tile>&acc, HATileInfo<Tile>&info, const Coord & l_ijk) {

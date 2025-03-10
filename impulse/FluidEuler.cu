@@ -80,7 +80,7 @@ __hostdev__ void IterateFaceNeighborCellTypes(const HATileAccessor<Tile>& acc, c
 	}
 }
 
-void ClearAllNeumannNeighborFaces(HADeviceGrid<Tile>& grid)
+void ClearAllNeumannNeighborFaces(HADeviceGrid<Tile>& grid, const int u_channel)
 {
 	grid.launchVoxelFunc(
 		[=] __device__(HATileAccessor<Tile>&acc, HATileInfo<Tile>&info, const Coord & l_ijk) {
@@ -92,7 +92,7 @@ void ClearAllNeumannNeighborFaces(HADeviceGrid<Tile>& grid)
 				}
 				});
 			if (to_set) {
-				info.tile()(Tile::u_channel + axis, l_ijk) = 0;
+				info.tile()(u_channel + axis, l_ijk) = 0;
 			}
 		}
 	}, -1, LEAF, LAUNCH_SUBTREE
