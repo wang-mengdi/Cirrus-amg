@@ -29,7 +29,7 @@ public:
 //	thrust::device_vector<Particle>& particles_d);
 
 void CountParticleNumberInLeafCells(HADeviceGrid<Tile>& grid, const thrust::device_vector<Particle>& particles, const int tmp_channel);
-void CalcInterestAreaFlagsWithParticlesOnLeafs(const thrust::device_vector<Particle>& particles, HADeviceGrid<Tile>& grid, int tmp_channel);
+//void CalcInterestAreaFlagsWithParticlesOnLeafs(const thrust::device_vector<Particle>& particles, HADeviceGrid<Tile>& grid, int tmp_channel);
 
 void RefineWithParticles(HADeviceGrid<Tile>& grid, const thrust::device_vector<Particle>& particles, const int coarse_levels, const int fine_levels, const int counter_channel, bool verbose);
 void CoarsenWithParticles(HADeviceGrid<Tile>& grid, const thrust::device_vector<Particle>& particles, const int coarse_levels, const int fine_levels, const int counter_channel, bool verbose);

@@ -175,6 +175,16 @@ void CountParticleNumberInLeafCells(HADeviceGrid<Tile>& grid, const thrust::devi
 void CalcInterestAreaFlagsWithParticlesOnLeafs(const thrust::device_vector<Particle>& particles, HADeviceGrid<Tile>& grid, int tmp_channel) {
 	CountParticleNumberInLeafCells(grid, particles, tmp_channel);
 
+	//auto info_ptr = thrust::raw_pointer_cast(grid.dAllTiles.data());
+	//MarkRegionOfInterestWithChannelMinAndMax128Kernel << <grid.dAllTiles.size(), 128 >> > (
+	//	grid.deviceAccessor(), info_ptr, -1, LEAF,
+	//	tmp_channel,
+	//	[=]__device__(const T tile_min, const T tile_max) {
+	//	return tile_max > 0;
+	//},
+	//	false//unlocked
+	//	);
+
 	for (int i = 0; i < grid.mNumLevels; i++) {
 		if (grid.hNumTiles[i] == 0) continue;
 		auto info_ptr = thrust::raw_pointer_cast(grid.dTileArrays[i].data());

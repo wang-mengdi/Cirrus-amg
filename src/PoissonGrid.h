@@ -2,6 +2,9 @@
 
 //#include "HAGrid.h"
 #include "PoissonTile.h"
+#include <cub/cub.cuh>
+#include <cub/block/block_reduce.cuh>
+#include <thrust/execution_policy.h>
 
 
 
@@ -84,7 +87,7 @@ void CalcCellTypesFromLeafs(HADeviceGrid<Tile>& grid);
 // Kernel to mark the interested area based on min and max values in a tile
 //if locked is set to true, set mIsLockedRefine in regions of interest
 template<class FuncTT>
-__global__ void MarkRegionOfInterestWithChannelMinAndMax128Kernel(HATileAccessor<Tile> acc, HATileInfo<Tile>* infos, int subtree_level, uint8_t launch_types, const int data_channel, FuncTT func_interested, bool locked) {
+__global__ void MarkRegionOfInterestWithChannelMinAndMax128Kernel(HATileAccessor<Tile> acc, HATileInfo<Tile>* infos, int subtree_level, uint8_t launch_types, const int data_channel, FuncTT func_interested, bool calc_locked) {
 	int bi = blockIdx.x;  // Block index
 	int ti = threadIdx.x; // Thread index within the block
 
@@ -95,7 +98,7 @@ __global__ void MarkRegionOfInterestWithChannelMinAndMax128Kernel(HATileAccessor
 		if (ti == 0) {
 			auto& tile = info.tile();
 			tile.mIsInterestArea = false;
-			tile.mIsLockedRefine = false;
+			if (calc_locked) tile.mIsLockedRefine = false;
 		}
 		return;
 	}
@@ -120,25 +123,15 @@ __global__ void MarkRegionOfInterestWithChannelMinAndMax128Kernel(HATileAccessor
 	if (ti == 0) {
 		if (func_interested(block_min, block_max)) {
 			tile.mIsInterestArea = true;
-			if (locked) {
+			if (calc_locked) {
 				tile.mIsLockedRefine = true;
 			}
 		}
 		else {
 			tile.mIsInterestArea = false;
-			tile.mIsLockedRefine = false;
+			if (calc_locked) {
+				tile.mIsLockedRefine = false;
+			}
 		}
-
-		//if (block_min == 0 && block_max > 0) {
-		//	tile.mIsInterestArea = true;
-		//	//tile.mIsLockedRefine = true;
-		//}
-		//else {
-		//	tile.mIsInterestArea = false;
-		//	//tile.mIsLockedRefine = false;
-		//}
-
-		// Debugging output
-		//printf("Block %d: minValue = %f, maxValue = %f\n", bi, block_min, block_max);
 	}
 }
