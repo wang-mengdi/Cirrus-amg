@@ -21,24 +21,7 @@ __device__ Vec NFMErodedAdvectionPoint(const int axis, const HATileAccessor<Tile
 	return acc.faceCenterGlobal(axis, effect_level, effect_g_ijk);
 }
 
-size_t SmartResizeParticlesForInsert(thrust::device_vector<Particle>& particles, const size_t insert_num) {
-	size_t old_capacity = particles.capacity();
-	size_t new_capacity = particles.size() + insert_num;
 
-	size_t diff;
-	if (new_capacity > old_capacity) {
-		diff = new_capacity - old_capacity;
-		size_t alloc_capacity = old_capacity + diff * 2;
-		particles.reserve(alloc_capacity);
-
-		//Info("alloc capacity: {} particles capacity: {}", alloc_capacity, particles.capacity());
-	}
-	else {
-		diff = 0;
-	}
-
-	return diff;
-}
 
 template<class FuncII>
 __hostdev__ void IterateFaceNeighborCellTypes(const HATileAccessor<Tile>& acc, const HATileInfo<Tile>& info, const Coord& l_ijk, const int axis, FuncII f) {
@@ -135,71 +118,71 @@ __global__ void CalculateReseedingNumbersOnLeafTiles128Kernel(const T current_ti
 	}
 }
 
-void ReseedParticles(HADeviceGrid<Tile>& grid, const FluidParams& params, const int tmp_channel, const double current_time, const int num_particles_per_cell, thrust::device_vector<Particle>& particles) {
-	//CPUTimer timer; timer.start();
-	static uint64_t global_particle_counter = 0;
-
-	static RandomGenerator rng;
-	CountParticleNumberInLeafCells(grid, particles, tmp_channel);
-
-	//cudaDeviceSynchronize(); timer.stop("count particles"); timer.start();
-
-	//int reseed_threshold = num_particles_per_cell / 2;
-	//int reseed_threshold = 
-
-	static thrust::device_vector<int> cell_particle_num_d;
-	if (cell_particle_num_d.size() < grid.dAllTiles.size() * Tile::SIZE) {
-		cell_particle_num_d.resize(grid.dAllTiles.size() * Tile::SIZE);
-	}
-	//Assert(cell_particle_num_d.size() == grid.dAllTiles.size() * Tile::SIZE,"");
-
-	thrust::fill(cell_particle_num_d.begin(), cell_particle_num_d.end(), 0);
-	auto cell_particle_num_d_ptr = thrust::raw_pointer_cast(cell_particle_num_d.data());
-	
-	auto info_ptr = thrust::raw_pointer_cast(grid.dAllTiles.data());
-	auto acc_d = grid.deviceAccessor();
-	CalculateReseedingNumbersOnLeafTiles128Kernel << <grid.dAllTiles.size(), 128 >> > (current_time, acc_d, info_ptr, params, tmp_channel, num_particles_per_cell, cell_particle_num_d_ptr);
-
-	//cudaDeviceSynchronize(); timer.stop("calc reseeding number of each voxel"); timer.start();
-
-	static thrust::host_vector<int> cell_particle_num_h;
-	cell_particle_num_h = cell_particle_num_d;
-	//Info("cell_particle_num_h: {}", cell_particle_num_h);
-
-	auto acc = grid.hostAccessor();
-	thrust::host_vector<Particle> reseed_particles_h;
-
-	for (int idx = 0; idx < cell_particle_num_h.size(); idx++) {
-		if (cell_particle_num_h[idx] > 0) {
-			int tile_idx = idx / Tile::SIZE;
-			int l_idx = idx % Tile::SIZE;
-			auto& info = grid.hAllTiles[tile_idx];
-			auto l_ijk = acc.localOffsetToCoord(l_idx);
-
-			//sample random particles
-			auto bbox = acc.voxelBBox(info, l_ijk);
-			auto minPoint = bbox.min();
-			auto maxPoint = bbox.max();
-
-			for (int i = 0; i < cell_particle_num_h[idx]; i++) {
-				auto x = rng.uniform(minPoint[0], maxPoint[0]);
-				auto y = rng.uniform(minPoint[1], maxPoint[1]);
-				auto z = rng.uniform(minPoint[2], maxPoint[2]);
-
-				Particle p;
-				p.global_idx = global_particle_counter++;
-				p.pos = Vec(x, y, z);
-				p.impulse = Vec(0., 0., 0.);
-				p.matT = Eigen::Matrix3<T>::Identity();
-				p.start_time = current_time;
-				reseed_particles_h.push_back(p);
-			}
-		}
-	}
-
-	int diff = SmartResizeParticlesForInsert(particles, reseed_particles_h.size());
-	particles.insert(particles.end(), reseed_particles_h.begin(), reseed_particles_h.end());
-}
+//void ReseedParticles(HADeviceGrid<Tile>& grid, const FluidParams& params, const int tmp_channel, const double current_time, const int num_particles_per_cell, thrust::device_vector<Particle>& particles) {
+//	//CPUTimer timer; timer.start();
+//	static uint64_t global_particle_counter = 0;
+//
+//	static RandomGenerator rng;
+//	CountParticleNumberInLeafCells(grid, particles, tmp_channel);
+//
+//	//cudaDeviceSynchronize(); timer.stop("count particles"); timer.start();
+//
+//	//int reseed_threshold = num_particles_per_cell / 2;
+//	//int reseed_threshold = 
+//
+//	static thrust::device_vector<int> cell_particle_num_d;
+//	if (cell_particle_num_d.size() < grid.dAllTiles.size() * Tile::SIZE) {
+//		cell_particle_num_d.resize(grid.dAllTiles.size() * Tile::SIZE);
+//	}
+//	//Assert(cell_particle_num_d.size() == grid.dAllTiles.size() * Tile::SIZE,"");
+//
+//	thrust::fill(cell_particle_num_d.begin(), cell_particle_num_d.end(), 0);
+//	auto cell_particle_num_d_ptr = thrust::raw_pointer_cast(cell_particle_num_d.data());
+//	
+//	auto info_ptr = thrust::raw_pointer_cast(grid.dAllTiles.data());
+//	auto acc_d = grid.deviceAccessor();
+//	CalculateReseedingNumbersOnLeafTiles128Kernel << <grid.dAllTiles.size(), 128 >> > (current_time, acc_d, info_ptr, params, tmp_channel, num_particles_per_cell, cell_particle_num_d_ptr);
+//
+//	//cudaDeviceSynchronize(); timer.stop("calc reseeding number of each voxel"); timer.start();
+//
+//	static thrust::host_vector<int> cell_particle_num_h;
+//	cell_particle_num_h = cell_particle_num_d;
+//	//Info("cell_particle_num_h: {}", cell_particle_num_h);
+//
+//	auto acc = grid.hostAccessor();
+//	thrust::host_vector<Particle> reseed_particles_h;
+//
+//	for (int idx = 0; idx < cell_particle_num_h.size(); idx++) {
+//		if (cell_particle_num_h[idx] > 0) {
+//			int tile_idx = idx / Tile::SIZE;
+//			int l_idx = idx % Tile::SIZE;
+//			auto& info = grid.hAllTiles[tile_idx];
+//			auto l_ijk = acc.localOffsetToCoord(l_idx);
+//
+//			//sample random particles
+//			auto bbox = acc.voxelBBox(info, l_ijk);
+//			auto minPoint = bbox.min();
+//			auto maxPoint = bbox.max();
+//
+//			for (int i = 0; i < cell_particle_num_h[idx]; i++) {
+//				auto x = rng.uniform(minPoint[0], maxPoint[0]);
+//				auto y = rng.uniform(minPoint[1], maxPoint[1]);
+//				auto z = rng.uniform(minPoint[2], maxPoint[2]);
+//
+//				Particle p;
+//				p.global_idx = global_particle_counter++;
+//				p.pos = Vec(x, y, z);
+//				p.impulse = Vec(0., 0., 0.);
+//				p.matT = Eigen::Matrix3<T>::Identity();
+//				p.start_time = current_time;
+//				reseed_particles_h.push_back(p);
+//			}
+//		}
+//	}
+//
+//	int diff = SmartResizeParticlesForInsert(particles, reseed_particles_h.size());
+//	particles.insert(particles.end(), reseed_particles_h.begin(), reseed_particles_h.end());
+//}
 
 int LockedRefineWithNonBoundaryNeumannCellsOneStep(const T current_time, HADeviceGrid<Tile>& grid, const FluidParams params, const int tmp_channel, bool verbose) {
 	int coarse_level = params.mCoarseLevel;

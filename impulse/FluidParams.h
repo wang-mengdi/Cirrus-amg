@@ -11,6 +11,7 @@
 namespace BufChnls {
 	constexpr int u = 6;
 	constexpr int u_node = 0;
+	constexpr int tmp = 3;
 }
 
 namespace AdvChnls {
@@ -33,10 +34,10 @@ namespace OutputChnls {
 
 ////Channel allocations
 //      Buffer		Advection		Projection		Output
-// 0    							x				node u
-// 1    							b/r				node v
-// 2								p				node w
-// 3								Ap				cell u
+// 0    node u						x				node u
+// 1    node v						b/r				node v
+// 2	node w						p				node w
+// 3	tmp							Ap				cell u
 // 4								z				cell v
 // 5												cell w
 // 6	u			u				u				u

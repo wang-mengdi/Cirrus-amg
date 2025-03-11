@@ -38,7 +38,7 @@ void MarkOldParticlesAsInvalid(thrust::device_vector<Particle>& particles, const
 __device__ Vec SemiLagrangianBackwardPosition(const HATileAccessor<Tile>& acc, const Vec& pos, const T dt, const int u_channel, const int node_u_channel);
 
 int LockedRefineWithNonBoundaryNeumannCellsOneStep(const T current_time, HADeviceGrid<Tile>& grid, const FluidParams params, const int tmp_channel, bool verbose);
-void ReseedParticles(HADeviceGrid<Tile>& grid, const FluidParams& params, const int tmp_channel, const double current_time, const int num_particles_per_cell, thrust::device_vector<Particle>& particles);
+//void ReseedParticles(HADeviceGrid<Tile>& grid, const FluidParams& params, const int tmp_channel, const double current_time, const int num_particles_per_cell, thrust::device_vector<Particle>& particles);
 
 
 class FluidEuler : public Simulator {
@@ -50,7 +50,6 @@ public:
 	//0
 	static constexpr int coeff_channel = 11;
 
-	int mNumParticlesPerCell = 8;
 	int time_step_counter = 0;
 
 	std::shared_ptr<HADeviceGrid<Tile>> nfm_query_grid_ptr;
@@ -58,6 +57,7 @@ public:
 	std::vector<double> time_steps;
 
 	thrust::device_vector<MarkerParticle> marker_particles_d;
+	thrust::device_vector<int> number_of_seeding_particles_in_cell_d;
 
 	//thrust::device_vector<Particle> particles;
 	//thrust::device_vector<ParticleRecord> records_d;
@@ -302,7 +302,7 @@ public:
 		//012: node u
 		//345: u copy
 		//678: face u
-		int last_tmp_channel = 3;
+		//int last_tmp_channel = 3;
 		//int last_u_node_channel = 0;//on last_grid
 		//int last_dye_node_channel = Tile::vor_channel;//on last_grid
 		
@@ -328,42 +328,29 @@ public:
 		);
 		EraseInvalidParticles(marker_particles_d);
 		cudaDeviceSynchronize(); particle_advection_time = timer.stop("Advect particles"); timer.start();
-
-
-		ReseedParticles(last_grid, mParams, last_tmp_channel, current_time, mNumParticlesPerCell, particles);		
-
-		cudaDeviceSynchronize(); reseeding_time = timer.stop("reseeding and remove particles in solid"); timer.start();
-		Info("total {:.5f}M particles, time step counter {}", particles.size() / (1024 * 1024 + 0.f), time_step_counter);
-
-
-
-		HistogramSortParticlesAtGivenLevel(last_grid, mParams.mFineLevel, last_tmp_channel, particles, tile_prefix_sum_d, records_d);
-		OptimizedAdvectParticlesAndSingleStepGradMRK4ForwardAtGivenLevel(last_grid, mParams.mFineLevel, u_channel, last_u_node_channel, dt, tile_prefix_sum_d, records_d);
-		EraseInvalidParticles(particles);
-
-		cudaDeviceSynchronize(); double adv_elapsed = timer.stop("Advect particles"); timer.start(); particle_advection_time = adv_elapsed;
-		{
-			double num_particles_M = particles.size() / (1024. * 1024.);
-			Info("Particle advection time: {} ms, {}M particles, throughput {}M particles/s", adv_elapsed, num_particles_M, num_particles_M / adv_elapsed * 1000);
-		}
 		CheckCudaError("adv particle");
 
+		auto params = mParams;
+		ReseedMarkerParticles(last_grid, BufChnls::tmp,
+			[=]__device__(const HATileAccessor<Tile>&acc, const HATileInfo<Tile>&info, const Coord & l_ijk) {
+			return params.isInParticleGenerationRegion(current_time, acc, info, l_ijk);
+		},
+			current_time,
+			0, 8,//threshold 0 seed 8
+			number_of_seeding_particles_in_cell_d, marker_particles_d
+		);
+		cudaDeviceSynchronize(); reseeding_time = timer.stop("reseeding and remove particles in solid"); timer.start();
+		Info("total {:.5f}M particles, time step counter {}", marker_particles_d.size() / (1024 * 1024 + 0.f), time_step_counter);
+		CheckCudaError("reseeding particles");
 
 		auto& grid = *grid_ptrs[n];
-
-		RefineWithParticles(grid, particles, mParams.mCoarseLevel, mParams.mFineLevel, next_counter_channel, false);
-
-		//cudaDeviceSynchronize(); timer.stop("Refine with particles"); timer.start();
-
-
-		CoarsenWithParticles(grid, particles, mParams.mCoarseLevel, mParams.mFineLevel, next_counter_channel, false);
+		RefineWithMarkerParticles(grid, marker_particles_d, mParams.mCoarseLevel, mParams.mFineLevel, next_counter_channel, false);
+		CoarsenWithMarkerParticles(grid, marker_particles_d, mParams.mCoarseLevel, mParams.mFineLevel, next_counter_channel, false);
+		cudaDeviceSynchronize(); adaptive_time = timer.stop("adapt with particles"); timer.start();
 		CheckCudaError("adapt with particles");
 
 
-		cudaDeviceSynchronize(); adaptive_time = timer.stop("adapt with particles"); timer.start();
-
-
-
+		//prepare pointers for previous grids
 		thrust::host_vector<HATileAccessor<Tile>> accs_h;
 		for (int i = 0; i < n; i++) accs_h.push_back(grid_ptrs[i]->deviceAccessor());
 		thrust::device_vector<HATileAccessor<Tile>> accs_d = accs_h;
@@ -371,7 +358,7 @@ public:
 		thrust::device_vector<double> time_steps_d = time_steps;
 		auto time_steps_d_ptr = thrust::raw_pointer_cast(time_steps_d.data());
 
-		//advect dye and NFM
+		//advect NFM velocity
 		{
 			auto last_acc = last_grid.deviceAccessor();
 			auto nfm_query_acc = nfm_query_grid_ptr->deviceAccessor();
@@ -406,9 +393,9 @@ public:
 							//NFMBackQueryImpulseAndT(accs_d_ptr, info.mLevel, coarse_level, time_steps_d_ptr, u_channel, last_u_node_channel, nfm_start_idx, n, psi, m0, matT);
 							//NFMBackQueryImpulseAndT(accs_d_ptr, fine_level, coarse_level, time_steps_d_ptr, u_channel, last_u_node_channel, nfm_start_idx, n, psi, m0, matT);
 
-							NFMBackMarchPsiAndT(accs_d_ptr, fine_level, coarse_level, time_steps_d_ptr, u_channel, last_u_node_channel, nfm_start_idx, n, psi, matT);
+							NFMBackMarchPsiAndT(accs_d_ptr, fine_level, coarse_level, time_steps_d_ptr, BufChnls::u, BufChnls::u_node, nfm_start_idx, n, psi, matT);
 							//m0 = InterpolateFaceValue(accs_d_ptr[nfm_start_idx], psi, u_channel, last_u_node_channel);
-							m0 = InterpolateFaceValue(nfm_query_acc, psi, u_channel, last_u_node_channel);
+							m0 = InterpolateFaceValue(nfm_query_acc, psi, BufChnls::u, BufChnls::u_node);
 
 							Vec m1 = MatrixTimesVec(matT.transpose(), m0);
 
@@ -527,17 +514,15 @@ public:
 			"reseeding time {} ms\n"
 			"particle_advection_time {} ms\n"
 			"adaptive_time {} ms\n"
-			"p2g_time {} ms\n"
 			"projection_time {} ms\n"
 			"nfm_advection_time {} ms\n"
 			"advance_time {} ms\n",
 			metadata.current_frame,
-			particles.size(),
+			marker_particles_d.size(),
 			grid_ptrs.back()->numTotalLeafTiles() * Tile::SIZE,
 			reseeding_time,
 			particle_advection_time,
 			adaptive_time,
-			p2g_time,
 			projection_time,
 			nfm_advection_time,
 			advance_time);
@@ -546,8 +531,8 @@ public:
 
 	void PrintMemoryInfo(void) {
 		double M = 1024 * 1024, G = 1024 * 1024 * 1024;
-		double particle_num = particles.size();
-		double particle_capacity = particles.capacity();
+		double particle_num = marker_particles_d.size();
+		double particle_capacity = marker_particles_d.capacity();
 		double total_tile_num = 0;
 		for (auto grid_ptr : grid_ptrs) {
 			auto& grid = *grid_ptr;

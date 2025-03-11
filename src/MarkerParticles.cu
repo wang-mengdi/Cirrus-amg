@@ -2,6 +2,24 @@
 #include "FlowMap.h"
 #include <thrust/remove.h>
 
+size_t SmartResizeParticlesForInsert(thrust::device_vector<MarkerParticle>& particles, const size_t insert_num) {
+	size_t old_capacity = particles.capacity();
+	size_t new_capacity = particles.size() + insert_num;
+
+	size_t diff;
+	if (new_capacity > old_capacity) {
+		diff = new_capacity - old_capacity;
+		size_t alloc_capacity = old_capacity + diff * 2;
+		particles.reserve(alloc_capacity);
+
+		//Info("alloc capacity: {} particles capacity: {}", alloc_capacity, particles.capacity());
+	}
+	else {
+		diff = 0;
+	}
+
+	return diff;
+}
 
 void CountParticleNumberInLeafCells(HADeviceGrid<Tile>& grid, const thrust::device_vector<MarkerParticle>& particles, const int tmp_channel) {
 	grid.launchVoxelFuncOnAllTiles(
@@ -40,7 +58,7 @@ void CalcInterestAreaFlagsWithParticlesOnLeafs(const thrust::device_vector<Marke
 		);
 }
 
-void CoarsenWithParticles(HADeviceGrid<Tile>& grid, const thrust::device_vector<MarkerParticle>& particles, const int coarse_levels, const int fine_levels, const int counter_channel, bool verbose) {
+void CoarsenWithMarkerParticles(HADeviceGrid<Tile>& grid, const thrust::device_vector<MarkerParticle>& particles, const int coarse_levels, const int fine_levels, const int counter_channel, bool verbose) {
 	auto levelTarget = [fine_levels, coarse_levels]__device__(const HATileAccessor<Tile> &acc, const HATileInfo<Tile> &info) ->int {
 		auto& tile = info.tile();
 		if (tile.mIsInterestArea || tile.mIsLockedRefine) return fine_levels;
@@ -57,7 +75,7 @@ void CoarsenWithParticles(HADeviceGrid<Tile>& grid, const thrust::device_vector<
 	grid.spawnGhostTiles(verbose);
 }
 
-void RefineWithParticles(HADeviceGrid<Tile>& grid, const thrust::device_vector<MarkerParticle>& particles, const int coarse_levels, const int fine_levels, const int counter_channel, bool verbose) {
+void RefineWithMarkerParticles(HADeviceGrid<Tile>& grid, const thrust::device_vector<MarkerParticle>& particles, const int coarse_levels, const int fine_levels, const int counter_channel, bool verbose) {
 	auto levelTarget = [fine_levels, coarse_levels]__device__(const HATileAccessor<Tile> &acc, const HATileInfo<Tile> &info) ->int {
 		auto& tile = info.tile();
 		if (tile.mIsInterestArea || tile.mIsLockedRefine) return fine_levels;
