@@ -201,55 +201,6 @@ void ReseedParticles(HADeviceGrid<Tile>& grid, const FluidParams& params, const 
 	particles.insert(particles.end(), reseed_particles_h.begin(), reseed_particles_h.end());
 }
 
-// Kernel to mark the interested area based on min and max values in a tile
-__global__ void LockedMarkInterestAreaMinAndMax128Kernel(HATileAccessor<Tile> acc, HATileInfo<Tile>* infos, const uint8_t tmp_channel, int subtree_level, uint8_t launch_types) {
-	int bi = blockIdx.x;  // Block index
-	int ti = threadIdx.x; // Thread index within the block
-
-	const auto& info = infos[bi];
-
-	// Early exit if the subtree type does not match the launch type
-	if (!(info.subtreeType(subtree_level) & launch_types)) {
-		if (ti == 0) {
-			auto& tile = info.tile();
-			tile.mIsInterestArea = false;
-			tile.mIsLockedRefine = false;
-		}
-		return;
-	}
-
-	auto& tile = info.tile();
-	auto dataAsFloat4 = reinterpret_cast<float4*>(tile.mData[tmp_channel]);
-	float4 value = dataAsFloat4[ti];
-
-	// Calculate thread-local min and max
-	T thread_min = min(min(value.x, value.y), min(value.z, value.w));
-	T thread_max = max(max(value.x, value.y), max(value.z, value.w));
-
-	// Use CUB to perform block-wide reduction
-	typedef cub::BlockReduce<T, 128> BlockReduce;
-	__shared__ typename BlockReduce::TempStorage temp_storage_min;
-	__shared__ typename BlockReduce::TempStorage temp_storage_max;
-
-	T block_min = BlockReduce(temp_storage_min).Reduce(thread_min, cub::Min());
-	T block_max = BlockReduce(temp_storage_max).Reduce(thread_max, cub::Max());
-
-	// The first thread writes the results to the tile metadata
-	if (ti == 0) {
-		if (block_min == 0 && block_max > 0) {
-			tile.mIsInterestArea = true;
-			//tile.mIsLockedRefine = true;
-		}
-		else {
-			tile.mIsInterestArea = false;
-			//tile.mIsLockedRefine = false;
-		}
-
-		// Debugging output
-		//printf("Block %d: minValue = %f, maxValue = %f\n", bi, block_min, block_max);
-	}
-}
-
 int LockedRefineWithNonBoundaryNeumannCellsOneStep(const T current_time, HADeviceGrid<Tile>& grid, const FluidParams params, const int tmp_channel, bool verbose) {
 	int coarse_level = params.mCoarseLevel;
 	int fine_level = params.mFineLevel;
@@ -281,7 +232,15 @@ int LockedRefineWithNonBoundaryNeumannCellsOneStep(const T current_time, HADevic
 	{
 		//Info("all {} tiles", grid.dAllTiles.size());
 		auto info_ptr = thrust::raw_pointer_cast(grid.dAllTiles.data());
-		LockedMarkInterestAreaMinAndMax128Kernel << <grid.dAllTiles.size(), 128 >> > (grid.deviceAccessor(), info_ptr, tmp_channel, -1, LEAF);
+		//LockedMarkInterestAreaMinAndMax128Kernel << <grid.dAllTiles.size(), 128 >> > (grid.deviceAccessor(), info_ptr, tmp_channel, -1, LEAF);
+		MarkRegionOfInterestWithChannelMinAndMax128Kernel << <grid.dAllTiles.size(), 128 >> > (
+			grid.deviceAccessor(), info_ptr, -1, LEAF,
+			tmp_channel,
+			[=]__device__(const T tile_min, const T tile_max) {
+			return tile_min == 0 && tile_max > 0;
+		},
+			false
+			);
 	}
 
 	//struct LevelTargetFunctor {

@@ -9,106 +9,106 @@
 #include <cub/cub.cuh>
 #include <cub/device/device_scan.cuh>
 
-void GenerateParticlesUniformlyWithChannelValueOnLevel(std::shared_ptr<HAHostTileHolder<Tile>> holder_all_ptr, const int level, const int channel, const T threshold, const uint8_t sampled_tile_types, const int scale_ratio, thrust::device_vector<Particle>& particles_d) {
-	auto& holder_all = *holder_all_ptr;
-	thrust::host_vector<Particle> particles_h;
+//void GenerateParticlesUniformlyWithChannelValueOnLevel(std::shared_ptr<HAHostTileHolder<Tile>> holder_all_ptr, const int level, const int channel, const T threshold, const uint8_t sampled_tile_types, const int scale_ratio, thrust::device_vector<Particle>& particles_d) {
+//	auto& holder_all = *holder_all_ptr;
+//	thrust::host_vector<Particle> particles_h;
+//
+//	auto acc = holder_all.coordAccessor();
+//	holder_all.iterateLevelCells(
+//		level,
+//		[&](HATileInfo<Tile>& info, const Coord& l_ijk) {
+//			auto& tile = info.tile();
+//			if (tile(channel, l_ijk) >= threshold) {
+//				auto bbox = acc.voxelBBox(info, l_ijk);
+//				auto p_dx = acc.voxelSize(info) / scale_ratio;
+//				for (int i = 0; i < scale_ratio; i++) {
+//					for (int j = 0; j < scale_ratio; j++) {
+//						for (int k = 0; k < scale_ratio; k++) {
+//							Vec pos = bbox.min() + Vec(i, j, k) * p_dx;
+//							Particle p;
+//							p.pos = pos;
+//							p.impulse = Vec(0., 0., 0.);
+//							p.matT = Eigen::Matrix3<T>::Identity();
+//							particles_h.push_back(p);
+//						}
+//					}
+//				}
+//			}
+//		}
+//	);
+//	particles_d = particles_h;
+//}
 
-	auto acc = holder_all.coordAccessor();
-	holder_all.iterateLevelCells(
-		level,
-		[&](HATileInfo<Tile>& info, const Coord& l_ijk) {
-			auto& tile = info.tile();
-			if (tile(channel, l_ijk) >= threshold) {
-				auto bbox = acc.voxelBBox(info, l_ijk);
-				auto p_dx = acc.voxelSize(info) / scale_ratio;
-				for (int i = 0; i < scale_ratio; i++) {
-					for (int j = 0; j < scale_ratio; j++) {
-						for (int k = 0; k < scale_ratio; k++) {
-							Vec pos = bbox.min() + Vec(i, j, k) * p_dx;
-							Particle p;
-							p.pos = pos;
-							p.impulse = Vec(0., 0., 0.);
-							p.matT = Eigen::Matrix3<T>::Identity();
-							particles_h.push_back(p);
-						}
-					}
-				}
-			}
-		}
-	);
-	particles_d = particles_h;
-}
+//void GenerateParticlesRandomlyInVoxels(
+//	std::shared_ptr<HAHostTileHolder<Tile>> holder_all_ptr,
+//	const int level,
+//	const uint8_t sampled_tile_types,
+//	const int number_particles_per_voxel,
+//	thrust::device_vector<Particle>& particles_d) {
+//
+//	auto& holder_all = *holder_all_ptr;
+//	thrust::host_vector<Particle> particles_h;
+//
+//	auto acc = holder_all.coordAccessor();
+//	holder_all.iterateLevelCells(
+//		level,
+//		[&](HATileInfo<Tile>& info, const Coord& l_ijk) {
+//			if (info.mType & sampled_tile_types) {
+//
+//				auto& tile = info.tile();
+//				auto bbox = acc.voxelBBox(info, l_ijk);
+//				auto minPoint = bbox.min();
+//				auto maxPoint = bbox.max();
+//
+//				RandomGenerator rng; // Assume this is available and provides uniform random values
+//				for (int i = 0; i < number_particles_per_voxel; i++) {
+//					// Generate random positions within the voxel
+//					auto x = rng.uniform(minPoint[0], maxPoint[0]);
+//					auto y = rng.uniform(minPoint[1], maxPoint[1]);
+//					auto z = rng.uniform(minPoint[2], maxPoint[2]);
+//
+//					Particle p;
+//					p.pos = Vec(x, y, z);
+//					p.impulse = Vec(0., 0., 0.);
+//					p.matT = Eigen::Matrix3<T>::Identity();
+//					particles_h.push_back(p);
+//				}
+//			}
+//		});
+//
+//	particles_d = particles_h;
+//}
 
-void GenerateParticlesRandomlyInVoxels(
-	std::shared_ptr<HAHostTileHolder<Tile>> holder_all_ptr,
-	const int level,
-	const uint8_t sampled_tile_types,
-	const int number_particles_per_voxel,
-	thrust::device_vector<Particle>& particles_d) {
-
-	auto& holder_all = *holder_all_ptr;
-	thrust::host_vector<Particle> particles_h;
-
-	auto acc = holder_all.coordAccessor();
-	holder_all.iterateLevelCells(
-		level,
-		[&](HATileInfo<Tile>& info, const Coord& l_ijk) {
-			if (info.mType & sampled_tile_types) {
-
-				auto& tile = info.tile();
-				auto bbox = acc.voxelBBox(info, l_ijk);
-				auto minPoint = bbox.min();
-				auto maxPoint = bbox.max();
-
-				RandomGenerator rng; // Assume this is available and provides uniform random values
-				for (int i = 0; i < number_particles_per_voxel; i++) {
-					// Generate random positions within the voxel
-					auto x = rng.uniform(minPoint[0], maxPoint[0]);
-					auto y = rng.uniform(minPoint[1], maxPoint[1]);
-					auto z = rng.uniform(minPoint[2], maxPoint[2]);
-
-					Particle p;
-					p.pos = Vec(x, y, z);
-					p.impulse = Vec(0., 0., 0.);
-					p.matT = Eigen::Matrix3<T>::Identity();
-					particles_h.push_back(p);
-				}
-			}
-		});
-
-	particles_d = particles_h;
-}
-
-void GenerateParticlesUniformlyOnGivenLevel(std::shared_ptr<HAHostTileHolder<Tile>> holder_all_ptr, const int level, const uint8_t sampled_tile_types, const int scale_ratio, thrust::device_vector<Particle>& particles_d) {
-	auto& holder_all = *holder_all_ptr;
-	thrust::host_vector<Particle> particles_h;
-
-	auto acc = holder_all.coordAccessor();
-	holder_all.iterateLevelCells(
-		level,
-		[&](HATileInfo<Tile>& info, const Coord& l_ijk) {
-			if (info.mType & sampled_tile_types) {
-
-				auto& tile = info.tile();
-				auto bbox = acc.voxelBBox(info, l_ijk);
-				auto p_dx = acc.voxelSize(info) / scale_ratio;
-				for (int i = 0; i < scale_ratio; i++) {
-					for (int j = 0; j < scale_ratio; j++) {
-						for (int k = 0; k < scale_ratio; k++) {
-							Vec pos = bbox.min() + Vec(i, j, k) * p_dx;
-							Particle p;
-							p.pos = pos;
-							p.impulse = Vec(0., 0., 0.);
-							p.matT = Eigen::Matrix3<T>::Identity();
-							particles_h.push_back(p);
-						}
-					}
-				}
-			}
-		}
-	);
-	particles_d = particles_h;
-}
+//void GenerateParticlesUniformlyOnGivenLevel(std::shared_ptr<HAHostTileHolder<Tile>> holder_all_ptr, const int level, const uint8_t sampled_tile_types, const int scale_ratio, thrust::device_vector<Particle>& particles_d) {
+//	auto& holder_all = *holder_all_ptr;
+//	thrust::host_vector<Particle> particles_h;
+//
+//	auto acc = holder_all.coordAccessor();
+//	holder_all.iterateLevelCells(
+//		level,
+//		[&](HATileInfo<Tile>& info, const Coord& l_ijk) {
+//			if (info.mType & sampled_tile_types) {
+//
+//				auto& tile = info.tile();
+//				auto bbox = acc.voxelBBox(info, l_ijk);
+//				auto p_dx = acc.voxelSize(info) / scale_ratio;
+//				for (int i = 0; i < scale_ratio; i++) {
+//					for (int j = 0; j < scale_ratio; j++) {
+//						for (int k = 0; k < scale_ratio; k++) {
+//							Vec pos = bbox.min() + Vec(i, j, k) * p_dx;
+//							Particle p;
+//							p.pos = pos;
+//							p.impulse = Vec(0., 0., 0.);
+//							p.matT = Eigen::Matrix3<T>::Identity();
+//							particles_h.push_back(p);
+//						}
+//					}
+//				}
+//			}
+//		}
+//	);
+//	particles_d = particles_h;
+//}
 
 __global__ void MarkInterestAreaKernel(HATileAccessor<Tile> acc, HATileInfo<Tile>* infos, const uint8_t tmp_channel, int subtree_level, uint8_t launch_types) {
 	const HATileInfo<Tile>& info = infos[blockIdx.x];

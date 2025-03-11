@@ -18,15 +18,15 @@ public:
 
 
 //void GenerateParticlesWithDyeDensity(std::shared_ptr<HAHostTileHolder<Tile>> holder_ptr, const int channel, const T threshold, const int number_particles_per_cell, thrust::device_vector<Particle>& particles_d);
-void GenerateParticlesUniformlyWithChannelValueOnLevel(std::shared_ptr<HAHostTileHolder<Tile>> holder_all_ptr, const int level, const int channel, const T threshold, const uint8_t sampled_tile_types, const int scale_ratio, thrust::device_vector<Particle>& particles_d);
+//void GenerateParticlesUniformlyWithChannelValueOnLevel(std::shared_ptr<HAHostTileHolder<Tile>> holder_all_ptr, const int level, const int channel, const T threshold, const uint8_t sampled_tile_types, const int scale_ratio, thrust::device_vector<Particle>& particles_d);
 //void GenerateParticlesUniformlyOnFinestLevel(std::shared_ptr<HAHostTileHolder<Tile>> holder_ptr, const int scale_ratio, thrust::device_vector<Particle>& particles_d);
-void GenerateParticlesUniformlyOnGivenLevel(std::shared_ptr<HAHostTileHolder<Tile>> holder_all_ptr, const int level, const uint8_t sampled_tile_types, const int scale_ratio, thrust::device_vector<Particle>& particles_d);
-void GenerateParticlesRandomlyInVoxels(
-	std::shared_ptr<HAHostTileHolder<Tile>> holder_all_ptr,
-	const int level,
-	const uint8_t sampled_tile_types,
-	const int number_particles_per_voxel,
-	thrust::device_vector<Particle>& particles_d);
+//void GenerateParticlesUniformlyOnGivenLevel(std::shared_ptr<HAHostTileHolder<Tile>> holder_all_ptr, const int level, const uint8_t sampled_tile_types, const int scale_ratio, thrust::device_vector<Particle>& particles_d);
+//void GenerateParticlesRandomlyInVoxels(
+//	std::shared_ptr<HAHostTileHolder<Tile>> holder_all_ptr,
+//	const int level,
+//	const uint8_t sampled_tile_types,
+//	const int number_particles_per_voxel,
+//	thrust::device_vector<Particle>& particles_d);
 
 void CountParticleNumberInLeafCells(HADeviceGrid<Tile>& grid, const thrust::device_vector<Particle>& particles, const int tmp_channel);
 void CalcInterestAreaFlagsWithParticlesOnLeafs(const thrust::device_vector<Particle>& particles, HADeviceGrid<Tile>& grid, int tmp_channel);
