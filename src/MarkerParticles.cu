@@ -1,5 +1,7 @@
 #include "MarkerParticles.h"
 #include "FlowMap.h"
+#include <thrust/remove.h>
+
 
 void CountParticleNumberInLeafCells(HADeviceGrid<Tile>& grid, const thrust::device_vector<MarkerParticle>& particles, const int tmp_channel) {
 	grid.launchVoxelFuncOnAllTiles(
@@ -79,14 +81,53 @@ void RefineWithParticles(HADeviceGrid<Tile>& grid, const thrust::device_vector<M
 	}
 }
 
-
-void AdvectMarkerParticlesRK4Forward(HADeviceGrid<Tile>& grid, const int fine_level, const int coarse_level, const int u_channel, const double dt, thrust::device_vector<MarkerParticle>& particles_d, const bool erase_invalid) {
+//will mark particles as invalid if:
+//1. some kernel intp in RK4 query failed
+//2. particle is moved to non-fluid region
+//3. particle is too old
+void AdvectMarkerParticlesRK4ForwardAndMarkInvalid(HADeviceGrid<Tile>& grid, const int fine_level, const int coarse_level, const int u_channel, const double dt, const T earliest_birth_time, thrust::device_vector<MarkerParticle>& particles_d) {
 	//advect particles
 	auto particles_ptr = thrust::raw_pointer_cast(particles_d.data());
 	auto acc = grid.deviceAccessor();
 	LaunchIndexFunc([=] __device__(int idx) {
 		auto& p = particles_ptr[idx];
-		RK4ForwardPosition(acc, fine_level, coarse_level, dt, u_channel, p.pos);
+
+		if (p.birth_time < earliest_birth_time) {
+			p.pos = Vec(NODATA, NODATA, NODATA);
+		}
+		else {
+			RK4ForwardPosition(acc, fine_level, coarse_level, dt, u_channel, p.pos);
+
+			//test if particle is in fluid region
+			{
+				HATileInfo<Tile> info; Coord l_ijk; Vec frac;
+				acc.findLeafVoxelAndFrac(p.pos, info, l_ijk, frac);
+				if (info.empty()) {
+					p.pos = Vec(NODATA, NODATA, NODATA);
+				}
+				else {
+					auto& tile = info.tile();
+					if (!(tile.type(l_ijk) & INTERIOR)) {
+						p.pos = Vec(NODATA, NODATA, NODATA);
+					}
+				}
+			}
+
+		}
 	}, particles_d.size(), 512, 4);
 }
 
+//remove if it's (NODATA, NODATA, NODATA)
+void EraseInvalidParticles(thrust::device_vector<MarkerParticle>& particles) {
+	//Warn("not erasing");
+	//return;
+
+	//Info("before erasing gradm norm {}", LinfNormOfGradMForbenius(particles));
+
+	particles.erase(
+		thrust::remove_if(particles.begin(), particles.end(), []__hostdev__(const MarkerParticle & p) { return p.pos == Vec(NODATA, NODATA, NODATA); }),
+		particles.end()
+	);
+
+	//Info("after erasing gradm norm {}", LinfNormOfGradMForbenius(particles));
+}

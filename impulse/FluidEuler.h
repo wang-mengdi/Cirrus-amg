@@ -11,9 +11,9 @@
 #include "GPUTimer.h"
 #include "AMGSolver.h"
 
-//#include "AMGSolver.h"
 #include "PoissonIOFunc.h"
 #include "FMParticles.h"
+#include "MarkerParticles.h"
 
 
 #include <polyscope/polyscope.h>
@@ -57,31 +57,32 @@ public:
 	std::vector<std::shared_ptr<HADeviceGrid<Tile>>> grid_ptrs;
 	std::vector<double> time_steps;
 
-	thrust::device_vector<Particle> particles;
-	thrust::device_vector<ParticleRecord> records_d;
-	thrust::device_vector<int> tile_prefix_sum_d;
+	thrust::device_vector<MarkerParticle> marker_particles_d;
+
+	//thrust::device_vector<Particle> particles;
+	//thrust::device_vector<ParticleRecord> records_d;
+	//thrust::device_vector<int> tile_prefix_sum_d;
 
 	FluidParams mParams;
 	std::shared_ptr<MaskGrid> mMaskGrid = nullptr;
 	std::shared_ptr<SDFGrid> mSDFGrid = nullptr;
 
-	std::shared_ptr<SDFGrid> mAnimationSDFGrid0 = nullptr;
-	std::shared_ptr<SDFGrid> mAnimationSDFGrid1 = nullptr;
-	std::shared_ptr<SDFGrid> mAnimationVelocityGrids[3];
+	//std::shared_ptr<SDFGrid> mAnimationSDFGrid0 = nullptr;
+	//std::shared_ptr<SDFGrid> mAnimationSDFGrid1 = nullptr;
+	//std::shared_ptr<SDFGrid> mAnimationVelocityGrids[3];
 
-	std::string animation_sdf_path = "";
-	fs::path flamingo_data_file = fs::path("data") / "flamingo-sdf.bin";
-	int loaded_animated_frame = -1;
+	//std::string animation_sdf_path = "";
+	//fs::path flamingo_data_file = fs::path("data") / "flamingo-sdf.bin";
+	//int loaded_animated_frame = -1;
 
 	//int cell_center_vel_channel = 3;
 
 	double advance_time = 0;
-	double projection_time = 0;
-	double reseeding_time = 0;
 	double particle_advection_time = 0;
+	double reseeding_time = 0;
 	double adaptive_time = 0;
-	double p2g_time = 0;
 	double nfm_advection_time = 0;
+	double projection_time = 0;
 
 	void applyVelocityBC(HADeviceGrid<Tile>& grid, const double time) {
 		//if (mParams.mTestCase == TVORTEX || mParams.mTestCase==FORCE_) 
@@ -99,62 +100,6 @@ public:
 		}
 	}
 
-	std::tuple<int, T> getBatAnimationFrameAndFrace(const T time) {
-		int bat_fps = 200;
-		T bat_f = time * bat_fps;
-		int bat_frame = (int)bat_f;
-		T frac = bat_f - bat_frame;
-		return std::make_tuple(bat_frame, frac);
-	}
-	fs::path getBatCyclicAnimationFile(const fs::path& animation_sdf_path, int bat_frame) {
-		//int cyc_idx = bat_frame % 205 + 1;
-		int cyc_idx = bat_frame;
-		return animation_sdf_path / fmt::format("{:04d}.bin", cyc_idx);
-	}
-	fs::path getBatCyclicVelocityFile(const fs::path& animation_sdf_path, int bat_frame, int axis) {
-		//int cyc_idx = bat_frame % 205 + 1;
-		int cyc_idx = bat_frame;
-		if (axis == 0) return animation_sdf_path / fmt::format("{:04d}_x.bin", cyc_idx);
-		else if (axis == 1) return animation_sdf_path / fmt::format("{:04d}_y.bin", cyc_idx);
-		else if (axis == 2) return animation_sdf_path / fmt::format("{:04d}_z.bin", cyc_idx);
-		else return fs::path("");
-	}
-
-	fs::path getFlamingoAnimationFile(const fs::path& animation_sdf_path, int frame) {
-		return animation_sdf_path / fmt::format("flamingo-flock{:04d}.bin", frame);
-	}
-	fs::path generateFlamingoFileWithPython(const fs::path& animation_sdf_path, const int frame, const T frac, const T isovalue) {
-		// Conda environment name and Python script path
-		std::string conda_env = "py311_env";
-		std::string python_script = fmt::format(
-			"C:\\Code\\HASimulator\\gen_single_flamingo.py  --mesh_path {} --frame {} --frac {} --scale 256 --isovalue {} --output_file {}",
-			animation_sdf_path.string(),
-			frame,
-			frac,
-			isovalue,
-			flamingo_data_file.string()
-		);
-		
-		// Command to activate conda environment and execute the Python script
-		std::string command = fmt::format(
-			"conda run -n py311_env python {}",
-			python_script
-		);
-
-
-		Info("Executing Python script: {}", command);
-		// Execute the command
-		int ret_code = std::system(command.c_str());
-
-		if (ret_code == 0) {
-			fmt::print("Python script executed successfully.\n");
-		}
-		else {
-			fmt::print("Failed to execute the Python script. Return code: {}\n", ret_code);
-		}
-
-		return flamingo_data_file;
-	}
 
 	void init(json &j) {
 		//Info("before init"); PrintMemoryInfo();
@@ -177,13 +122,9 @@ public:
 		else {
 			mSDFGrid = nullptr;
 		}
-		animation_sdf_path = Json::Value<std::string>(j, "animation_sdf_path", "");
-		Info("animation_sdf_path {}", animation_sdf_path);
 
-		
-		
 		float reserve_particles_m = Json::Value<float>(j, "reserve_particles_m", 1.0);
-		particles.reserve((size_t)(reserve_particles_m * 1024 * 1024));
+		marker_particles_d.reserve((size_t)(reserve_particles_m * 1024 * 1024));
 		mParams = FluidParams(j, mMaskGrid, mSDFGrid);
 
 		//level-resolution:
@@ -297,47 +238,11 @@ public:
 		//		particles_h_ptr, base_path_d / fmt::format("particles{:04d}.vtu", metadata.current_frame)
 		//	));
 		//}
-
-		//{
-		//	if (metadata.current_frame == 200) {
-		//		auto all_holder = grid.getHostTileHolder(LEAF | NONLEAF | GHOST, -1);
-		//		IOFunc::WriteHAHostTileHolderToFile(*all_holder, metadata.base_path / "fluid_end.bin");
-		//	}
-		//}
 	}
 
 
 	void project(HADeviceGrid<Tile>& grid, int u_channel, double current_time) {
 		auto c0_channel = ProjChnls::c0;
-
-
-
-		////GMG
-		//{
-		//	for (int axis : {0, 1, 2}) {
-		//		PropagateToChildren(grid, u_channel + axis, u_channel + axis, -1, GHOST, LAUNCH_SUBTREE, INTERIOR | DIRICHLET | NEUMANN);
-		//	}
-		//	VelocityVolumeDivergenceOnLeafs(grid, u_channel, Tile::b_channel);
-		//	Info("div pt l2: {}", NormSync(grid, 2, Tile::b_channel, false));
-		//	CalculateNeighborTiles(grid);
-		//	GMGSolver solver(1., 1.);
-		//	//AMGSolver solver(Tile::c0_channel, 1., 1.);
-		//	//solver.prepareTypesAndCoeffs(grid);
-
-		//	CPUTimer timer;
-		//	timer.start();
-		//	//auto [iters, err] = ConjugateGradientSync(grid, false, 1000, 2, 10, 1e-6, false);
-		//	auto [iters, err] = solver.solve(grid, false, 1000, 1e-6, 1, 10, 1, mParams.mIsPureNeumann);
-		//	cudaDeviceSynchronize();
-		//	double elapsed = timer.stop("MGPCG");
-		//	double total_cells = grid.numTotalTiles() * Tile::SIZE;
-		//	double cells_per_second = (total_cells + 0.0) / (elapsed / 1000.0);
-		//	Info("Total {:.5}M cells, MGPCG speed {:.5} M cells /s at {} iters", total_cells / (1024.0 * 1024), cells_per_second / (1024.0 * 1024), iters);
-		//	projection_time = elapsed;
-		//	Info("pressure pt l2: {}", NormSync(grid, 2, Tile::x_channel, false));
-		//	AddGradientToFaceCenters(grid, Tile::x_channel, u_channel);
-		//	applyVelocityBC(grid, current_time);
-		//}
 
 		//AMG
 		{
@@ -391,14 +296,14 @@ public:
 		//3: temporary node dye density
 
 		//shared by two grids
-		int u_channel = AdvChnls::u;//6
+		//int u_channel = AdvChnls::u;//6
 
 		//last_grid:
 		//012: node u
 		//345: u copy
 		//678: face u
 		int last_tmp_channel = 3;
-		int last_u_node_channel = 0;//on last_grid
+		//int last_u_node_channel = 0;//on last_grid
 		//int last_dye_node_channel = Tile::vor_channel;//on last_grid
 		
 		//next grid:
@@ -413,59 +318,23 @@ public:
 		int n = grid_ptrs.size() - 1;
 		//we only need to prepare the last grid at this time
 		auto& last_grid = *grid_ptrs[n - 1];
-		InterpolateVelocitiesAtAllTiles(last_grid, u_channel, last_u_node_channel);
-
-		
-		//cudaDeviceSynchronize(); timer.stop("Prepare last grid"); timer.start();
+		InterpolateVelocitiesAtAllTiles(last_grid, BufChnls::u, BufChnls::u_node);
 		CheckCudaError("prepare last grid");
 
-		thrust::host_vector<HATileAccessor<Tile>> accs_h;
-		for (int i = 0; i < n; i++) {
-			accs_h.push_back(grid_ptrs[i]->deviceAccessor());
-		}
-		thrust::device_vector<HATileAccessor<Tile>> accs_d = accs_h;
-		auto accs_d_ptr = thrust::raw_pointer_cast(accs_d.data());
-		thrust::device_vector<double> time_steps_d = time_steps;
-		auto time_steps_d_ptr = thrust::raw_pointer_cast(time_steps_d.data());
+		AdvectMarkerParticlesRK4ForwardAndMarkInvalid(
+			last_grid, mParams.mFineLevel, mParams.mCoarseLevel,
+			BufChnls::u, dt, current_time - mParams.mParticleLife,
+			marker_particles_d
+		);
+		EraseInvalidParticles(marker_particles_d);
+		cudaDeviceSynchronize(); particle_advection_time = timer.stop("Advect particles"); timer.start();
 
-		MarkParticlesOutsideFluidRegionAsInvalid(particles, last_grid);
-		MarkOldParticlesAsInvalid(particles, current_time, mParams.mParticleLife);
-		EraseInvalidParticles(particles);
 
 		ReseedParticles(last_grid, mParams, last_tmp_channel, current_time, mNumParticlesPerCell, particles);		
 
 		cudaDeviceSynchronize(); reseeding_time = timer.stop("reseeding and remove particles in solid"); timer.start();
 		Info("total {:.5f}M particles, time step counter {}", particles.size() / (1024 * 1024 + 0.f), time_step_counter);
 
-		//reset impulse for all particles
-		if (time_step_counter % mParams.mFlowMapStride == 0) {
-			nfm_query_grid_ptr = grid_ptrs[n - 1];
-			ResetParticleImpulse(last_grid, u_channel, last_u_node_channel, particles);
-
-			cudaDeviceSynchronize(); timer.stop("reset all particles impulse"); timer.start();
-		}
-		else {
-			int fine_level = mParams.mFineLevel;
-			int coarse_level = mParams.mCoarseLevel;
-
-			int back_traced_steps = time_step_counter % mParams.mFlowMapStride;
-			int nfm_start_idx = n - back_traced_steps - 1;
-			auto particles_d_ptr = thrust::raw_pointer_cast(particles.data());
-			LaunchIndexFunc([=] __device__(int idx) {
-				auto& particle = particles_d_ptr[idx];
-
-				if (particle.start_time == current_time) {
-
-					Vec psi = particle.pos;
-					Vec m0; Eigen::Matrix3<T> matT;
-					NFMBackQueryImpulseAndT(accs_d_ptr, fine_level, coarse_level, time_steps_d_ptr, u_channel, last_u_node_channel, nfm_start_idx, n - 1, psi, m0, matT);
-					particle.impulse = m0;
-					particle.matT = matT;
-				}
-			}, particles.size(), 128);
-
-			cudaDeviceSynchronize(); timer.stop("reset newly sampled particles impulse"); timer.start();
-		}
 
 
 		HistogramSortParticlesAtGivenLevel(last_grid, mParams.mFineLevel, last_tmp_channel, particles, tile_prefix_sum_d, records_d);
@@ -494,20 +363,13 @@ public:
 		cudaDeviceSynchronize(); adaptive_time = timer.stop("adapt with particles"); timer.start();
 
 
-		//ParticleImpulseToGridMACIntp(grid, particles, u_channel, next_uw_channel);
-		HistogramSortParticlesAtGivenLevel(grid, mParams.mFineLevel, next_counter_channel, particles, tile_prefix_sum_d, records_d);
-		//OptimizedP2GTransferAtGivenLevel(grid, mParams.mFineLevel, u_channel, next_uw_channel, tile_prefix_sum_d, records_d);
-		EraseInvalidParticles(particles);
 
-		CheckCudaError("pfm p2g");
-		//Info("max impulse after pfm: {}", VelocityLinf(grid, u_channel, -1, LEAF, LAUNCH_SUBTREE));
-
-
-		cudaDeviceSynchronize(); p2g_time = timer.stop("P2G"); timer.start();
-		{
-			double num_particles_M = particles.size() / (1024. * 1024.);
-			Info("P2G time: {} ms, {}M particles, throughput {}M particles/s", p2g_time, num_particles_M, num_particles_M / p2g_time * 1000);
-		}
+		thrust::host_vector<HATileAccessor<Tile>> accs_h;
+		for (int i = 0; i < n; i++) accs_h.push_back(grid_ptrs[i]->deviceAccessor());
+		thrust::device_vector<HATileAccessor<Tile>> accs_d = accs_h;
+		auto accs_d_ptr = thrust::raw_pointer_cast(accs_d.data());
+		thrust::device_vector<double> time_steps_d = time_steps;
+		auto time_steps_d_ptr = thrust::raw_pointer_cast(time_steps_d.data());
 
 		//advect dye and NFM
 		{

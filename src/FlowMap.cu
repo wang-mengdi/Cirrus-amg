@@ -448,23 +448,25 @@ void InterpolateVelocitiesAtAllTiles(HADeviceGrid<Tile>& grid, const int u_chann
 	);
 }
 
-__device__ void RK4ForwardPosition(const HATileAccessor<Tile>& acc, const int fine_level, const int coarse_level, const T dt, const int u_channel, Vec& phi) {
+__device__ bool RK4ForwardPosition(const HATileAccessor<Tile>& acc, const int fine_level, const int coarse_level, const T dt, const int u_channel, Vec& phi) {
 	Vec u1;
-	KernelIntpVelocityMAC2(acc, fine_level, coarse_level, phi, u_channel, u1);
+	if (!KernelIntpVelocityMAC2(acc, fine_level, coarse_level, phi, u_channel, u1)) return false;
 	Vec phi1 = phi + 0.5 * dt * u1;
 
 	Vec u2;
-	KernelIntpVelocityMAC2(acc, fine_level, coarse_level, phi1, u_channel, u2);
+	if (!KernelIntpVelocityMAC2(acc, fine_level, coarse_level, phi1, u_channel, u2)) return false;
 	Vec phi2 = phi + 0.5 * dt * u2;
 
 	Vec u3;
-	KernelIntpVelocityMAC2(acc, fine_level, coarse_level, phi2, u_channel, u3);
+	if (!KernelIntpVelocityMAC2(acc, fine_level, coarse_level, phi2, u_channel, u3)) return false;
 	Vec phi3 = phi + dt * u3;
 
 	Vec u4;
-	KernelIntpVelocityMAC2(acc, fine_level, coarse_level, phi3, u_channel, u4);
+	if (!KernelIntpVelocityMAC2(acc, fine_level, coarse_level, phi3, u_channel, u4)) return false;
 
 	phi = phi + dt / 6.0 * (u1 + 2 * u2 + 2 * u3 + u4);
+
+	return true;
 }
 
 //__device__ void RK2ForwardPositionAndF(const HATileAccessor<Tile>& acc, const int fine_level, const int coarse_level, const T dt, const int u_channel, const int node_u_channel, Vec& pos, Eigen::Matrix3<T>& F) {

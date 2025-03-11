@@ -8,15 +8,22 @@
 #define M_PI 3.14159265358979323846
 #endif
 
+namespace BufChnls {
+	constexpr int u = 6;
+	constexpr int u_node = 0;
+}
+
+namespace AdvChnls {
+	constexpr int u = 6;
+}
+
+
 namespace ProjChnls {
 	constexpr int x = 0;
 	constexpr int b = 1;
 	constexpr int c0 = 11;
 }
 
-namespace AdvChnls {
-	constexpr int u = 6;
-}
 
 namespace OutputChnls {
 	constexpr int u_node = 0;
@@ -26,15 +33,15 @@ namespace OutputChnls {
 
 ////Channel allocations
 //      Buffer		Advection		Projection		Output
-// 0    u							x				node u
-// 1    v							b/r				node v
-// 2	w							p				node w
+// 0    							x				node u
+// 1    							b/r				node v
+// 2								p				node w
 // 3								Ap				cell u
 // 4								z				cell v
 // 5												cell w
-// 6				u				u				u
-// 7				v				v				v
-// 8				w				w				w
+// 6	u			u				u				u
+// 7	v			v				v				v
+// 8	w			w				w				w
 // 9												vor
 //10
 //11								c0
