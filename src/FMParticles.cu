@@ -2,12 +2,12 @@
 #include "Random.h"
 #include "PoissonIOFunc.h"
 
-#include <cub/cub.cuh>
+//#include <cub/cub.cuh>
 #include <thrust/remove.h>
 #include <polyscope/polyscope.h>
 //#include "FluidEuler.h"
-#include <cub/cub.cuh>
-#include <cub/device/device_scan.cuh>
+//#include <cub/cub.cuh>
+//#include <cub/device/device_scan.cuh>
 
 //void GenerateParticlesUniformlyWithChannelValueOnLevel(std::shared_ptr<HAHostTileHolder<Tile>> holder_all_ptr, const int level, const int channel, const T threshold, const uint8_t sampled_tile_types, const int scale_ratio, thrust::device_vector<Particle>& particles_d) {
 //	auto& holder_all = *holder_all_ptr;
