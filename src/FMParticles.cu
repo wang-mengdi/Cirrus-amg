@@ -110,44 +110,44 @@
 //	particles_d = particles_h;
 //}
 
-__global__ void MarkInterestAreaKernel(HATileAccessor<Tile> acc, HATileInfo<Tile>* infos, const uint8_t tmp_channel, int subtree_level, uint8_t launch_types) {
-	const HATileInfo<Tile>& info = infos[blockIdx.x];
-	Coord l_ijk = Coord(threadIdx.x, threadIdx.y, threadIdx.z);
-
-	if (!(info.subtreeType(subtree_level) & launch_types)) {
-		if (l_ijk == Coord(0, 0, 0)) {
-			auto& tile = info.tile();
-			tile.mIsInterestArea = false;
-		}
-		return;
-	}
-
-	auto& tile = info.tile();
-	T value = tile(tmp_channel, l_ijk);
-
-	typedef cub::BlockReduce<T, Tile::DIM, cub::BLOCK_REDUCE_WARP_REDUCTIONS, Tile::DIM, Tile::DIM> BlockReduce;
-	__shared__ typename BlockReduce::TempStorage temp_storage_min;
-	__shared__ typename BlockReduce::TempStorage temp_storage_max;
-
-	T minValue = BlockReduce(temp_storage_min).Reduce(value, cub::Min());
-	T maxValue = BlockReduce(temp_storage_max).Reduce(value, cub::Max());
-
-	if (l_ijk == Coord(0, 0, 0)) {
-		auto& tile = info.tile();
-		if (maxValue > 0) {
-			tile.mIsInterestArea = true;
-		}
-		else {
-			tile.mIsInterestArea = false;
-		}
-		//if (minValue == 0 && maxValue > 0) {
-		//	tile.mIsInterestArea = true;
-		//}
-		//else {
-		//	tile.mIsInterestArea = false;
-		//}
-	}
-}
+//__global__ void MarkInterestAreaKernel(HATileAccessor<Tile> acc, HATileInfo<Tile>* infos, const uint8_t tmp_channel, int subtree_level, uint8_t launch_types) {
+//	const HATileInfo<Tile>& info = infos[blockIdx.x];
+//	Coord l_ijk = Coord(threadIdx.x, threadIdx.y, threadIdx.z);
+//
+//	if (!(info.subtreeType(subtree_level) & launch_types)) {
+//		if (l_ijk == Coord(0, 0, 0)) {
+//			auto& tile = info.tile();
+//			tile.mIsInterestArea = false;
+//		}
+//		return;
+//	}
+//
+//	auto& tile = info.tile();
+//	T value = tile(tmp_channel, l_ijk);
+//
+//	typedef cub::BlockReduce<T, Tile::DIM, cub::BLOCK_REDUCE_WARP_REDUCTIONS, Tile::DIM, Tile::DIM> BlockReduce;
+//	__shared__ typename BlockReduce::TempStorage temp_storage_min;
+//	__shared__ typename BlockReduce::TempStorage temp_storage_max;
+//
+//	T minValue = BlockReduce(temp_storage_min).Reduce(value, cub::Min());
+//	T maxValue = BlockReduce(temp_storage_max).Reduce(value, cub::Max());
+//
+//	if (l_ijk == Coord(0, 0, 0)) {
+//		auto& tile = info.tile();
+//		if (maxValue > 0) {
+//			tile.mIsInterestArea = true;
+//		}
+//		else {
+//			tile.mIsInterestArea = false;
+//		}
+//		//if (minValue == 0 && maxValue > 0) {
+//		//	tile.mIsInterestArea = true;
+//		//}
+//		//else {
+//		//	tile.mIsInterestArea = false;
+//		//}
+//	}
+//}
 
 void CountParticleNumberInLeafCells(HADeviceGrid<Tile>& grid, const thrust::device_vector<Particle>& particles, const int tmp_channel) {
 	grid.launchVoxelFuncOnAllTiles(
@@ -175,21 +175,21 @@ void CountParticleNumberInLeafCells(HADeviceGrid<Tile>& grid, const thrust::devi
 void CalcInterestAreaFlagsWithParticlesOnLeafs(const thrust::device_vector<Particle>& particles, HADeviceGrid<Tile>& grid, int tmp_channel) {
 	CountParticleNumberInLeafCells(grid, particles, tmp_channel);
 
-	//auto info_ptr = thrust::raw_pointer_cast(grid.dAllTiles.data());
-	//MarkRegionOfInterestWithChannelMinAndMax128Kernel << <grid.dAllTiles.size(), 128 >> > (
-	//	grid.deviceAccessor(), info_ptr, -1, LEAF,
-	//	tmp_channel,
-	//	[=]__device__(const T tile_min, const T tile_max) {
-	//	return tile_max > 0;
-	//},
-	//	false//unlocked
-	//	);
+	auto info_ptr = thrust::raw_pointer_cast(grid.dAllTiles.data());
+	MarkRegionOfInterestWithChannelMinAndMax128Kernel << <grid.dAllTiles.size(), 128 >> > (
+		grid.deviceAccessor(), info_ptr, -1, LEAF,
+		tmp_channel,
+		[=]__device__(const T tile_min, const T tile_max) {
+		return tile_max > 0;
+	},
+		false//do not calculate locked
+		);
 
-	for (int i = 0; i < grid.mNumLevels; i++) {
-		if (grid.hNumTiles[i] == 0) continue;
-		auto info_ptr = thrust::raw_pointer_cast(grid.dTileArrays[i].data());
-		MarkInterestAreaKernel << <grid.hNumTiles[i], dim3(Tile::DIM, Tile::DIM, Tile::DIM) >> > (grid.deviceAccessor(), info_ptr, tmp_channel, -1, LEAF);
-	}
+	//for (int i = 0; i < grid.mNumLevels; i++) {
+	//	if (grid.hNumTiles[i] == 0) continue;
+	//	auto info_ptr = thrust::raw_pointer_cast(grid.dTileArrays[i].data());
+	//	MarkInterestAreaKernel << <grid.hNumTiles[i], dim3(Tile::DIM, Tile::DIM, Tile::DIM) >> > (grid.deviceAccessor(), info_ptr, tmp_channel, -1, LEAF);
+	//}
 }
 
 void CoarsenWithParticles(HADeviceGrid<Tile>& grid, const thrust::device_vector<Particle>& particles, const int coarse_levels, const int fine_levels, const int counter_channel, bool verbose) {
