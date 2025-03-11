@@ -397,8 +397,6 @@ public:
 		//012: node u
 		//345: u copy
 		//678: face u
-		//9: node dye
-		//10: voxel dye
 		int last_tmp_channel = 3;
 		int last_u_node_channel = 0;//on last_grid
 		//int last_dye_node_channel = Tile::vor_channel;//on last_grid
