@@ -311,8 +311,8 @@ public:
 		//3: particle counter
 		//678: face u
 		//10: voxel dye
-		int next_uw_channel = 0;//on grid
-		int next_counter_channel = 4;//on grid
+		//int next_uw_channel = 0;//on grid
+		//int next_counter_channel = 4;//on grid
 		
 		//saved intermediate velocities
 		int n = grid_ptrs.size() - 1;
@@ -344,11 +344,17 @@ public:
 		CheckCudaError("reseeding particles");
 
 		auto& grid = *grid_ptrs[n];
-		RefineWithMarkerParticles(grid, marker_particles_d, mParams.mCoarseLevel, mParams.mFineLevel, next_counter_channel, false);
-		CoarsenWithMarkerParticles(grid, marker_particles_d, mParams.mCoarseLevel, mParams.mFineLevel, next_counter_channel, false);
+		RefineWithMarkerParticles(grid, marker_particles_d, mParams.mCoarseLevel, mParams.mFineLevel, AdvChnls::counter, false);
+		CoarsenWithMarkerParticles(grid, marker_particles_d, mParams.mCoarseLevel, mParams.mFineLevel, AdvChnls::counter, false);
 		cudaDeviceSynchronize(); adaptive_time = timer.stop("adapt with particles"); timer.start();
 		CheckCudaError("adapt with particles");
+		
 
+		Info("time step counter: {}", time_step_counter);
+		if (time_step_counter % mParams.mFlowMapStride == 0) {
+			nfm_query_grid_ptr = grid_ptrs[n - 1];
+			Info("reset nfm query ptr");
+		}
 
 		//prepare pointers for previous grids
 		thrust::host_vector<HATileAccessor<Tile>> accs_h;
@@ -357,6 +363,8 @@ public:
 		auto accs_d_ptr = thrust::raw_pointer_cast(accs_d.data());
 		thrust::device_vector<double> time_steps_d = time_steps;
 		auto time_steps_d_ptr = thrust::raw_pointer_cast(time_steps_d.data());
+		CheckCudaError("prepare pointers");
+		Info("prepare pointers");
 
 		//advect NFM velocity
 		{
@@ -373,18 +381,14 @@ public:
 			grid.launchVoxelFuncOnAllTiles(
 				[=] __device__(HATileAccessor<Tile>&acc, HATileInfo<Tile>&info, const Coord & l_ijk) {
 				auto& tile = info.tile();
-				//if (!tile.isInterior(l_ijk)) return;
 
 				//type
 				int boundary_axis, boundary_off;
 				tile.type(l_ijk) = params.cellType(current_time, acc, info, l_ijk, boundary_axis, boundary_off);
 
-
-
 				{
 					//grid velocity advection
 					for (int axis : {0, 1, 2}) {
-						if (tile(next_uw_channel + axis, l_ijk) < 1 - 1e-3)
 						{
 							//Vec psi = acc.faceCenter(axis, info, l_ijk);
 							Vec psi = NFMErodedAdvectionPoint(axis, acc, info, l_ijk);
@@ -410,8 +414,13 @@ public:
 				}
 			}, LEAF, 4
 			);
+
+			CheckCudaError("launch nfm");
+
 		}
 
+
+		Info("launch done");
 
 		CalcCellTypesFromLeafs(grid);
 

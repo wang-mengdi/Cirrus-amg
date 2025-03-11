@@ -16,6 +16,7 @@ namespace BufChnls {
 
 namespace AdvChnls {
 	constexpr int u = 6;
+	constexpr int counter = 4;
 }
 
 
@@ -38,7 +39,7 @@ namespace OutputChnls {
 // 1    node v						b/r				node v
 // 2	node w						p				node w
 // 3	tmp							Ap				cell u
-// 4								z				cell v
+// 4				counter			z				cell v
 // 5												cell w
 // 6	u			u				u				u
 // 7	v			v				v				v
