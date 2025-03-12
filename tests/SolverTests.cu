@@ -1338,28 +1338,119 @@ namespace SolverTests {
         //IOFunc::OutputTilesAsVTU(holder, "output/tiles.vtu");
     }
 
-    std::tuple<std::shared_ptr<HADeviceGrid<Tile>>, bool> CreateSolidTestGrid(const std::string grid_name, const int min_level, const int max_level) {
-		std::shared_ptr<HADeviceGrid<Tile>> grid_ptr;
-        if (grid_name == "uniform") {
-            grid_ptr = CreateTestGridCase<UniformGridCase>(grid_name, min_level, max_level);
-        }
-        else if (grid_name == "sphere"){
-			grid_ptr = CreateTestGridCase<SphereSolid05GridCase>(grid_name, min_level, max_level);
-        }
-        else if (grid_name == "star"){
-			grid_ptr = CreateTestGridCase<StarSolidGerrisGridCase>(grid_name, min_level, max_level);
+    __hostdev__ float FaceFluidRatio(float phi0, float phi1, float phi2, float phi3)
+    {
+        return 0.0f;
+    }
+
+    void TestSolverErrorSolid(const std::string grid_name, const int min_level, const int max_level){
+        std::shared_ptr<HADeviceGrid<Tile>> grid_ptr;
+        // grid with type
+       if (grid_name == "sphere") {
+            grid_ptr = CreateTestGridCase<SphereSolid05GridCase>(grid_name, min_level, max_level);
         }
         else {
             Assert(false, "grid_name {} not supported", grid_name);
         }
         auto& grid = *grid_ptr;
-
         bool is_pure_neumann = false;
 
-        return std::make_tuple(grid_ptr, is_pure_neumann);
-    }
+        grid.launchVoxelFuncOnAllTiles(
+            [=] __device__(HATileAccessor<Tile>&acc, HATileInfo<Tile>&info, const Coord & l_ijk) {
+            auto& tile = info.tile();
+            if (tile.type(l_ijk) == INTERIOR) {
+                int boundary_axis, boundary_off;
+                if (QueryEffectiveBoundaryDirection(acc, min_level, info, l_ijk, boundary_axis, boundary_off)) {
+                    tile.type(l_ijk) = NEUMANN;
+                }
+            }
+        }, LEAF
+        );
+        CalcCellTypesFromLeafs(grid);
+        CalculateNeighborTiles(grid);
 
-    void TestSolverErrorSolid(const std::string grid_name, const int min_level, const int max_level){
-
+        // amg with coef
+        int coeff_channel = 6;
+		AMGSolver solver(coeff_channel, 0.5, 1, 1);
+        //step 0: clear coeff channel for all tiles
+        grid.launchVoxelFuncOnAllTiles(
+            [=] __device__(HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const Coord& l_ijk) {
+            auto& tile = info.tile();
+            for (int axis : {0, 1, 2}) {
+                tile(coeff_channel + axis, l_ijk) = 0;
+            }
+            tile(coeff_channel + 3, l_ijk) = 0;
+        },
+            LEAF | GHOST | NONLEAF
+        );
+        //step 1: fill GHOST cell types
+        grid.launchVoxelFuncOnAllTiles(
+            [=] __device__(HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const Coord& l_ijk) {
+            auto& tile = info.tile();
+            auto g_ijk = acc.composeGlobalCoord(info.mTileCoord, l_ijk);
+            auto pg_ijk = acc.parentCoord(g_ijk);
+            HATileInfo<Tile> pinfo; Coord pl_ijk;
+            acc.findVoxel(info.mLevel - 1, pg_ijk, pinfo, pl_ijk);
+            if (!pinfo.empty()) tile.type(l_ijk) = pinfo.tile().type(pl_ijk);
+            else tile.type(l_ijk) = DIRICHLET;
+        }, GHOST);
+        // step 2: calculate face terms on LEAF and GHOST cells
+        grid.launchVoxelFuncOnAllTiles(
+            [=] __device__(HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const Coord& l_ijk) {
+            auto h = acc.voxelSize(info);
+            Tile& tile = info.tile();
+            uint8_t ctype0 = tile.type(l_ijk);
+            auto cell_center = acc.cellCenter(info, l_ijk);
+            //iterate neighbors
+            acc.iterateSameLevelNeighborVoxels(info, l_ijk,
+                [&]__device__(const HATileInfo<Tile>&ninfo, const Coord & nl_ijk, const int axis, const int sgn) {
+                if (sgn != -1)
+                    return;
+                uint8_t ctype1;
+                T coeff = 0;
+                if (ctype0 == INTERIOR)
+                {
+                    if (ninfo.empty()) {
+                        ctype1 = DIRICHLET;
+                    }
+                    else {
+                        auto& ntile = ninfo.tile();
+                        ctype1 = ntile.type(nl_ijk);
+                    }
+                    if (ctype1 == INTERIOR) {
+                        Vec face_corner[4];
+                        if (axis == 0)
+                        {
+							face_corner[0] = cell_center + Vec(-0.5, -0.5, -0.5) * h;
+							face_corner[1] = cell_center + Vec(-0.5, -0.5, 0.5) * h;
+							face_corner[2] = cell_center + Vec(-0.5, 0.5, 0.5) * h;
+							face_corner[3] = cell_center + Vec(-0.5, 0.5, -0.5) * h;
+						}
+                        else if (axis == 1)
+                        {
+							face_corner[0] = cell_center + Vec(-0.5, -0.5, -0.5) * h;
+							face_corner[1] = cell_center + Vec(-0.5, -0.5, 0.5) * h;
+							face_corner[2] = cell_center + Vec(0.5, -0.5, 0.5) * h;
+							face_corner[3] = cell_center + Vec(0.5, -0.5, -0.5) * h;
+                        }
+						else if (axis == 2)
+                        {
+							face_corner[0] = cell_center + Vec(-0.5, -0.5, -0.5) * h;
+							face_corner[1] = cell_center + Vec(-0.5, 0.5, -0.5) * h;
+							face_corner[2] = cell_center + Vec(0.5, 0.5, -0.5) * h;
+							face_corner[3] = cell_center + Vec(0.5, -0.5, -0.5) * h;
+                        }
+                        float phi[4];
+						for (int i = 0; i < 4; i++)
+								phi[i] = SphereSolid05GridCase::phi(face_corner[i]);
+                        coeff = h * FaceFluidRatio(phi[0], phi[1], phi[2], phi[3]);
+                    }
+                    else if (ctype1 == DIRICHLET){
+                        coeff = h;
+                    }
+                }
+                tile(coeff_channel + axis, l_ijk) = -coeff;
+            });
+        }, LEAF | GHOST);
     }
 }
