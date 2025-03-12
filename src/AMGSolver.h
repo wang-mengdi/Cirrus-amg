@@ -66,3 +66,5 @@ public:
 	double* mean_d;
     double* count_d;
 };
+
+__global__ void CoarsenOffDiagCoefficientsOneStepKernel(HATileAccessor<Tile> acc, HATileInfo<Tile>* fine_tiles, int fine_subtree_level, uint8_t fine_tile_types, int fine_u_channel, int coarse_u_channel, Tile::T R_mat_coeff, uint8_t cell_types);
