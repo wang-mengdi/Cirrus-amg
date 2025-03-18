@@ -1896,5 +1896,31 @@ namespace SolverTests
 			}
 		},
 			-1, LEAF | GHOST | NONLEAF, LAUNCH_SUBTREE, FINE_FIRST);
+
+		//rhs
+		int rhs_channel = 1;
+		int u_channel = 10;
+		int v_channel = 11;
+		int w_channel = 12;
+	
+		grid.launchVoxelFuncOnAllTiles(
+			[=] __device__(HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const Coord& l_ijk)
+		{
+			float vel_val = -1.0;
+			Tile& tile = info.tile();
+			tile(u_channel, l_ijk) = 0.0f;
+			tile(w_channel, l_ijk) = 0.0f;
+			auto g_ijk = acc.composeGlobalCoord(info.mTileCoord, l_ijk);
+			if (tile.type(l_ijk) == NEUMANN || g_ijk[1] == 1)
+			{
+				tile(v_channel, l_ijk) = 0;
+			}
+			else
+			{
+				tile(v_channel, l_ijk) = vel_val;
+			}
+		}, LEAF);
+		AMGVolumeWeightedDivergenceOnLeafs(grid, u_channel, coeff_channel, rhs_channel);
+
 	}
 }
