@@ -1690,7 +1690,10 @@ namespace SolverTests
 				int boundary_axis, boundary_off;
 				if (QueryEffectiveBoundaryDirection(acc, min_level, info, l_ijk, boundary_axis, boundary_off))
 				{
-					tile.type(l_ijk) = NEUMANN;
+					if (boundary_axis == 1 && boundary_off == 1)
+						tile.type(l_ijk) = DIRICHLET;
+					else
+						tile.type(l_ijk) = NEUMANN;
 				}
 			}
 		},
@@ -1736,6 +1739,7 @@ namespace SolverTests
 		{
 			auto h = acc.voxelSize(info);
 			Tile& tile = info.tile();
+			uint8_t ttype0 = info.mType;
 			uint8_t ctype0 = tile.type(l_ijk);
 			auto cell_center = acc.cellCenter(info, l_ijk);
 			// iterate neighbors
@@ -1744,52 +1748,53 @@ namespace SolverTests
 			{
 				if (sgn != -1)
 					return;
-				uint8_t ctype1;
 				T coeff = 0;
-				if (ctype0 == INTERIOR)
+
+				uint8_t ttype1;
+				uint8_t ctype1;
+				if (ninfo.empty())
 				{
-					if (ninfo.empty())
+					ttype1 = ttype0;
+					ctype1 = DIRICHLET;
+				}
+				else
+				{
+					auto& ntile = ninfo.tile();
+					ttype1 = ninfo.mType;
+					ctype1 = ntile.type(nl_ijk);
+				}
+				bool both_leafs = ((ttype0 & LEAF) && (ttype1 & LEAF));
+				bool one_leaf_one_ghost = ((ttype0 & LEAF && ttype1 & GHOST) || (ttype0 & GHOST && ttype1 & LEAF));
+				bool has_neumann = (ctype0 & NEUMANN || ctype1 & NEUMANN);
+				bool has_interior = (ctype0 & INTERIOR || ctype1 & INTERIOR);
+				if ((both_leafs || one_leaf_one_ghost) && !has_neumann && has_interior)
+				{
+					Vec face_corner[4];
+					if (axis == 0)
 					{
-						ctype1 = DIRICHLET;
+						face_corner[0] = cell_center + Vec(-0.5, -0.5, -0.5) * h;
+						face_corner[1] = cell_center + Vec(-0.5, -0.5, 0.5) * h;
+						face_corner[2] = cell_center + Vec(-0.5, 0.5, 0.5) * h;
+						face_corner[3] = cell_center + Vec(-0.5, 0.5, -0.5) * h;
 					}
-					else
+					else if (axis == 1)
 					{
-						auto& ntile = ninfo.tile();
-						ctype1 = ntile.type(nl_ijk);
+						face_corner[0] = cell_center + Vec(-0.5, -0.5, -0.5) * h;
+						face_corner[1] = cell_center + Vec(-0.5, -0.5, 0.5) * h;
+						face_corner[2] = cell_center + Vec(0.5, -0.5, 0.5) * h;
+						face_corner[3] = cell_center + Vec(0.5, -0.5, -0.5) * h;
 					}
-					if (ctype1 == INTERIOR)
+					else if (axis == 2)
 					{
-						Vec face_corner[4];
-						if (axis == 0)
-						{
-							face_corner[0] = cell_center + Vec(-0.5, -0.5, -0.5) * h;
-							face_corner[1] = cell_center + Vec(-0.5, -0.5, 0.5) * h;
-							face_corner[2] = cell_center + Vec(-0.5, 0.5, 0.5) * h;
-							face_corner[3] = cell_center + Vec(-0.5, 0.5, -0.5) * h;
-						}
-						else if (axis == 1)
-						{
-							face_corner[0] = cell_center + Vec(-0.5, -0.5, -0.5) * h;
-							face_corner[1] = cell_center + Vec(-0.5, -0.5, 0.5) * h;
-							face_corner[2] = cell_center + Vec(0.5, -0.5, 0.5) * h;
-							face_corner[3] = cell_center + Vec(0.5, -0.5, -0.5) * h;
-						}
-						else if (axis == 2)
-						{
-							face_corner[0] = cell_center + Vec(-0.5, -0.5, -0.5) * h;
-							face_corner[1] = cell_center + Vec(-0.5, 0.5, -0.5) * h;
-							face_corner[2] = cell_center + Vec(0.5, 0.5, -0.5) * h;
-							face_corner[3] = cell_center + Vec(0.5, -0.5, -0.5) * h;
-						}
-						float phi[4];
-						for (int i = 0; i < 4; i++)
-							phi[i] = SphereSolid05GridCase::phi(face_corner[i]);
-						coeff = h * FaceFluidRatio(phi[0], phi[1], phi[2], phi[3]);
+						face_corner[0] = cell_center + Vec(-0.5, -0.5, -0.5) * h;
+						face_corner[1] = cell_center + Vec(-0.5, 0.5, -0.5) * h;
+						face_corner[2] = cell_center + Vec(0.5, 0.5, -0.5) * h;
+						face_corner[3] = cell_center + Vec(0.5, -0.5, -0.5) * h;
 					}
-					else if (ctype1 == DIRICHLET)
-					{
-						coeff = h;
-					}
+					float phi[4];
+					for (int i = 0; i < 4; i++)
+						phi[i] = SphereSolid05GridCase::phi(face_corner[i]);
+					coeff = h * FaceFluidRatio(phi[0], phi[1], phi[2], phi[3]);
 				}
 				tile(coeff_channel + axis, l_ijk) = -coeff;
 			});
@@ -1922,5 +1927,74 @@ namespace SolverTests
 		}, LEAF);
 		AMGVolumeWeightedDivergenceOnLeafs(grid, u_channel, coeff_channel, rhs_channel);
 
+		grid.launchVoxelFuncOnAllTiles(
+			[=] __device__(HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const Coord& l_ijk)
+		{
+			auto& tile = info.tile();
+			auto pos = acc.cellCenter(info, l_ijk);
+			auto h = acc.voxelSize(info);
+			if (tile.type(l_ijk) & INTERIOR)
+			{
+				acc.iterateSameLevelNeighborVoxels(info, l_ijk,
+					[&] __device__(const HATileInfo<Tile> &ninfo, const Coord & nl_ijk, const int axis, const int sgn)
+				{
+					if (axis != 1 || sgn != 1)
+						return;
+					if (!ninfo.empty())
+					{
+						auto& ntile = ninfo.tile();
+						uint8_t ttype1 = ninfo.mType;
+						uint8_t ctype1 = ntile.type(nl_ijk);
+						float val;
+						if (ttype1 == GHOST)
+						{
+							auto npos = acc.cellCenter(info, nl_ijk);
+							val = npos[1] + 0.5 * h;
+						}
+						else
+						{
+							auto npos = acc.cellCenter(info, nl_ijk);
+							val = npos[1];
+						}
+						float coeff = ntile(coeff_channel + 1, nl_ijk);
+						tile(rhs_channel, l_ijk) -= coeff * val;
+					}
+
+				});
+			}
+		}, LEAF);
+		// grdt
+		int grdt_channel = 5;
+		grid.launchVoxelFuncOnAllTiles(
+			[=] __device__(HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const Coord& l_ijk)
+		{
+			auto& tile = info.tile();
+			if (tile.type(l_ijk) & INTERIOR)
+			{
+				auto pos = acc.cellCenter(info, l_ijk);
+				tile(grdt_channel, l_ijk) = pos[1];
+			}
+		}, LEAF);
+
+		// solve
+		auto [iters, err] = solver.solve(grid, true, 6, 1e-6, 2, 10, -1, is_pure_neumann);
+		cudaDeviceSynchronize();
+		// error
+		int error_channel = 13;
+		grid.launchVoxelFuncOnAllTiles(
+			[=] __device__(HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const Coord& l_ijk)
+		{
+			auto& tile = info.tile();
+			if (tile.type(l_ijk) & INTERIOR)
+			{
+				tile(error_channel, l_ijk) = tile(grdt_channel, l_ijk) - tile(Tile::x_channel, l_ijk);
+			}
+			else
+			{
+				tile(error_channel, l_ijk) = 0;
+			}
+		},
+			LEAF);
+		Info("linf: {}", NormSync(grid, -1, error_channel, false));
 	}
 }

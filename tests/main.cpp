@@ -39,15 +39,16 @@ int main(int argc, char** argv) {
 
 	for (int min_level : {2, 3, 4, 5}) {
 		//grid convergence of cg
-		SolverTests::TestSolverErrorWithAllNeumannBC("uniform", min_level, min_level, "athena_sin", "amg");
-		SolverTests::TestSolverErrorWithAllNeumannBC("sphere_shell_05", min_level, min_level + 2, "athena_sin", "amg");
-		SolverTests::TestSolverErrorWithAllNeumannBC("star_shell", min_level, min_level + 2, "athena_sin", "amg");
+		//SolverTests::TestSolverErrorWithAllNeumannBC("uniform", min_level, min_level, "athena_sin", "amg");
+		//SolverTests::TestSolverErrorWithAllNeumannBC("sphere_shell_05", min_level, min_level + 2, "athena_sin", "amg");
+		//SolverTests::TestSolverErrorWithAllNeumannBC("star_shell", min_level, min_level + 2, "athena_sin", "amg");
 
 		//SolverTests::TestDiscretizedLaplacian("uniform", min_level, min_level, "athena_sin");
 
 		//SolverTests::TestSolverErrorWithAllNeumannBC("uniform", min_level, min_level, "athena_sin", "cmg");
 
 		//SolverTests::TestSolverErrorWithAllNeumannBC("uniform", min_level, min_level, "athena_sin", "amg");
+		SolverTests::TestSolverErrorSolid("sphere", min_level, min_level +2);
 	}
 
 	//for (int min_level : {4, 5}) {
