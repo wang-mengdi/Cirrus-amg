@@ -633,7 +633,7 @@ namespace SolverTests
 		__hostdev__ static T phi(const Vec& pos)
 		{
 			const Vec ctr(0.5, 0.5, 0.5);
-			constexpr T radius = 0.5 / 2;
+			constexpr T radius = -0.5 / 2;
 			return (pos - ctr).length() - radius;
 		}
 
@@ -1927,6 +1927,7 @@ namespace SolverTests
 		}, LEAF);
 		AMGVolumeWeightedDivergenceOnLeafs(grid, u_channel, coeff_channel, rhs_channel);
 
+		int b_copy_channel = 14;
 		grid.launchVoxelFuncOnAllTiles(
 			[=] __device__(HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const Coord& l_ijk)
 		{
@@ -1945,24 +1946,32 @@ namespace SolverTests
 						auto& ntile = ninfo.tile();
 						uint8_t ttype1 = ninfo.mType;
 						uint8_t ctype1 = ntile.type(nl_ijk);
-						float val;
-						if (ttype1 == GHOST)
+						if (ctype1 == DIRICHLET)
 						{
-							auto npos = acc.cellCenter(info, nl_ijk);
-							val = npos[1] + 0.5 * h;
+							float val;
+							if (ttype1 == GHOST)
+							{
+								auto npos = acc.cellCenter(info, nl_ijk);
+								val = npos[1] + 0.5 * h;
+							}
+							else
+							{
+								auto npos = acc.cellCenter(info, nl_ijk);
+								val = npos[1];
+							}
+							float coeff = ntile(coeff_channel + 1, nl_ijk);
+							tile(rhs_channel, l_ijk) -= coeff * val;
 						}
-						else
-						{
-							auto npos = acc.cellCenter(info, nl_ijk);
-							val = npos[1];
-						}
-						float coeff = ntile(coeff_channel + 1, nl_ijk);
-						tile(rhs_channel, l_ijk) -= coeff * val;
 					}
 
 				});
 			}
+			else {
+				tile(Tile::b_channel, l_ijk) = 0;
+			}
+			tile(b_copy_channel, l_ijk) = tile(Tile::b_channel, l_ijk);
 		}, LEAF);
+
 		// grdt
 		int grdt_channel = 5;
 		grid.launchVoxelFuncOnAllTiles(
@@ -1977,8 +1986,9 @@ namespace SolverTests
 		}, LEAF);
 
 		// solve
-		auto [iters, err] = solver.solve(grid, true, 6, 1e-6, 2, 10, -1, is_pure_neumann);
+		auto [iters, err] = solver.solve(grid, true, 1000, 1e-6, 3, 100, 1, is_pure_neumann);
 		cudaDeviceSynchronize();
+
 		// error
 		int error_channel = 13;
 		grid.launchVoxelFuncOnAllTiles(
@@ -1995,6 +2005,15 @@ namespace SolverTests
 			}
 		},
 			LEAF);
+
+		auto holder = grid.getHostTileHolder(LEAF);
+		polyscope::init();
+		IOFunc::AddLeveledPoissonGridCellCentersToPolyscopePointCloud(holder,
+			{ {-1, "type"}, {coeff_channel, "x-"} , {coeff_channel + 1, "y-"}, {coeff_channel + 2, "z-"}, {coeff_channel + 3, "diag"}, {b_copy_channel, "b"} , {grdt_channel, "grdt"}, {Tile::x_channel, "pressure"}, {error_channel, "error"}},
+			{}, -1, FLT_MAX);
+		polyscope::show();
+
 		Info("linf: {}", NormSync(grid, -1, error_channel, false));
+
 	}
 }
