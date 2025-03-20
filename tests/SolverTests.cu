@@ -633,7 +633,7 @@ namespace SolverTests
 		__hostdev__ static T phi(const Vec& pos)
 		{
 			const Vec ctr(0.5, 0.5, 0.5);
-			constexpr T radius = -0.5 / 2;
+			constexpr T radius = 0.5 / 2;
 			return (pos - ctr).length() - radius;
 		}
 
@@ -1609,8 +1609,8 @@ namespace SolverTests
 		}
 		else if (phi0 < 0 && phi1 >= 0 && phi2 >= 0 && phi3 >= 0)
 		{
-			float edge1 = FracInside(phi0, phi1);
-			float edge2 = FracInside(phi0, phi3);
+			float edge1 = 1.0 - FracInside(phi0, phi1);
+			float edge2 = 1.0 - FracInside(phi0, phi3);
 			ret = 1.0 - 0.5 * edge1 * edge2;
 		}
 		else if (phi0 >= 0 && phi1 < 0 && phi2 < 0 && phi3 < 0)
@@ -1635,8 +1635,8 @@ namespace SolverTests
 		}
 		else if (phi0 >= 0 && phi1 < 0 && phi2 >= 0 && phi3 >= 0)
 		{
-			float edge1 = FracInside(phi1, phi0);
-			float edge2 = FracInside(phi1, phi2);
+			float edge1 = 1.0 - FracInside(phi1, phi0);
+			float edge2 = 1.0 - FracInside(phi1, phi2);
 			ret = 1.0 - 0.5 * edge1 * edge2;
 		}
 		else if (phi0 >= 0 && phi1 >= 0 && phi2 < 0 && phi3 < 0)
@@ -1647,14 +1647,14 @@ namespace SolverTests
 		}
 		else if (phi0 >= 0 && phi1 >= 0 && phi2 < 0 && phi3 >= 0)
 		{
-			float edge1 = FracInside(phi2, phi1);
-			float edge2 = FracInside(phi2, phi3);
+			float edge1 =1.0 - FracInside(phi2, phi1);
+			float edge2 =1.0 - FracInside(phi2, phi3);
 			ret = 1.0 - 0.5 * edge1 * edge2;
 		}
 		else if (phi0 >= 0 && phi1 >= 0 && phi2 >= 0 && phi3 < 0)
 		{
-			float edge1 = FracInside(phi3, phi0);
-			float edge2 = FracInside(phi3, phi2);
+			float edge1 = 1.0 - FracInside(phi3, phi0);
+			float edge2 = 1.0 - FracInside(phi3, phi2);
 			ret = 1.0 - 0.5 * edge1 * edge2;
 		}
 		else
@@ -1986,7 +1986,7 @@ namespace SolverTests
 		}, LEAF);
 
 		// solve
-		auto [iters, err] = solver.solve(grid, true, 1000, 1e-6, 3, 100, 1, is_pure_neumann);
+		auto [iters, err] = solver.solve(grid, true, 100, 1e-6, 3, 100, 1, is_pure_neumann);
 		cudaDeviceSynchronize();
 
 		// error
