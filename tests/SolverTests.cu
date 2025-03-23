@@ -1549,6 +1549,74 @@ namespace SolverTests
 		// IOFunc::OutputTilesAsVTU(holder, "output/tiles.vtu");
 	}
 
+	void TestIterativeResidualReduction(HADeviceGrid<Tile>& grid, const std::string algorithm, const int max_iters, const int b0_channel, const int coeff_channel,  const int final_x_channel, bool is_pure_neumann)
+	{
+		Info("Iteratively smooth out residual for algorithm {}", algorithm);
+
+		CalculateNeighborTiles(grid);
+		grid.launchVoxelFuncOnAllTiles(
+			[=] __device__(HATileAccessor<Tile> &acc, HATileInfo<Tile> &info, const Coord & l_ijk)
+		{
+			auto& tile = info.tile();
+			tile(final_x_channel, l_ijk) = 0;
+		},
+			LEAF | NONLEAF | GHOST);
+
+		auto calc_residual = [&](int x_channel, int rhs_channel, int r_channel) {
+			AMGFullNegativeLaplacianOnLeafs(grid, x_channel, coeff_channel, r_channel);
+			grid.launchVoxelFuncOnAllTiles(
+				[=] __device__(HATileAccessor<Tile>&acc, HATileInfo<Tile>&info, const Coord & l_ijk)
+			{
+				auto& tile = info.tile();
+				tile(r_channel, l_ijk) = tile(rhs_channel, l_ijk) - tile(r_channel, l_ijk);
+			},
+				LEAF);
+			};
+
+		if (algorithm == "fas_vcycle") {
+			AMGSolver solver(coeff_channel, 0.5, 0.5, 1);
+			solver.prepareTypesAndCoeffs(grid);
+			int x_channel = Tile::x_channel;//0
+			int b_channel = Tile::b_channel;//1
+			int x0_channel = 2;
+			int iter_r_channel = 3;
+
+			for (int iter = 1; iter <= max_iters; iter++) {
+				//calculate residual to Tile::b_channel for this iteration
+				calc_residual(final_x_channel, b0_channel, b_channel);
+				grid.launchVoxelFuncOnAllTiles(
+					[=] __device__(HATileAccessor<Tile>&acc, HATileInfo<Tile>&info, const Coord & l_ijk) {
+					auto& tile = info.tile();
+					tile(x_channel, l_ijk) = 0;
+				}, LEAF);
+
+				double pt_l2 = NormSync(grid, 2, b_channel, false);
+				Info("Residual pointwise L2 norm at step {}: {}", iter - 1, pt_l2);
+
+				solver.FASMuCycleStep(grid.mMaxLevel, 1, grid, x_channel, b_channel, x0_channel, coeff_channel, 2, 100);
+
+				{
+					calc_residual(final_x_channel, b0_channel, b_channel);
+					calc_residual(x_channel, b_channel, iter_r_channel);
+					Info("after FAS iter {} residual pointwise L2 norm: {}", iter, NormSync(grid, 2, iter_r_channel, false));
+				}
+
+				//accumulate x to final_x_channel
+				grid.launchVoxelFuncOnAllTiles(
+					[=] __device__(HATileAccessor<Tile>&acc, HATileInfo<Tile>&info, const Coord & l_ijk)
+				{
+					auto& tile = info.tile();
+					tile(final_x_channel, l_ijk) += tile(x_channel, l_ijk) * 0.5;
+				},
+					LEAF);
+			}
+			Info("Residual pointwise L2 norm at step {}: {}", max_iters, NormSync(grid, 2, iter_r_channel, false));
+		}
+		else {
+			Assert(false, "TestIterativeResidualReduction algorithm {} not supported", algorithm);
+		}
+	}
+
 	__hostdev__ float FracInside(float a, float b)
 	{
 		if (a < 0.0 && b < 0.0)
@@ -2041,17 +2109,39 @@ namespace SolverTests
 				int boundary_axis, boundary_off;
 				if (QueryEffectiveBoundaryDirection(acc, min_level, info, l_ijk, boundary_axis, boundary_off))
 				{
-					if (boundary_axis == 1 && boundary_off == 1)
-						tile.type(l_ijk) = DIRICHLET;
-					else
+					if (boundary_axis == 1 && boundary_off == 1) {
+
+						//tile.type(l_ijk) = DIRICHLET;
+					}
+					else {
 						tile.type(l_ijk) = NEUMANN;
+					}
 				}
 			}
 		},
 			LEAF);
 		CalcCellTypesFromLeafs(grid);
 		CalculateNeighborTiles(grid);
-	
+		
+		//0,1,2,3,4: AMGPCG
+		//5: grdt
+		//6,7,8,9: coeff
+		//10: b0
+		//11: x0
+		int b0_channel = 10;
+		int final_x_channel = 11;
+		
+		//at the end:
+		//1: -lap(grdt)
+		//2: -lap(x)
+		//3: -lap(grdt) - (-lap(x))
+		//4: grdt-x
+
+		int lap_grdt_channel = 1;
+		int lap_x_channel = 2;
+		int lap_diff_channel = 3;
+		int x_diff_channel = 4;
+
 		// amg with coef
 		int coeff_channel = 6;
 		float R_matrix_coeff = 0.5;
@@ -2073,25 +2163,32 @@ namespace SolverTests
 		}, LEAF);
 
 		// rhs
-		AMGFullNegativeLaplacianOnLeafs(grid, grdt_channel, coeff_channel, Tile::b_channel);
+		AMGFullNegativeLaplacianOnLeafs(grid, grdt_channel, coeff_channel, b0_channel);
 
 		// solve
-		auto [iters, err] = solver.solve(grid, true, 100, 1e-6, 3, 100, 1, is_pure_neumann);
-		cudaDeviceSynchronize();
+		//auto [iters, err] = solver.solve(grid, true, 100, 1e-6, 3, 100, 1, is_pure_neumann);
+		//cudaDeviceSynchronize();
+
+		TestIterativeResidualReduction(grid, "fas_vcycle", 10, b0_channel, coeff_channel, final_x_channel, is_pure_neumann);
+
+		//lap(x)
+		AMGFullNegativeLaplacianOnLeafs(grid, grdt_channel, coeff_channel, lap_grdt_channel);
+		AMGFullNegativeLaplacianOnLeafs(grid, final_x_channel, coeff_channel, lap_x_channel);
 
 		// error
-		int error_channel = 13;
 		grid.launchVoxelFuncOnAllTiles(
 			[=] __device__(HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const Coord& l_ijk)
 		{
 			auto& tile = info.tile();
 			if (tile.type(l_ijk) & INTERIOR)
 			{
-				tile(error_channel, l_ijk) = tile(grdt_channel, l_ijk) - tile(Tile::x_channel, l_ijk);
+				tile(lap_diff_channel, l_ijk) = tile(lap_grdt_channel, l_ijk) - tile(lap_x_channel, l_ijk);
+				tile(x_diff_channel, l_ijk) = tile(grdt_channel, l_ijk) - tile(final_x_channel, l_ijk);
 			}
 			else
 			{
-				tile(error_channel, l_ijk) = 0;
+				tile(lap_diff_channel, l_ijk) = 0;
+				tile(x_diff_channel, l_ijk) = 0;
 			}
 		},
 			LEAF);
@@ -2099,10 +2196,12 @@ namespace SolverTests
 		auto holder = grid.getHostTileHolder(LEAF);
 		polyscope::init();
 		IOFunc::AddLeveledPoissonGridCellCentersToPolyscopePointCloud(holder,
-			{ {-1, "type"}, {coeff_channel, "x-"} , {coeff_channel + 1, "y-"}, {coeff_channel + 2, "z-"}, {coeff_channel + 3, "diag"}, {grdt_channel, "grdt"}, {Tile::x_channel, "pressure"}, {error_channel, "error"} },
+			{ {-1, "type"}, {coeff_channel, "x-"} , {coeff_channel + 1, "y-"}, {coeff_channel + 2, "z-"}, {coeff_channel + 3, "diag"}, {grdt_channel, "grdt"}, {final_x_channel, "pressure"},
+			{x_diff_channel, "x_diff"}, {lap_diff_channel, "lap_diff"}, {lap_grdt_channel, "lap(grdt)"}, {lap_x_channel, "lap(x)"} },
 			{}, -1, FLT_MAX);
-		//polyscope::show();
+		polyscope::show();
 
-		Info("linf: {}", NormSync(grid, -1, error_channel, false));
+		Info("tile size: {}", sizeof(Tile));
+		Info("linf: {}", NormSync(grid, -1, x_diff_channel, false));
 	}
 }
