@@ -50,8 +50,8 @@ int main(int argc, char** argv) {
 		//SolverTests::TestSolverErrorWithAllNeumannBC("uniform", min_level, min_level, "athena_sin", "amg");
 		
 	//}
-	SolverTests::TestSolverErrorSolid("sphere", 2, 2);
-
+	//SolverTests::TestSolverErrorSolid("sphere", 2, 2);
+	SolverTests::TestRecoveryNew("sphere", 2, 4);
 
 	//for (int min_level : {4, 5}) {
 	for (int min_level : {4}) {

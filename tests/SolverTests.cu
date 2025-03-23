@@ -2016,4 +2016,93 @@ namespace SolverTests
 		Info("linf: {}", NormSync(grid, -1, error_channel, false));
 
 	}
+
+	void TestRecoveryNew(const std::string grid_name, const int min_level, const int max_level)
+	{
+		std::shared_ptr<HADeviceGrid<Tile>> grid_ptr;
+		// grid with type
+		if (grid_name == "sphere")
+		{
+			grid_ptr = CreateTestGridCase<SphereSolid05GridCase>(grid_name, min_level, max_level);
+		}
+		else
+		{
+			Assert(false, "grid_name {} not supported", grid_name);
+		}
+		auto& grid = *grid_ptr;
+		bool is_pure_neumann = false;
+
+		grid.launchVoxelFuncOnAllTiles(
+			[=] __device__(HATileAccessor<Tile> &acc, HATileInfo<Tile> &info, const Coord & l_ijk)
+		{
+			auto& tile = info.tile();
+			if (tile.type(l_ijk) == INTERIOR)
+			{
+				int boundary_axis, boundary_off;
+				if (QueryEffectiveBoundaryDirection(acc, min_level, info, l_ijk, boundary_axis, boundary_off))
+				{
+					if (boundary_axis == 1 && boundary_off == 1)
+						tile.type(l_ijk) = DIRICHLET;
+					else
+						tile.type(l_ijk) = NEUMANN;
+				}
+			}
+		},
+			LEAF);
+		CalcCellTypesFromLeafs(grid);
+		CalculateNeighborTiles(grid);
+	
+		// amg with coef
+		int coeff_channel = 6;
+		float R_matrix_coeff = 0.5;
+		AMGSolver solver(coeff_channel, R_matrix_coeff, 1, 1);
+
+		solver.prepareTypesAndCoeffs(grid);
+
+		//  grdt
+		int grdt_channel = 5;
+		grid.launchVoxelFuncOnAllTiles(
+			[=] __device__(HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const Coord& l_ijk)
+		{
+			auto& tile = info.tile();
+			if (tile.type(l_ijk) & INTERIOR)
+			{
+				auto pos = acc.cellCenter(info, l_ijk);
+				tile(grdt_channel, l_ijk) = pos[1];
+			}
+		}, LEAF);
+
+		// rhs
+		AMGFullNegativeLaplacianOnLeafs(grid, grdt_channel, coeff_channel, Tile::b_channel);
+
+		// solve
+		auto [iters, err] = solver.solve(grid, true, 100, 1e-6, 3, 100, 1, is_pure_neumann);
+		cudaDeviceSynchronize();
+
+		// error
+		int error_channel = 13;
+		grid.launchVoxelFuncOnAllTiles(
+			[=] __device__(HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const Coord& l_ijk)
+		{
+			auto& tile = info.tile();
+			if (tile.type(l_ijk) & INTERIOR)
+			{
+				tile(error_channel, l_ijk) = tile(grdt_channel, l_ijk) - tile(Tile::x_channel, l_ijk);
+			}
+			else
+			{
+				tile(error_channel, l_ijk) = 0;
+			}
+		},
+			LEAF);
+
+		auto holder = grid.getHostTileHolder(LEAF);
+		polyscope::init();
+		IOFunc::AddLeveledPoissonGridCellCentersToPolyscopePointCloud(holder,
+			{ {-1, "type"}, {coeff_channel, "x-"} , {coeff_channel + 1, "y-"}, {coeff_channel + 2, "z-"}, {coeff_channel + 3, "diag"}, {grdt_channel, "grdt"}, {Tile::x_channel, "pressure"}, {error_channel, "error"} },
+			{}, -1, FLT_MAX);
+		//polyscope::show();
+
+		Info("linf: {}", NormSync(grid, -1, error_channel, false));
+	}
 }
