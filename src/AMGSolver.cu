@@ -1052,7 +1052,8 @@ __global__ void FASSaveSolutionAndUpdateSource128Kernel(HATileAccessor<Tile> acc
 
         //tile(rhs_channel, l_ijk) -= shared_data.negativeLap(l_ijk);
         if (tile.type(l_ijk) & INTERIOR) {
-            tile(rhs_channel, l_ijk) = tile(rhs_channel, l_ijk) + shared_data.negativeLapOuterNonLeaf(l_ijk);
+            //tile(rhs_channel, l_ijk) = tile(rhs_channel, l_ijk) + shared_data.negativeLapOuterNonLeaf(l_ijk);
+            tile(rhs_channel, l_ijk) = tile(rhs_channel, l_ijk) + shared_data.negativeLap(l_ijk);
             tile(x0_channel, l_ijk) = tile(x_channel, l_ijk);
         }
         else tile(rhs_channel, l_ijk) = 0;

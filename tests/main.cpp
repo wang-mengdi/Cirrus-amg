@@ -56,12 +56,12 @@ int main(int argc, char** argv) {
 		//}
 
 
-		////cmg version of test 1 grid convergence and runtime part
-		for (int min_level : {2, 3, 4, 5}) {
-			SolverTests::TestSolverErrorWithAllNeumannBC("uniform", 1.0, min_level, min_level, "athena_sin", "cmg");
-			SolverTests::TestSolverErrorWithAllNeumannBC("sphere_shell_05", 1.0, min_level, min_level + 2, "athena_sin", "cmg");
-			SolverTests::TestSolverErrorWithAllNeumannBC("star_shell", 1.0, min_level, min_level + 2, "athena_sin", "cmg");
-		}
+		//////cmg version of test 1 grid convergence and runtime part
+		//for (int min_level : {2, 3, 4, 5}) {
+		//	SolverTests::TestSolverErrorWithAllNeumannBC("uniform", 1.0, min_level, min_level, "athena_sin", "cmg");
+		//	SolverTests::TestSolverErrorWithAllNeumannBC("sphere_shell_05", 1.0, min_level, min_level + 2, "athena_sin", "cmg");
+		//	SolverTests::TestSolverErrorWithAllNeumannBC("star_shell", 1.0, min_level, min_level + 2, "athena_sin", "cmg");
+		//}
 
 		////cmg version of test 1 convergence part
 		//for (int min_level : {2, 3, 4, 5}) {
@@ -69,10 +69,17 @@ int main(int argc, char** argv) {
 		//	SolverTests::TestSolutionItersErrorWithAllNeumannBC("sphere_shell_05", 1.0, min_level, min_level + 2, "athena_sin", "cmg");
 		//	SolverTests::TestSolutionItersErrorWithAllNeumannBC("star_shell", 1.0, min_level, min_level + 2, "athena_sin", "cmg");
 		//}
+
+		//amg-vcycle version of test 1 grid convergence and runtime part
+		for (int min_level : {2, 3, 4, 5}) {
+			SolverTests::TestSolverErrorWithAllNeumannBC("uniform", 1.0, min_level, min_level, "athena_sin", "amg_vcycle");
+			SolverTests::TestSolverErrorWithAllNeumannBC("sphere_shell_05", 1.0, min_level, min_level + 2, "athena_sin", "amg_vcycle");
+			SolverTests::TestSolverErrorWithAllNeumannBC("star_shell", 1.0, min_level, min_level + 2, "athena_sin", "amg_vcycle");
+		}
 	}
 
 
-	//SolverTests::TestSolverErrorSolid("sphere", 2, 2);
+	//SolverTests::TestSolverErrorSolid("sphere", 2, 4);
 	//SolverTests::TestRecoveryNew("sphere", 2, 4);
 
 	//for (int min_level : {4, 5}) {

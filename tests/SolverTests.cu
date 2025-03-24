@@ -1391,7 +1391,7 @@ namespace SolverTests
 			Info("Total {:.5}M cells, AMGPCG Async speed {:.5} M cells /s", total_cells / (1024.0 * 1024), cells_per_second / (1024.0 * 1024));
 			Info("AMGPCG solved in {} iterations with error {}, average iteration throughput {:.5}M cell/s", iters, err, cells_per_second * iters / (1024.0 * 1024));
 		}
-		else if (algorithm == "fas_vcycle")
+		else if (algorithm == "amg_vcycle")
 		{
 			CalculateNeighborTiles(grid);
 			AMGSolver solver(coeff_channel, 0.5, 0.5, 1);
@@ -1623,8 +1623,9 @@ namespace SolverTests
 				LEAF);
 			};
 
-		if (algorithm == "fas_vcycle") {
+		if (algorithm == "amg_vcycle") {
 			AMGSolver solver(coeff_channel, 0.5, 0.5, 1);
+			solver.omega = 2. / 3;
 			solver.prepareTypesAndCoeffs(grid);
 			int x_channel = Tile::x_channel;//0
 			int b_channel = Tile::b_channel;//1
@@ -2233,7 +2234,7 @@ namespace SolverTests
 		//auto [iters, err] = solver.solve(grid, true, 100, 1e-6, 3, 100, 1, is_pure_neumann);
 		//cudaDeviceSynchronize();
 
-		TestIterativeResidualReduction(grid, "fas_vcycle", 10, b0_channel, coeff_channel, final_x_channel, is_pure_neumann);
+		TestIterativeResidualReduction(grid, "amg_vcycle", 10, b0_channel, coeff_channel, final_x_channel, is_pure_neumann);
 
 		//lap(x)
 		AMGFullNegativeLaplacianOnLeafs(grid, grdt_channel, coeff_channel, lap_grdt_channel);

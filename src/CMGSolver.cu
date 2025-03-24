@@ -388,6 +388,45 @@ void CMGSolver::VCycle(HADeviceGrid<Tile>& grid, int x_channel, int f_channel, c
     }
 }
 
+//__global__ void FASSaveSolutionAndUpdateSource128Kernel(HATileAccessor<Tile> acc, HATileInfo<Tile>* tiles, uint8_t launch_abs_tile_types, int level, int x_channel, int rhs_channel, int x0_channel) {
+//    __shared__ CMGLaplacianTileData shared_data;
+//    //block idx (tile idx), distinguish from thread idx
+//    int bi = blockIdx.x;
+//    //thread idx
+//    int ti = threadIdx.x;
+//
+//    auto& info = tiles[bi];
+//    auto& tile = info.tile();
+//
+//    if (!(info.mType & launch_abs_tile_types)) return;
+//
+//
+//    LoadCMGLaplacianTileData(acc, info, shared_data, level, x_channel, ti);
+//    __syncthreads();
+//
+//    //calculate residual
+//    for (int i = 0; i < 4; i++) {
+//        //voxel idx
+//        int vi = i * 128 + ti;
+//        Coord l_ijk = acc.localOffsetToCoord(vi);
+//
+//        //tile(rhs_channel, l_ijk) -= shared_data.negativeLap(l_ijk);
+//        if (tile.type(l_ijk) & INTERIOR) {
+//            tile(rhs_channel, l_ijk) = tile(rhs_channel, l_ijk) + shared_data.negativeLapOuterNonLeaf(l_ijk);
+//            tile(x0_channel, l_ijk) = tile(x_channel, l_ijk);
+//        }
+//        else tile(rhs_channel, l_ijk) = 0;
+//    }
+//}
+
+//void FASSaveSolutionAndUpdateSource128(HADeviceGrid<Tile>& grid, int level, int x_channel, int coeff_channel, int rhs_channel, int x0_channel) {
+//    FASSaveSolutionAndUpdateSource128Kernel << <grid.hNumTiles[level], 128 >> > (
+//        grid.deviceAccessor(), thrust::raw_pointer_cast(grid.dTileArrays[level].data()),
+//        NONLEAF,
+//        x_channel, coeff_channel, rhs_channel, x0_channel
+//        );
+//}
+
 std::tuple<int, double> CMGSolver::solve(HADeviceGrid<Tile>& grid, bool verbose, int max_iters, double relative_tolerance, int level_iters, int coarsest_iters, int sync_stride, bool is_pure_neumann)
 {
     double rhs_norm2, threshold_norm2, last_residual_norm2;
