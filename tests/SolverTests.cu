@@ -2097,8 +2097,7 @@ namespace SolverTests
 			auto& tile = info.tile();
 			if (tile.type(l_ijk) & INTERIOR)
 			{
-				//tile(error_channel, l_ijk) = tile(grdt_channel, l_ijk) - tile(Tile::x_channel, l_ijk);
-				tile(error_channel, l_ijk) = tile(b_copy_channel, l_ijk) - tile(Tile::b_channel, l_ijk);
+				tile(error_channel, l_ijk) = tile(grdt_channel, l_ijk) - tile(Tile::x_channel, l_ijk);
 			}
 			else
 			{
