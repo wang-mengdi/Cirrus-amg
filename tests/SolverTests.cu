@@ -1400,7 +1400,7 @@ namespace SolverTests
 
 			CPUTimer<std::chrono::microseconds> timer;
 			timer.start();
-			auto [iters, err] = solver.FASMuCycleSolve(1, grid, 10, 1e-6, 2, 10);
+			auto [iters, err] = solver.FASMuCycleSolve(1, grid, 1000, 1e-6, 2, 10);
 			CheckCudaError("FASMuCycleSolve");
 			float elapsed = timer.stop("FASMuCycleSolve");
 			int total_cells = grid.numTotalLeafTiles() * Tile::SIZE;
@@ -2120,7 +2120,8 @@ namespace SolverTests
 		}, LEAF);
 
 		// solve
-		auto [iters, err] = solver.solve(grid, true, 100, 1e-6, 3, 100, 1, is_pure_neumann);
+		solver.omega = 1.5;
+		auto [iters, err] = solver.solve(grid, true, 100, 1e-6, 2, 10, 1, is_pure_neumann);
 		cudaDeviceSynchronize();
 		
 		AMGAddGradientToFace(grid, -1, LEAF | GHOST, grdt_channel, coeff_channel, u_channel);
@@ -2136,6 +2137,9 @@ namespace SolverTests
 			{
 				//tile(error_channel, l_ijk) = tile(grdt_channel, l_ijk) - tile(Tile::x_channel, l_ijk);
 				tile(error_channel, l_ijk) = tile(b_copy_channel, l_ijk) - tile(Tile::b_channel, l_ijk);
+
+				auto h = acc.voxelSize(info);
+				tile(error_channel, l_ijk) /= (h * h * h);
 			}
 			else
 			{
@@ -2152,7 +2156,8 @@ namespace SolverTests
 			{}, -1, FLT_MAX);
 		polyscope::show();
 
-		Info("linf: {}", NormSync(grid, -1, error_channel, false));
+		//Info("linf: {}", NormSync(grid, -1, error_channel, false));
+		Info("volume-weighted RMS: {}", NormSync(grid, 2, error_channel, true));
 
 	}
 
@@ -2237,11 +2242,15 @@ namespace SolverTests
 		AMGFullNegativeLaplacianOnLeafs(grid, grdt_channel, coeff_channel, b0_channel);
 
 		// solve
-		auto [iters, err] = solver.solve(grid, true, 100, 1e-6, 3, 100, 1, is_pure_neumann);
+		int Nx = 8 << max_level;
+		Info("nx: {}", Nx);
+		//solver.omega = 2.0 / (1 + CommonConstants::pi / Nx);
+		Info("theory value: {}", 2.0 / (1 + CommonConstants::pi / Nx));
+		solver.omega = 1.5;
+		auto [iters, err] = solver.solve(grid, true, 100, 1e-6, 2, 10, 1, is_pure_neumann);
 		cudaDeviceSynchronize();
 
 		//TestIterativeResidualReduction(grid, "amg_vcycle", 10, b0_channel, coeff_channel, final_x_channel, is_pure_neumann);
-		//TestIterativeResidualReduction(grid, "fas_vcycle", 10, b0_channel, coeff_channel, final_x_channel, is_pure_neumann);
 
 		//lap(x)
 		AMGFullNegativeLaplacianOnLeafs(grid, grdt_channel, coeff_channel, lap_grdt_channel);
@@ -2265,13 +2274,13 @@ namespace SolverTests
 		},
 			LEAF);
 
-		auto holder = grid.getHostTileHolder(LEAF);
-		polyscope::init();
-		IOFunc::AddLeveledPoissonGridCellCentersToPolyscopePointCloud(holder,
-			{ {-1, "type"}, {coeff_channel, "x-"} , {coeff_channel + 1, "y-"}, {coeff_channel + 2, "z-"}, {coeff_channel + 3, "diag"}, {grdt_channel, "grdt"}, {final_x_channel, "pressure"},
-			{x_diff_channel, "x_diff"}, {lap_diff_channel, "lap_diff"}, {lap_grdt_channel, "lap(grdt)"}, {lap_x_channel, "lap(x)"}},
-			{}, -1, FLT_MAX);
-		polyscope::show();
+		//auto holder = grid.getHostTileHolder(LEAF);
+		//polyscope::init();
+		//IOFunc::AddLeveledPoissonGridCellCentersToPolyscopePointCloud(holder,
+		//	{ {-1, "type"}, {coeff_channel, "x-"} , {coeff_channel + 1, "y-"}, {coeff_channel + 2, "z-"}, {coeff_channel + 3, "diag"}, {grdt_channel, "grdt"}, {final_x_channel, "pressure"},
+		//	{x_diff_channel, "x_diff"}, {lap_diff_channel, "lap_diff"}, {lap_grdt_channel, "lap(grdt)"}, {lap_x_channel, "lap(x)"}},
+		//	{}, -1, FLT_MAX);
+		//polyscope::show();
 
 		Info("tile size: {}", sizeof(Tile));
 		Info("linf: {}", NormSync(grid, -1, x_diff_channel, false));

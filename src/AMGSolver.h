@@ -25,7 +25,7 @@ public:
 	T R_restrict_coeff = 1.0;
     T prolong_coeff = 1.0; // 2 is better but does not work for cross-levels
     //T prolong_coeff = 2; // 2 is better but
-    T omega = 1.0; // update coefficient in Gauss-Seidel
+    T omega = 1.5; // update coefficient in Gauss-Seidel
 
     AMGSolver(int _coeff_channel, T _R_matrix_coeff = 1, T _R_restrict_coeff = 1, T _P_coeff = 1) : d_tmp(7), coeff_channel(_coeff_channel),
         R_matrix_coeff(_R_matrix_coeff), R_restrict_coeff(_R_restrict_coeff), prolong_coeff(_P_coeff)
