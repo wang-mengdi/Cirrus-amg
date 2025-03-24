@@ -78,8 +78,7 @@ int main(int argc, char** argv) {
 		}
 	}
 
-
-	//SolverTests::TestSolverErrorSolid("sphere", 2, 4);
+	SolverTests::TestSolverErrorSolid("sphere", 2, 4);
 	//SolverTests::TestRecoveryNew("sphere", 2, 4);
 
 	//for (int min_level : {4, 5}) {
