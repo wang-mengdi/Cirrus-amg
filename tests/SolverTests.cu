@@ -2106,17 +2106,20 @@ namespace SolverTests
 		},
 			LEAF);
 
-		auto holder = grid.getHostTileHolder(LEAF);
+		auto holder = grid.getHostTileHolder(LEAF | GHOST);
 		polyscope::init();
 		IOFunc::AddLeveledPoissonGridCellCentersToPolyscopePointCloud(holder,
 			{ {-1, "type"}, {coeff_channel, "x-"} , {coeff_channel + 1, "y-"}, {coeff_channel + 2, "z-"}, {coeff_channel + 3, "diag"}, {b_copy_channel, "b"} , {grdt_channel, "grdt"}, {Tile::x_channel, "pressure"}, {error_channel, "error"}, {u_channel, "u"}, {v_channel, "v"}, 
 			{w_channel, "w"}},
 			{}, -1, FLT_MAX);
-		polyscope::show();
+		//polyscope::show();
 
 		Info("linf: {}", NormSync(grid, -1, error_channel, false));
 
-	}
+		Info("u: {}", holder->cellValue(3, Coord(48, 30, 30), u_channel));
+		Info("p: {} {} {} {} {}", holder->cellValue(3, Coord(48, 30, 30), grdt_channel), holder->cellValue(4, Coord(95, 60, 60), grdt_channel), holder->cellValue(4, Coord(95, 60, 61), grdt_channel), holder->cellValue(4, Coord(95, 61, 60), grdt_channel), holder->cellValue(4, Coord(95, 61, 61), grdt_channel));
+		Info("coeff: {} {} {} {}", holder->cellValue(4, Coord(96, 60, 60), coeff_channel), holder->cellValue(4, Coord(96, 60, 61), coeff_channel), holder->cellValue(4, Coord(96, 61, 60), coeff_channel), holder->cellValue(4, Coord(96, 61, 61), coeff_channel));
+}
 
 	void TestRecoveryNew(const std::string grid_name, const int min_level, const int max_level)
 	{
