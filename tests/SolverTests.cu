@@ -1984,6 +1984,7 @@ namespace SolverTests
 			tile(u_channel, l_ijk) = 0.0f;
 			tile(w_channel, l_ijk) = 0.0f;
 			auto g_ijk = acc.composeGlobalCoord(info.mTileCoord, l_ijk);
+
 			if (tile.type(l_ijk) == NEUMANN || g_ijk[1] == 1)
 			{
 				tile(v_channel, l_ijk) = 0;
@@ -2056,7 +2057,10 @@ namespace SolverTests
 		// solve
 		auto [iters, err] = solver.solve(grid, true, 100, 1e-6, 3, 100, 1, is_pure_neumann);
 		cudaDeviceSynchronize();
-
+		
+		AMGAddGradientToFace(grid, -1, LEAF | GHOST, grdt_channel, coeff_channel, u_channel);
+		
+		AMGFullNegativeLaplacianOnLeafs(grid, grdt_channel, coeff_channel, Tile::b_channel);
 		// error
 		int error_channel = 13;
 		grid.launchVoxelFuncOnAllTiles(
@@ -2065,7 +2069,8 @@ namespace SolverTests
 			auto& tile = info.tile();
 			if (tile.type(l_ijk) & INTERIOR)
 			{
-				tile(error_channel, l_ijk) = tile(grdt_channel, l_ijk) - tile(Tile::x_channel, l_ijk);
+				//tile(error_channel, l_ijk) = tile(grdt_channel, l_ijk) - tile(Tile::x_channel, l_ijk);
+				tile(error_channel, l_ijk) = tile(b_copy_channel, l_ijk) - tile(Tile::b_channel, l_ijk);
 			}
 			else
 			{
@@ -2077,7 +2082,8 @@ namespace SolverTests
 		auto holder = grid.getHostTileHolder(LEAF);
 		polyscope::init();
 		IOFunc::AddLeveledPoissonGridCellCentersToPolyscopePointCloud(holder,
-			{ {-1, "type"}, {coeff_channel, "x-"} , {coeff_channel + 1, "y-"}, {coeff_channel + 2, "z-"}, {coeff_channel + 3, "diag"}, {b_copy_channel, "b"} , {grdt_channel, "grdt"}, {Tile::x_channel, "pressure"}, {error_channel, "error"}},
+			{ {-1, "type"}, {coeff_channel, "x-"} , {coeff_channel + 1, "y-"}, {coeff_channel + 2, "z-"}, {coeff_channel + 3, "diag"}, {b_copy_channel, "b"} , {grdt_channel, "grdt"}, {Tile::x_channel, "pressure"}, {error_channel, "error"}, {u_channel, "u"}, {v_channel, "v"}, 
+			{w_channel, "w"}},
 			{}, -1, FLT_MAX);
 		polyscope::show();
 
@@ -2166,7 +2172,7 @@ namespace SolverTests
 		AMGFullNegativeLaplacianOnLeafs(grid, grdt_channel, coeff_channel, b0_channel);
 
 		// solve
-		auto [iters, err] = solver.solve(grid, true, 100, 1e-6, 1, 10, 1, is_pure_neumann);
+		auto [iters, err] = solver.solve(grid, true, 100, 1e-6, 3, 100, 1, is_pure_neumann);
 		cudaDeviceSynchronize();
 
 		//TestIterativeResidualReduction(grid, "fas_vcycle", 10, b0_channel, coeff_channel, final_x_channel, is_pure_neumann);
@@ -2197,7 +2203,7 @@ namespace SolverTests
 		polyscope::init();
 		IOFunc::AddLeveledPoissonGridCellCentersToPolyscopePointCloud(holder,
 			{ {-1, "type"}, {coeff_channel, "x-"} , {coeff_channel + 1, "y-"}, {coeff_channel + 2, "z-"}, {coeff_channel + 3, "diag"}, {grdt_channel, "grdt"}, {final_x_channel, "pressure"},
-			{x_diff_channel, "x_diff"}, {lap_diff_channel, "lap_diff"}, {lap_grdt_channel, "lap(grdt)"}, {lap_x_channel, "lap(x)"} },
+			{x_diff_channel, "x_diff"}, {lap_diff_channel, "lap_diff"}, {lap_grdt_channel, "lap(grdt)"}, {lap_x_channel, "lap(x)"}},
 			{}, -1, FLT_MAX);
 		polyscope::show();
 
