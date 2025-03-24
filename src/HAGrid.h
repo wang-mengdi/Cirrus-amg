@@ -124,6 +124,26 @@ public:
 		return HACoordAccessor<Tile>(mH0);
 	}
 
+	//NOTE: this function iterates over all tiles in the level
+	//It is slow and should be used for debugging only
+	T cellValue(const int level, const Coord g_ijk, const int channel) {
+		auto acc = coordAccessor();
+		Coord b_ijk, l_ijk;
+		acc.decomposeGlobalCoord(g_ijk, b_ijk, l_ijk);
+		for (auto& info : mHostLevels[level]) {
+			if (info.mTileCoord == b_ijk) {
+				auto& tile = info.tile();
+
+				if (channel == -1) return tile.type(l_ijk);
+				else {
+					Assert(0 <= channel && channel < Tile::num_channels, "Invalid channel {}", channel);
+					return tile(channel, l_ijk);
+				}
+			}
+		}
+		return 0;
+	}
+
 	int numberOfLeafTiles(void)const {
 		int cnt = 0;
 		for (int i = 0; i <= mMaxLevel; i++) {
