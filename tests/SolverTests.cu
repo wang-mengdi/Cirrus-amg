@@ -2128,8 +2128,8 @@ namespace SolverTests
 		//6,7,8,9: coeff
 		//10: b0
 		//11: x0
-		int b0_channel = 10;
-		int final_x_channel = 11;
+		int b0_channel = 1;
+		int final_x_channel = 0;
 		
 		//at the end:
 		//1: -lap(grdt)
@@ -2166,10 +2166,10 @@ namespace SolverTests
 		AMGFullNegativeLaplacianOnLeafs(grid, grdt_channel, coeff_channel, b0_channel);
 
 		// solve
-		//auto [iters, err] = solver.solve(grid, true, 100, 1e-6, 3, 100, 1, is_pure_neumann);
-		//cudaDeviceSynchronize();
+		auto [iters, err] = solver.solve(grid, true, 100, 1e-6, 1, 10, 1, is_pure_neumann);
+		cudaDeviceSynchronize();
 
-		TestIterativeResidualReduction(grid, "fas_vcycle", 10, b0_channel, coeff_channel, final_x_channel, is_pure_neumann);
+		//TestIterativeResidualReduction(grid, "fas_vcycle", 10, b0_channel, coeff_channel, final_x_channel, is_pure_neumann);
 
 		//lap(x)
 		AMGFullNegativeLaplacianOnLeafs(grid, grdt_channel, coeff_channel, lap_grdt_channel);
