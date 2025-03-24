@@ -13,7 +13,7 @@ void AMGVolumeWeightedDivergenceOnLeafs(HADeviceGrid<Tile>& grid, int u_channel,
 void AMGVolumeWeightedDivergenceOnLeafs(HADeviceGrid<Tile>& grid, int u_channel, int coeff_channel, int x_channel);
 //void AMGFluxCorrectionOnLeafs(HADeviceGrid<Tile>& grid, int subtree_level, uint8_t launch_tile_types, int coeff_channel, int x_channel, int u_channel, bool calc_div);
 
-void GaussSeidelAMG(int iters, int order, HADeviceGrid<Tile>& grid, const int level, const int x_channel, const int coeff_channel, const int rhs_channel);
+void GaussSeidelAMG(int iters, int order, HADeviceGrid<Tile>& grid, const int level, const int x_channel, const int coeff_channel, const int rhs_channel, const double omega);
 
 class AMGSolver {
 public:
@@ -24,7 +24,8 @@ public:
     T R_matrix_coeff = 1.0;
 	T R_restrict_coeff = 1.0;
     T prolong_coeff = 1.0; // 2 is better but does not work for cross-levels
-    //T prolong_coeff = 2; // 2 is better but 
+    //T prolong_coeff = 2; // 2 is better but
+    T omega = 1.0; // update coefficient in Gauss-Seidel
 
     AMGSolver(int _coeff_channel, T _R_matrix_coeff = 1, T _R_restrict_coeff = 1, T _P_coeff = 1) : d_tmp(7), coeff_channel(_coeff_channel),
         R_matrix_coeff(_R_matrix_coeff), R_restrict_coeff(_R_restrict_coeff), prolong_coeff(_P_coeff)

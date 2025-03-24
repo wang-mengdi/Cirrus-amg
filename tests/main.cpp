@@ -37,19 +37,33 @@ int main(int argc, char** argv) {
 	//SolverTests::TestSolverErrorWithAllNeumannBC("star_shell", 2, 4, "athena_sin", "amg");
 
 
-	// (int min_level : {2, 3, 4, 5}) {
-		//grid convergence of cg
-		//SolverTests::TestSolverErrorWithAllNeumannBC("uniform", min_level, min_level, "athena_sin", "amg");
-		//SolverTests::TestSolverErrorWithAllNeumannBC("sphere_shell_05", min_level, min_level + 2, "athena_sin", "amg");
-		//SolverTests::TestSolverErrorWithAllNeumannBC("star_shell", min_level, min_level + 2, "athena_sin", "amg");
+	{
+		//test 1
 
-		//SolverTests::TestDiscretizedLaplacian("uniform", min_level, min_level, "athena_sin");
+		////test 1, grid convergence and runtime part
+		//for (int min_level : {2, 3, 4, 5}) {
+		//	SolverTests::TestSolverErrorWithAllNeumannBC("uniform", 1.0, min_level, min_level, "athena_sin", "amg");
+		//	SolverTests::TestSolverErrorWithAllNeumannBC("sphere_shell_05", 1.0, min_level, min_level + 2, "athena_sin", "amg");
+		//	SolverTests::TestSolverErrorWithAllNeumannBC("star_shell", 1.0, min_level, min_level + 2, "athena_sin", "amg");
+		//}
 
-		//SolverTests::TestSolverErrorWithAllNeumannBC("uniform", min_level, min_level, "athena_sin", "cmg");
+		////test 1, iters convergence part
+		//for (int min_level : {2, 3, 4, 5}) {
+		//	//the paper shows the "full weighted L2"
+		//	SolverTests::TestSolutionItersErrorWithAllNeumannBC("uniform", 1.0, min_level, min_level, "athena_sin", "amg");
+		//	SolverTests::TestSolutionItersErrorWithAllNeumannBC("sphere_shell_05", 1.0, min_level, min_level + 2, "athena_sin", "amg");
+		//	SolverTests::TestSolutionItersErrorWithAllNeumannBC("star_shell", 1.0, min_level, min_level + 2, "athena_sin", "amg");
+		//}
 
-		//SolverTests::TestSolverErrorWithAllNeumannBC("uniform", min_level, min_level, "athena_sin", "amg");
-		
-	//}
+		//cmg version of test 1 convergence part
+		for (int min_level : {2, 3, 4, 5}) {
+			SolverTests::TestSolutionItersErrorWithAllNeumannBC("uniform", 1.0, min_level, min_level, "athena_sin", "cmg");
+			SolverTests::TestSolutionItersErrorWithAllNeumannBC("sphere_shell_05", 1.0, min_level, min_level + 2, "athena_sin", "cmg");
+			SolverTests::TestSolutionItersErrorWithAllNeumannBC("star_shell", 1.0, min_level, min_level + 2, "athena_sin", "cmg");
+		}
+	}
+
+
 	//SolverTests::TestSolverErrorSolid("sphere", 2, 2);
 	//SolverTests::TestRecoveryNew("sphere", 2, 4);
 
@@ -61,7 +75,7 @@ int main(int argc, char** argv) {
 		//SolverTests::TestSolverErrorWithAllNeumannBC("sphere_shell_05", min_level, min_level + 2, "athena_sin", "cmg");
 		//SolverTests::TestSolverErrorWithAllNeumannBC("star_shell", min_level, min_level + 2, "athena_sin", "cmg");
 
-		SolverTests::TestSolverErrorWithAllNeumannBC("star_shell", min_level, min_level + 2, "athena_sin", "amg");
+		//SolverTests::TestSolverErrorWithAllNeumannBC("star_shell", min_level, min_level + 2, "athena_sin", "amg");
 	}
 	
 

@@ -8,7 +8,8 @@ namespace SolverTests {
 
 
 	void TestDiscretizedLaplacian(const std::string grid_name, const int min_level, const int max_level, const std::string bc_name);
-	void TestSolverErrorWithAllNeumannBC(const std::string grid_name, const int min_level, const int max_level, const std::string bc_name, const std::string algorithm);
+	void TestSolverErrorWithAllNeumannBC(const std::string grid_name, const double omega, const int min_level, const int max_level, const std::string bc_name, const std::string algorithm);
+	void TestSolutionItersErrorWithAllNeumannBC(const std::string grid_name, const double omega, const int min_level, const int max_level, const std::string bc_name, const std::string algorithm);
 	void TestSolverErrorSolid(const std::string grid_name, const int min_level, const int max_level);
 	void TestRecoveryNew(const std::string grid_name, const int min_level, const int max_level);
 }
