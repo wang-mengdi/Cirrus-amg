@@ -161,7 +161,7 @@ public:
     }
 };
 
-using Tile = PoissonTile<double, 15>;
+using Tile = PoissonTile<float, 15>;
 using T = Tile::T;
 using Coord = typename Tile::Coord;
 using Vec = Tile::VecType;

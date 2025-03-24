@@ -712,7 +712,7 @@ __global__ void NegativeLaplacianAndGaussSeidelSameLevelAMG128Kernel(const HATil
                 printf("D is zero!!!!!!!!!!!!!!! at g_ijk %d %d %d level %d\n", g_ijk[0], g_ijk[1], g_ijk[2], info.mLevel);
             }
             T delta_x = (ctype & INTERIOR) ? (b - Ax) / D : 0;
-			info.tile()(x_channel, vi) = shared_data.xValueT(l_ijk) + delta_x;
+            info.tile()(x_channel, vi) = shared_data.xValueT(l_ijk) + delta_x * 2.0 / 3;
         }
     }
 }

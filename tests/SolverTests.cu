@@ -1534,17 +1534,31 @@ namespace SolverTests
 		TestSolverWithAnalyticalSolution(grid, algorithm, coeff_channel, grdt_channel, error_channel, is_pure_neumann);
 		// TestIterativeConvergenceWithAnalyticalSolution(grid, algorithm, coeff_channel, b0_channel, grdt_channel, error_channel, is_pure_neumann);
 
+
 		fmt::print("\n");
 
-		//{
-		//    auto holder = grid.getHostTileHolderForLeafs();
-		//    IOFunc::OutputPoissonGridAsStructuredVTI(
-		//        holder,
-		//        { {-2,"level"}, { -1, "type" }, {rhs_channel, "rhs"}, {grdt_channel, "grdt"}, {Tile::x_channel, "x"}, {Tile::r_channel, "r"} },
-		//        {  },
-		//        fmt::format("output/analytical_{}_levels{}_{}_{}_{}.vti", grid_name, min_level, max_level, bc_name, algorithm)
-		//    );
-		//}
+		{
+		    auto holder = grid.getHostTileHolderForLeafs();
+
+
+		    //IOFunc::OutputPoissonGridAsStructuredVTI(
+		    //    holder,
+		    //    { {-2,"level"}, { -1, "type" }, {rhs_channel, "rhs"}, {grdt_channel, "grdt"}, {Tile::x_channel, "x"}, {Tile::r_channel, "r"} },
+		    //    {  },
+		    //    fmt::format("output/analytical_{}_levels{}_{}_{}_{}.vti", grid_name, min_level, max_level, bc_name, algorithm)
+		    //);
+
+			polyscope::init();
+			IOFunc::AddPoissonGridCellCentersToPolyscopePointCloud(
+				holder,
+				{ {-1, "type"}, {rhs_channel, "rhs"}, {grdt_channel, "grdt"}, {Tile::x_channel, "x"}, {error_channel, "error"} },
+				{}
+			);
+			polyscope::show();
+
+			Info("test: {}", holder->cellValue(6, Coord(331,371,331), grdt_channel));//0.0670311
+
+		}
 
 		// IOFunc::OutputTilesAsVTU(holder, "output/tiles.vtu");
 	}
@@ -1579,6 +1593,7 @@ namespace SolverTests
 			int x_channel = Tile::x_channel;//0
 			int b_channel = Tile::b_channel;//1
 			int x0_channel = 2;
+			int b_copy_channel = 4;
 			int iter_r_channel = 3;
 
 			for (int iter = 1; iter <= max_iters; iter++) {
@@ -1588,27 +1603,40 @@ namespace SolverTests
 					[=] __device__(HATileAccessor<Tile>&acc, HATileInfo<Tile>&info, const Coord & l_ijk) {
 					auto& tile = info.tile();
 					tile(x_channel, l_ijk) = 0;
+
+					tile(b_channel, l_ijk) *= 1000;
+
+					tile(b_copy_channel, l_ijk) = tile(b_channel, l_ijk);
 				}, LEAF);
 
 				double pt_l2 = NormSync(grid, 2, b_channel, false);
 				Info("Residual pointwise L2 norm at step {}: {}", iter - 1, pt_l2);
 
-				solver.FASMuCycleStep(grid.mMaxLevel, 1, grid, x_channel, b_channel, x0_channel, coeff_channel, 2, 100);
+				solver.FASMuCycleStep(grid.mMaxLevel, 1, grid, x_channel, b_channel, x0_channel, coeff_channel, 1, 10);
 
 				{
-					calc_residual(final_x_channel, b0_channel, b_channel);
-					calc_residual(x_channel, b_channel, iter_r_channel);
-					Info("after FAS iter {} residual pointwise L2 norm: {}", iter, NormSync(grid, 2, iter_r_channel, false));
+					calc_residual(x_channel, b_copy_channel, iter_r_channel);
+					Info("after FAS iter {} residual pointwise L2 norm: {}\n", iter, NormSync(grid, 2, iter_r_channel, false));
+
+					auto holder = grid.getHostTileHolder(LEAF);
+					polyscope::init();
+					IOFunc::AddLeveledPoissonGridCellCentersToPolyscopePointCloud(
+						holder,
+						{ {-1,"type"}, {b_copy_channel, "iter rhs"}, {x_channel, "iter x"}, {iter_r_channel, "iter r"},
+						{coeff_channel + 0, "x-"}, {coeff_channel + 1,"y-"},{coeff_channel + 2,"z-"},{coeff_channel + 3,"diag"}
+						},
+						{}
+					);
+					polyscope::show();
 				}
 
 				//accumulate x to final_x_channel
 				grid.launchVoxelFuncOnAllTiles(
-					[=] __device__(HATileAccessor<Tile>&acc, HATileInfo<Tile>&info, const Coord & l_ijk)
-				{
+					[=] __device__(HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const Coord& l_ijk) {
 					auto& tile = info.tile();
-					tile(final_x_channel, l_ijk) += tile(x_channel, l_ijk) * 0.5;
-				},
-					LEAF);
+					//tile(final_x_channel, l_ijk) += tile(x_channel, l_ijk);
+					tile(final_x_channel, l_ijk) += tile(x_channel, l_ijk) / 1000.0;
+				}, LEAF);
 			}
 			Info("Residual pointwise L2 norm at step {}: {}", max_iters, NormSync(grid, 2, iter_r_channel, false));
 		}
