@@ -1604,7 +1604,67 @@ namespace SolverTests
 		auto [grid_ptr, is_pure_neumann] = CreateTestGrid(grid_name, min_level, max_level, bc_name, rhs_channel, grdt_channel);
 		auto& grid = *grid_ptr;
 
-		TestIterativeConvergenceWithAnalyticalSolution(grid, algorithm, coeff_channel, b0_channel, grdt_channel, error_channel, is_pure_neumann);
+		Info("Test Iter-Error with analytical solution on algorithm {}", algorithm);
+
+		grid.launchVoxelFuncOnAllTiles(
+			[=] __device__(HATileAccessor<Tile> &acc, HATileInfo<Tile> &info, const Coord & l_ijk)
+		{
+			auto& tile = info.tile();
+			tile(b0_channel, l_ijk) = tile(Tile::b_channel, l_ijk);
+		},
+			LEAF);
+
+		for (int max_iters = 0;; max_iters++)
+		{
+			CalculateNeighborTiles(grid);
+
+			grid.launchVoxelFuncOnAllTiles(
+				[=] __device__(HATileAccessor<Tile> &acc, HATileInfo<Tile> &info, const Coord & l_ijk)
+			{
+				auto& tile = info.tile();
+				tile(Tile::b_channel, l_ijk) = tile(b0_channel, l_ijk);
+			},
+				LEAF);
+
+			MultiGridParams params;
+			params.algorithm = algorithm;
+			params.omega = 1.0;
+			params.mu_repeat_times = 1;
+			params.level_iters = 2;
+			params.bottom_iters = 10;
+
+			auto [iters, err, elapsed] = SolveLinearSystem(grid, coeff_channel, is_pure_neumann, max_iters, 0, 1, params, false);
+
+			//auto [iters, err] = solve_system(algorithm, max_iters);
+
+
+			grid.launchVoxelFuncOnAllTiles(
+				[=] __device__(HATileAccessor<Tile> &acc, HATileInfo<Tile> &info, const Coord & l_ijk)
+			{
+				auto& tile = info.tile();
+				if (tile.type(l_ijk) & INTERIOR)
+				{
+					tile(error_channel, l_ijk) = tile(grdt_channel, l_ijk) - tile(Tile::x_channel, l_ijk);
+				}
+				else
+				{
+					tile(error_channel, l_ijk) = 0;
+				}
+			},
+				LEAF);
+			Info("Solve {} iters, linf {} weighted L1 {} weighted L2 {} full weighted L2 {} pointwise L2 {}",
+				iters,
+				NormSync(grid, -1, error_channel, false, INTERIOR),
+				NormSync(grid, 1, error_channel, true, INTERIOR),
+				NormSync(grid, 2, error_channel, true, INTERIOR),
+				NormSync(grid, 2, error_channel, true, INTERIOR | NEUMANN | DIRICHLET),
+				NormSync(grid, 2, error_channel, false, INTERIOR)
+
+			);
+
+			if (err < 1e-6)
+				break;
+		}
 
 
 		fmt::print("\n");
