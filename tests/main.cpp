@@ -93,7 +93,7 @@ int main(int argc, char** argv) {
 
 
 	//for (int min_level : {4, 5}) {
-	for (int min_level : {4}) {
+	//for (int min_level : {4}) {
 	//for (int min_level : {1}){
 		//SolverTests::TestDiscretizedLaplacian("sphere_solid_05", min_level, min_level + 2, "athena_sin");
 
@@ -101,7 +101,8 @@ int main(int argc, char** argv) {
 		//SolverTests::TestSolverErrorWithAllNeumannBC("star_shell", min_level, min_level + 2, "athena_sin", "cmg");
 
 		//SolverTests::TestSolverErrorWithAllNeumannBC("star_shell", min_level, min_level + 2, "athena_sin", "amg");
-	}
+
+	//}
 	
 
 	////for (int max_level : {3, 4, 5, 6}) {
