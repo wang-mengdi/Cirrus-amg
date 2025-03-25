@@ -1052,8 +1052,8 @@ __global__ void FASSaveSolutionAndUpdateSource128Kernel(HATileAccessor<Tile> acc
 
         //tile(rhs_channel, l_ijk) -= shared_data.negativeLap(l_ijk);
         if (tile.type(l_ijk) & INTERIOR) {
-            //tile(rhs_channel, l_ijk) = tile(rhs_channel, l_ijk) + shared_data.negativeLapOuterNonLeaf(l_ijk);
-            tile(rhs_channel, l_ijk) = tile(rhs_channel, l_ijk) + shared_data.negativeLap(l_ijk);
+            tile(rhs_channel, l_ijk) = tile(rhs_channel, l_ijk) + shared_data.negativeLapOuterNonLeaf(l_ijk);
+            //tile(rhs_channel, l_ijk) = tile(rhs_channel, l_ijk) + shared_data.negativeLap(l_ijk);
             tile(x0_channel, l_ijk) = tile(x_channel, l_ijk);
         }
         else tile(rhs_channel, l_ijk) = 0;
@@ -1200,7 +1200,7 @@ void AMGSolver::prepareTypesAndCoeffs(HADeviceGrid<Tile>& grid)
 
 std::tuple<int, double> AMGSolver::solve(HADeviceGrid<Tile>& grid, bool verbose, int max_iters, double relative_tolerance, int level_iters, int coarsest_iters, int sync_stride, bool is_pure_neumann)
 {
-    int mu_cycle_repeat_times = 1;
+    //int mu_cycle_repeat_times = 2;
 
     double rhs_norm2, threshold_norm2, last_residual_norm2;
 

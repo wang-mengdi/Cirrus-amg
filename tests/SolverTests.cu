@@ -1266,6 +1266,61 @@ namespace SolverTests
 		return std::make_tuple(grid_ptr, is_pure_neumann);
 	}
 
+	class MultiGridParams {
+	public:
+		std::string algorithm = "amg";
+		int mu_repeat_times = 1;
+		int level_iters = 1;
+		int bottom_iters = 10;
+		double omega = 1.5;
+	};
+
+	//solve from b channel to x channel
+	//return: iters, rel error, solve time (microseconds)
+	std::tuple<int, double, double> SolveLinearSystem(HADeviceGrid<Tile>& grid, const int coeff_channel, bool is_pure_neumann, int max_iters, double rel_tolerance, int sync_stride, const MultiGridParams params, bool verbose) {
+		CalculateNeighborTiles(grid);
+
+		if (params.algorithm == "cmg") {
+			CMGSolver solver(1.0, 1.0);
+			CPUTimer<std::chrono::microseconds> timer;
+			timer.start();
+			auto [iters, err] = solver.solve(grid, verbose, max_iters, rel_tolerance, params.level_iters, params.bottom_iters, sync_stride, is_pure_neumann);
+			cudaDeviceSynchronize();
+			CheckCudaError("CMG solve");
+			double elapsed = timer.stop("CMG Solve");
+			return std::make_tuple(iters, err, elapsed);
+		}
+		else if (params.algorithm == "amg") {
+			AMGSolver solver(coeff_channel, 0.5, 1, 1);
+			solver.omega = params.omega;
+			solver.mu_cycle_repeat_times = params.mu_repeat_times;
+			solver.prepareTypesAndCoeffs(grid);
+
+			CPUTimer<std::chrono::microseconds> timer;
+			timer.start();
+			auto [iters, err] = solver.solve(grid, verbose, max_iters, rel_tolerance, params.level_iters, params.bottom_iters, sync_stride, is_pure_neumann);
+			cudaDeviceSynchronize();
+			CheckCudaError("AMG solve");
+			double elapsed = timer.stop("AMG Solve");
+			return std::make_tuple(iters, err, elapsed);
+		}
+		else if (params.algorithm == "amg_vcycle") {
+			AMGSolver solver(coeff_channel, 0.5, 0.5, 1);
+			solver.omega = params.omega;
+			solver.mu_cycle_repeat_times = params.mu_repeat_times;
+			solver.prepareTypesAndCoeffs(grid);
+
+			CPUTimer<std::chrono::microseconds> timer;
+			timer.start();
+			auto [iters, err] = solver.FASMuCycleSolve(params.mu_repeat_times, grid, max_iters, rel_tolerance, params.level_iters, params.bottom_iters);
+			CheckCudaError("FAS MuCycle Solve");
+			float elapsed = timer.stop("FAS MuCycle");
+		}
+		else {
+			Assert(false, "SolveLinearSystem algorithm {} not supported", params.algorithm);
+		}
+	}
+
 	void TestIterativeConvergenceWithAnalyticalSolution(HADeviceGrid<Tile>& grid, const std::string algorithm, const int coeff_channel, const int b0_channel, const int grdt_channel, int error_channel, bool is_pure_neumann)
 	{
 		Info("Test Iter-Error with analytical solution on algorithm {}", algorithm);
@@ -1280,12 +1335,7 @@ namespace SolverTests
 
 		auto solve_system = [&](const std::string algorithm, int max_iters)->std::tuple<int,double> {
 			if (algorithm == "cmg") {
-				CMGSolver solver(1.0, 1.0);
-				CPUTimer<std::chrono::microseconds> timer;
-				timer.start();
-				auto [iters, err] = solver.solve(grid, false, max_iters, 0.0, 2, 10, 1, is_pure_neumann);
-				CheckCudaError("AMGPCG solve");
-				return std::make_pair(iters, err);
+
 			}
 			else if (algorithm == "amg") {
 				AMGSolver solver(coeff_channel, 0.5, 1, 1);
@@ -1351,6 +1401,20 @@ namespace SolverTests
 
 	void TestSolverWithAnalyticalSolution(HADeviceGrid<Tile>& grid, const std::string algorithm, const double omega, const int coeff_channel, const int grdt_channel, int error_channel, bool is_pure_neumann)
 	{
+		//MultiGridParams params;
+		//params.algorithm = algorithm;
+		//params.omega = omega;
+		//params.mu_repeat_times = 1;
+		//params.level_iters = 2;
+		//params.bottom_iters = 10;
+
+
+		//auto [iters, err, elapsed] = SolveLinearSystem(grid, coeff_channel, is_pure_neumann, 1000, 1e-6, 1, params, false);
+		//int total_cells = grid.numTotalLeafTiles() * Tile::SIZE;
+		//float cells_per_second = (total_cells + 0.0) / (elapsed / 1e6);
+		//Info("Total {:.5}M cells, {} speed {:.5} M cells /s", total_cells / (1024.0 * 1024), algorithm, cells_per_second / (1024.0 * 1024));
+		//Info("{} solved in {} iterations with error {}, average iteration throughput {:.5}M cell/s", algorithm, iters, err, cells_per_second * iters / (1024.0 * 1024));
+
 		if (algorithm == "cmg")
 		{
 			CalculateNeighborTiles(grid);
