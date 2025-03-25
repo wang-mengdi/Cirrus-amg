@@ -1339,6 +1339,8 @@ namespace SolverTests
 			}
 			else if (algorithm == "amg") {
 				AMGSolver solver(coeff_channel, 0.5, 1, 1);
+				solver.omega = 1;
+				solver.mu_cycle_repeat_times = 1;
 				solver.prepareTypesAndCoeffs(grid);
 				// AMGFullNegativeLaplacianOnLeafs(grid, grdt_channel, coeff_channel, Tile::b_channel);
 
@@ -1367,7 +1369,16 @@ namespace SolverTests
 			},
 				LEAF);
 
-			auto [iters, err] = solve_system(algorithm, max_iters);
+			MultiGridParams params;
+			params.algorithm = algorithm;
+			params.omega = 1.0;
+			params.mu_repeat_times = 1;
+			params.level_iters = 2;
+			params.bottom_iters = 10;
+			
+			auto [iters, err, elapsed] = SolveLinearSystem(grid, coeff_channel, is_pure_neumann, max_iters, 0, 1, params, false);
+
+			//auto [iters, err] = solve_system(algorithm, max_iters);
 
 
 			grid.launchVoxelFuncOnAllTiles(
@@ -1401,82 +1412,20 @@ namespace SolverTests
 
 	void TestSolverWithAnalyticalSolution(HADeviceGrid<Tile>& grid, const std::string algorithm, const double omega, const int coeff_channel, const int grdt_channel, int error_channel, bool is_pure_neumann)
 	{
-		//MultiGridParams params;
-		//params.algorithm = algorithm;
-		//params.omega = omega;
-		//params.mu_repeat_times = 1;
-		//params.level_iters = 2;
-		//params.bottom_iters = 10;
+		MultiGridParams params;
+		params.algorithm = algorithm;
+		params.omega = omega;
+		params.mu_repeat_times = 1;
+		params.level_iters = 2;
+		params.bottom_iters = 10;
 
 
 		//auto [iters, err, elapsed] = SolveLinearSystem(grid, coeff_channel, is_pure_neumann, 1000, 1e-6, 1, params, false);
-		//int total_cells = grid.numTotalLeafTiles() * Tile::SIZE;
-		//float cells_per_second = (total_cells + 0.0) / (elapsed / 1e6);
-		//Info("Total {:.5}M cells, {} speed {:.5} M cells /s", total_cells / (1024.0 * 1024), algorithm, cells_per_second / (1024.0 * 1024));
-		//Info("{} solved in {} iterations with error {}, average iteration throughput {:.5}M cell/s", algorithm, iters, err, cells_per_second * iters / (1024.0 * 1024));
-
-		if (algorithm == "cmg")
-		{
-			CalculateNeighborTiles(grid);
-			// ConservativeFullNegativeLaplacian(grid, grdt_channel, Tile::b_channel);
-
-			_sleep(200);
-			CMGSolver solver(1.0, 1.0);
-			// Copy(grid, Tile::b_channel, Tile::phi_channel, -1, LEAF, LAUNCH_SUBTREE, INTERIOR | DIRICHLET | NEUMANN);
-			CPUTimer<std::chrono::microseconds> timer;
-			timer.start();
-			auto [iters, err] = solver.solve(grid, false, 1000, 1e-6, 2, 10, 1, is_pure_neumann);
-			CheckCudaError("CMGPCG solve");
-			float elapsed = timer.stop("CMGPCG Async");
-			int total_cells = grid.numTotalTiles() * Tile::SIZE;
-			float cells_per_second = (total_cells + 0.0) / (elapsed / 1e6);
-			Info("Total {:.5}M cells, CMGPCG Async speed {:.5} M cells /s", total_cells / (1024.0 * 1024), cells_per_second / (1024.0 * 1024));
-			Info("CMGPCG solved in {} iterations with error {}, average iteration throughput {:.5}M cell/s", iters, err, cells_per_second * iters / (1024.0 * 1024));
-		}
-		else if (algorithm == "amg")
-		{
-			CalculateNeighborTiles(grid);
-
-			AMGSolver solver(coeff_channel, 0.5, 1, 1);
-			solver.omega = omega;
-			solver.prepareTypesAndCoeffs(grid);
-			// AMGFullNegativeLaplacianOnLeafs(grid, grdt_channel, coeff_channel, Tile::b_channel);
-
-			_sleep(200);
-
-			CPUTimer<std::chrono::microseconds> timer;
-			timer.start();
-			auto [iters, err] = solver.solve(grid, true, 6, 1e-6, 2, 10, -1, is_pure_neumann);
-			cudaDeviceSynchronize();
-			CheckCudaError("AMGPCG solve");
-			float elapsed = timer.stop("AMGPCG Async");
-			int total_cells = grid.numTotalLeafTiles() * Tile::SIZE;
-			float cells_per_second = (total_cells + 0.0) / (elapsed / 1e6);
-			Info("Total {:.5}M cells, AMGPCG Async speed {:.5} M cells /s", total_cells / (1024.0 * 1024), cells_per_second / (1024.0 * 1024));
-			Info("AMGPCG solved in {} iterations with error {}, average iteration throughput {:.5}M cell/s", iters, err, cells_per_second * iters / (1024.0 * 1024));
-		}
-		else if (algorithm == "amg_vcycle")
-		{
-			CalculateNeighborTiles(grid);
-			AMGSolver solver(coeff_channel, 0.5, 0.5, 1);
-			solver.omega = omega;
-			solver.prepareTypesAndCoeffs(grid);
-
-			CPUTimer<std::chrono::microseconds> timer;
-			timer.start();
-			auto [iters, err] = solver.FASMuCycleSolve(1, grid, 1000, 1e-6, 2, 10);
-			CheckCudaError("FASMuCycleSolve");
-			float elapsed = timer.stop("FASMuCycleSolve");
-			int total_cells = grid.numTotalLeafTiles() * Tile::SIZE;
-			float cells_per_second = (total_cells + 0.0) / (elapsed / 1e6);
-			Info("Total {:.5}M cells, FASMuCycleSolve speed {:.5} M cells /s", total_cells / (1024.0 * 1024), cells_per_second / (1024.0 * 1024));
-			Info("FASMuCycleSolve solved in {} iterations with error {}, average iteration throughput {:.5}M cell/s", iters, err, cells_per_second * iters / (1024.0 * 1024));
-		}
-		else
-		{
-			Assert(false, "algorithm {} not supported", algorithm);
-		}
-		_sleep(200);
+		auto [iters, err, elapsed] = SolveLinearSystem(grid, coeff_channel, is_pure_neumann, 6, 1e-6, -1, params, false);
+		int total_cells = grid.numTotalLeafTiles() * Tile::SIZE;
+		float cells_per_second = (total_cells + 0.0) / (elapsed / 1e6);
+		Info("Total {:.5}M cells, {} speed {:.5} M cells /s", total_cells / (1024.0 * 1024), algorithm, cells_per_second / (1024.0 * 1024));
+		Info("{} solved in {} iterations with error {}, average iteration throughput {:.5}M cell/s", algorithm, iters, err, cells_per_second * iters / (1024.0 * 1024));
 
 		// calculate difference from x and grdt in r_channel
 		grid.launchVoxelFuncOnAllTiles(
