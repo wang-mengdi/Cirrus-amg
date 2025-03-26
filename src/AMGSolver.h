@@ -13,7 +13,7 @@ void AMGVolumeWeightedDivergenceOnLeafs(HADeviceGrid<Tile>& grid, int u_channel,
 void AMGVolumeWeightedDivergenceOnLeafs(HADeviceGrid<Tile>& grid, int u_channel, int coeff_channel, int x_channel);
 //void AMGFluxCorrectionOnLeafs(HADeviceGrid<Tile>& grid, int subtree_level, uint8_t launch_tile_types, int coeff_channel, int x_channel, int u_channel, bool calc_div);
 
-void GaussSeidelAMG(int iters, int order, HADeviceGrid<Tile>& grid, const int level, const int x_channel, const int coeff_channel, const int rhs_channel);
+void GaussSeidelAMG(int iters, int order, HADeviceGrid<Tile>& grid, const int level, const int x_channel, const int coeff_channel, const int rhs_channel, const double omega);
 
 class AMGSolver {
 public:
@@ -24,7 +24,9 @@ public:
     T R_matrix_coeff = 1.0;
 	T R_restrict_coeff = 1.0;
     T prolong_coeff = 1.0; // 2 is better but does not work for cross-levels
-    //T prolong_coeff = 2; // 2 is better but 
+    //T prolong_coeff = 2; // 2 is better but
+    int mu_cycle_repeat_times = 2;
+    T omega = 1.5; // update coefficient in Gauss-Seidel
 
     AMGSolver(int _coeff_channel, T _R_matrix_coeff = 1, T _R_restrict_coeff = 1, T _P_coeff = 1) : d_tmp(7), coeff_channel(_coeff_channel),
         R_matrix_coeff(_R_matrix_coeff), R_restrict_coeff(_R_restrict_coeff), prolong_coeff(_P_coeff)
@@ -46,7 +48,7 @@ public:
     void muCycle(int repeat_times, HADeviceGrid<Tile>& grid, const int x_channel, const int f_channel, const int rhs_channel, const int coeff_channel, int level_iters, int coarsest_iters);
     void FASMuCycleStep(int current_level, int repeat_times, HADeviceGrid<Tile>& grid, const int x_channel, const int rhs_channel, const int x0_channel, const int coeff_channel, int level_iters, int coarsest_iters);
 	void FASMuCycle(int repeat_times, HADeviceGrid<Tile>& grid, const int x_channel, const int rhs_channel, const int x0_channel, const int coeff_channel, int level_iters, int coarsest_iters);
-	std::tuple<int, double> FASMuCycleSolve(int repeat_times, HADeviceGrid<Tile>& grid, int max_iters, double relative_tolerance, int level_iters, int coarsest_iters);
+	std::tuple<int, double> FASMuCycleSolve(int repeat_times, HADeviceGrid<Tile>& grid, bool verbose, int max_iters, double relative_tolerance, int level_iters, int coarsest_iters);
 
     //solve -lap(x_channel)=b_channel
     //b channel will be modified

@@ -677,7 +677,7 @@ void AMGVolumeWeightedDivergenceOnLeafs(HADeviceGrid<Tile>& grid, int u_channel,
 }
 
 //for single level smoothing, does not consider ttype
-__global__ void NegativeLaplacianAndGaussSeidelSameLevelAMG128Kernel(const HATileAccessor<Tile> acc, HATileInfo<Tile>* tiles, int subtree_level, uint8_t launch_tile_types, int x_channel, int coeff_channel, int rhs_channel, int color) {
+__global__ void NegativeLaplacianAndGaussSeidelSameLevelAMG128Kernel(const HATileAccessor<Tile> acc, HATileInfo<Tile>* tiles, int subtree_level, uint8_t launch_tile_types, int x_channel, int coeff_channel, int rhs_channel, int color, const double omega) {
     __shared__ AMGLaplacianTileData shared_data;
 
 
@@ -712,25 +712,25 @@ __global__ void NegativeLaplacianAndGaussSeidelSameLevelAMG128Kernel(const HATil
                 printf("D is zero!!!!!!!!!!!!!!! at g_ijk %d %d %d level %d\n", g_ijk[0], g_ijk[1], g_ijk[2], info.mLevel);
             }
             T delta_x = (ctype & INTERIOR) ? (b - Ax) / D : 0;
-            info.tile()(x_channel, vi) = shared_data.xValueT(l_ijk) + delta_x * 2.0 / 3;
+            info.tile()(x_channel, vi) = shared_data.xValueT(l_ijk) + delta_x * omega;
         }
     }
 }
 
-void NegativeLaplacianAndGaussSeidelSameLevelAMG128(HADeviceGrid<Tile>& grid, thrust::device_vector<HATileInfo<Tile>>& tiles, int launch_tile_num, int subtree_level, uint8_t launch_tile_types, int x_channel, int coeff_channel, int rhs_channel, int color) {
+void NegativeLaplacianAndGaussSeidelSameLevelAMG128(HADeviceGrid<Tile>& grid, thrust::device_vector<HATileInfo<Tile>>& tiles, int launch_tile_num, int subtree_level, uint8_t launch_tile_types, int x_channel, int coeff_channel, int rhs_channel, int color, const double omega) {
     if (launch_tile_num > 0) {
-        NegativeLaplacianAndGaussSeidelSameLevelAMG128Kernel << <launch_tile_num, 128 >> > (grid.deviceAccessor(), thrust::raw_pointer_cast(tiles.data()), subtree_level, launch_tile_types, x_channel, coeff_channel, rhs_channel, color);
+        NegativeLaplacianAndGaussSeidelSameLevelAMG128Kernel << <launch_tile_num, 128 >> > (grid.deviceAccessor(), thrust::raw_pointer_cast(tiles.data()), subtree_level, launch_tile_types, x_channel, coeff_channel, rhs_channel, color, omega);
     }
 }
 
 
 
-void GaussSeidelAMG(int iters, int order, HADeviceGrid<Tile>& grid, const int level, const int x_channel, const int coeff_channel, const int rhs_channel) {
+void GaussSeidelAMG(int iters, int order, HADeviceGrid<Tile>& grid, const int level, const int x_channel, const int coeff_channel, const int rhs_channel, const double omega) {
     //order==0: 0,1
     //order==1: 1,0
     for (int i = 0; i < iters; i++) {
-        NegativeLaplacianAndGaussSeidelSameLevelAMG128(grid, grid.dTileArrays[level], grid.hNumTiles[level], level, LEAF, x_channel, coeff_channel, rhs_channel, order);
-        NegativeLaplacianAndGaussSeidelSameLevelAMG128(grid, grid.dTileArrays[level], grid.hNumTiles[level], level, LEAF, x_channel, coeff_channel, rhs_channel, 1 - order);
+        NegativeLaplacianAndGaussSeidelSameLevelAMG128(grid, grid.dTileArrays[level], grid.hNumTiles[level], level, LEAF, x_channel, coeff_channel, rhs_channel, order, omega);
+        NegativeLaplacianAndGaussSeidelSameLevelAMG128(grid, grid.dTileArrays[level], grid.hNumTiles[level], level, LEAF, x_channel, coeff_channel, rhs_channel, 1 - order, omega);
     }
 }
 
@@ -938,7 +938,7 @@ void AMGSolver::VCycle(HADeviceGrid<Tile>& grid, const int x_channel, const int 
 
         //u^l=0
         //fjinest level already done at the beginning
-        GaussSeidelAMG(level_iters, 0, grid, i, x_channel, coeff_channel, rhs_channel);
+        GaussSeidelAMG(level_iters, 0, grid, i, x_channel, coeff_channel, rhs_channel, omega);
 
 
 
@@ -952,8 +952,8 @@ void AMGSolver::VCycle(HADeviceGrid<Tile>& grid, const int x_channel, const int 
 
 
      
-	GaussSeidelAMG(coarsest_iters / 2, 0, grid, 0, x_channel, coeff_channel, rhs_channel);
-	GaussSeidelAMG(coarsest_iters / 2, 1, grid, 0, x_channel, coeff_channel, rhs_channel);
+	GaussSeidelAMG(coarsest_iters / 2, 0, grid, 0, x_channel, coeff_channel, rhs_channel, omega);
+	GaussSeidelAMG(coarsest_iters / 2, 1, grid, 0, x_channel, coeff_channel, rhs_channel, omega);
 
 
 
@@ -962,7 +962,7 @@ void AMGSolver::VCycle(HADeviceGrid<Tile>& grid, const int x_channel, const int 
 
 
         //smoothing: fine.x = smooth(fine.b)
-		GaussSeidelAMG(level_iters, 1, grid, i, x_channel, coeff_channel, rhs_channel);
+		GaussSeidelAMG(level_iters, 1, grid, i, x_channel, coeff_channel, rhs_channel, omega);
     }
 
     // timer.stop("upstroke");
@@ -970,12 +970,12 @@ void AMGSolver::VCycle(HADeviceGrid<Tile>& grid, const int x_channel, const int 
 
 void AMGSolver::muCycleStep(int current_level, int repeat_times, HADeviceGrid<Tile>& grid, const int x_channel, const int f_channel, const int rhs_channel, const int coeff_channel, int level_iters, int coarsest_iters) {
     if (current_level == 0) {
-        GaussSeidelAMG(coarsest_iters / 2, 0, grid, 0, x_channel, coeff_channel, rhs_channel);
-        GaussSeidelAMG(coarsest_iters / 2, 1, grid, 0, x_channel, coeff_channel, rhs_channel);
+        GaussSeidelAMG(coarsest_iters / 2, 0, grid, 0, x_channel, coeff_channel, rhs_channel, omega);
+        GaussSeidelAMG(coarsest_iters / 2, 1, grid, 0, x_channel, coeff_channel, rhs_channel, omega);
         return;
     }
     
-    GaussSeidelAMG(level_iters, 0, grid, current_level, x_channel, coeff_channel, rhs_channel);
+    GaussSeidelAMG(level_iters, 0, grid, current_level, x_channel, coeff_channel, rhs_channel, omega);
     //will set initial guess of coarser level to 0
     ResidualAndRestrictAMG(grid, x_channel, coeff_channel, rhs_channel, x_channel, rhs_channel, current_level, LEAF, R_restrict_coeff);
     DeductFluxOnAbsLeafs(grid, current_level - 1, x_channel, coeff_channel, f_channel, rhs_channel);
@@ -986,7 +986,7 @@ void AMGSolver::muCycleStep(int current_level, int repeat_times, HADeviceGrid<Ti
     }
 
 	ProlongateAndUpdateAMG128(grid, x_channel, x_channel, current_level, prolong_coeff);
-	GaussSeidelAMG(level_iters, 1, grid, current_level, x_channel, coeff_channel, rhs_channel);
+	GaussSeidelAMG(level_iters, 1, grid, current_level, x_channel, coeff_channel, rhs_channel, omega);
 
     //{
     //    Info("done with mucycle level {}", current_level);
@@ -1052,7 +1052,8 @@ __global__ void FASSaveSolutionAndUpdateSource128Kernel(HATileAccessor<Tile> acc
 
         //tile(rhs_channel, l_ijk) -= shared_data.negativeLap(l_ijk);
         if (tile.type(l_ijk) & INTERIOR) {
-            tile(rhs_channel, l_ijk) = tile(rhs_channel, l_ijk) + shared_data.negativeLapOuterNonLeaf(l_ijk);
+            //tile(rhs_channel, l_ijk) = tile(rhs_channel, l_ijk) + shared_data.negativeLapOuterNonLeaf(l_ijk);
+            tile(rhs_channel, l_ijk) = tile(rhs_channel, l_ijk) + shared_data.negativeLap(l_ijk);
             tile(x0_channel, l_ijk) = tile(x_channel, l_ijk);
         }
         else tile(rhs_channel, l_ijk) = 0;
@@ -1111,12 +1112,12 @@ void FASProlongateAndUpdateAMG128(HADeviceGrid<Tile>& grid, int coarse_x_channel
 void AMGSolver::FASMuCycleStep(int current_level, int repeat_times, HADeviceGrid<Tile>& grid, const int x_channel, const int rhs_channel, const int x0_channel, const int coeff_channel, int level_iters, int coarsest_iters)
 {
     if (current_level == 0) {
-        GaussSeidelAMG(coarsest_iters / 2, 0, grid, 0, x_channel, coeff_channel, rhs_channel);
-        GaussSeidelAMG(coarsest_iters / 2, 1, grid, 0, x_channel, coeff_channel, rhs_channel);
+        GaussSeidelAMG(coarsest_iters / 2, 0, grid, 0, x_channel, coeff_channel, rhs_channel, omega);
+        GaussSeidelAMG(coarsest_iters / 2, 1, grid, 0, x_channel, coeff_channel, rhs_channel, omega);
         return;
     }
 
-    GaussSeidelAMG(level_iters, 0, grid, current_level, x_channel, coeff_channel, rhs_channel);
+    GaussSeidelAMG(level_iters, 0, grid, current_level, x_channel, coeff_channel, rhs_channel, omega);
 
     //will set initial guess of coarser level to 0
     ResidualAndRestrictAMG(grid, x_channel, coeff_channel, rhs_channel, x_channel, rhs_channel, current_level, LEAF, R_restrict_coeff);
@@ -1127,7 +1128,7 @@ void AMGSolver::FASMuCycleStep(int current_level, int repeat_times, HADeviceGrid
     }
 
     FASProlongateAndUpdateAMG128(grid, x_channel, x0_channel, x_channel, current_level, prolong_coeff);
-    GaussSeidelAMG(level_iters, 1, grid, current_level, x_channel, coeff_channel, rhs_channel);
+    GaussSeidelAMG(level_iters, 1, grid, current_level, x_channel, coeff_channel, rhs_channel, omega);
 }
 
 void AMGSolver::FASMuCycle(int repeat_times, HADeviceGrid<Tile>& grid, const int x_channel, const int rhs_channel, const int x0_channel, const int coeff_channel, int level_iters, int coarsest_iters)
@@ -1145,7 +1146,7 @@ void AMGSolver::FASMuCycle(int repeat_times, HADeviceGrid<Tile>& grid, const int
     FASMuCycleStep(grid.mMaxLevel, repeat_times, grid, x_channel, rhs_channel, x0_channel, coeff_channel, level_iters, coarsest_iters);
 }
 
-std::tuple<int, double> AMGSolver::FASMuCycleSolve(int repeat_times, HADeviceGrid<Tile>& grid, int max_iters, double relative_tolerance, int level_iters, int coarsest_iters)
+std::tuple<int, double> AMGSolver::FASMuCycleSolve(int repeat_times, HADeviceGrid<Tile>& grid, bool verbose, int max_iters, double relative_tolerance, int level_iters, int coarsest_iters)
 {
     auto x_channel = Tile::x_channel;//0
     auto rhs_channel = Tile::b_channel;//1
@@ -1166,10 +1167,10 @@ std::tuple<int, double> AMGSolver::FASMuCycleSolve(int repeat_times, HADeviceGri
 	double threshold_norm = relative_tolerance * rhs_norm;
 	threshold_norm = std::max(threshold_norm, std::numeric_limits<double>::min());
 
-	Info("FASMuCycleSolve iter 0 norm {}", rhs_norm);
+    if (verbose) Info("FASMuCycleSolve iter 0 norm {}", rhs_norm, max_iters);
 
     int i = 0;
-    double residual_norm;
+    double residual_norm = rhs_norm;
 	for (i = 0; i < max_iters; i++) {
         FASMuCycleStep(grid.mMaxLevel, repeat_times, grid, x_channel, rhs_channel, x0_channel, coeff_channel, level_iters, coarsest_iters);
         //calculate residual to x0 channel
@@ -1183,7 +1184,7 @@ std::tuple<int, double> AMGSolver::FASMuCycleSolve(int repeat_times, HADeviceGri
         }, LEAF, 4);
 		
 		residual_norm = sqrt(Dot(grid, x0_channel, x0_channel, LEAF));
-		Info("FASMuCycleSolve iter {} norm {}", i + 1, residual_norm);
+        if (verbose) Info("FASMuCycleSolve iter {} norm {}", i + 1, residual_norm);
 		if (residual_norm < threshold_norm) {
 			break;
 		}
@@ -1199,7 +1200,7 @@ void AMGSolver::prepareTypesAndCoeffs(HADeviceGrid<Tile>& grid)
 
 std::tuple<int, double> AMGSolver::solve(HADeviceGrid<Tile>& grid, bool verbose, int max_iters, double relative_tolerance, int level_iters, int coarsest_iters, int sync_stride, bool is_pure_neumann)
 {
-    int mu_cycle_repeat_times = 1;
+    //int mu_cycle_repeat_times = 2;
 
     double rhs_norm2, threshold_norm2, last_residual_norm2;
 

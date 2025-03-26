@@ -1266,6 +1266,65 @@ namespace SolverTests
 		return std::make_tuple(grid_ptr, is_pure_neumann);
 	}
 
+	class MultiGridParams {
+	public:
+		std::string algorithm = "amg";
+		int mu_repeat_times = 1;
+		int level_iters = 1;
+		int bottom_iters = 10;
+		double omega = 1.5;
+	};
+
+	//solve from b channel to x channel
+	//return: iters, rel error, solve time (microseconds)
+	std::tuple<int, double, double> SolveLinearSystem(HADeviceGrid<Tile>& grid, const int coeff_channel, bool is_pure_neumann, int max_iters, double rel_tolerance, int sync_stride, const MultiGridParams params, bool verbose) {
+		CalculateNeighborTiles(grid);
+
+		if (params.algorithm == "cmg") {
+			CMGSolver solver(1.0, 1.0);
+			CPUTimer<std::chrono::microseconds> timer;
+			timer.start();
+			auto [iters, err] = solver.solve(grid, verbose, max_iters, rel_tolerance, params.level_iters, params.bottom_iters, sync_stride, is_pure_neumann);
+			cudaDeviceSynchronize();
+			CheckCudaError("CMG solve");
+			double elapsed = timer.stop("CMG Solve");
+			return std::make_tuple(iters, err, elapsed);
+		}
+		else if (params.algorithm == "amg") {
+			AMGSolver solver(coeff_channel, 0.5, 1, 1);
+			solver.omega = params.omega;
+			solver.mu_cycle_repeat_times = params.mu_repeat_times;
+			solver.prepareTypesAndCoeffs(grid);
+
+			CPUTimer<std::chrono::microseconds> timer;
+			timer.start();
+			auto [iters, err] = solver.solve(grid, verbose, max_iters, rel_tolerance, params.level_iters, params.bottom_iters, sync_stride, is_pure_neumann);
+			cudaDeviceSynchronize();
+			CheckCudaError("AMG solve");
+			double elapsed = timer.stop("AMG Solve");
+			return std::make_tuple(iters, err, elapsed);
+		}
+		else if (params.algorithm == "amg_vcycle") {
+			AMGSolver solver(coeff_channel, 0.5, 0.5, 1);
+			solver.omega = params.omega;
+			solver.mu_cycle_repeat_times = params.mu_repeat_times;
+			solver.prepareTypesAndCoeffs(grid);
+
+			CPUTimer<std::chrono::microseconds> timer;
+			timer.start();
+			auto [iters, err] = solver.FASMuCycleSolve(params.mu_repeat_times, grid, verbose, max_iters, rel_tolerance, params.level_iters, params.bottom_iters);
+			CheckCudaError("FAS MuCycle Solve");
+			float elapsed = timer.stop("FAS MuCycle");
+
+			Info("iter {} err {}", iters, err);
+
+			return std::make_tuple(iters, err, elapsed);
+		}
+		else {
+			Assert(false, "SolveLinearSystem algorithm {} not supported", params.algorithm);
+		}
+	}
+
 	void TestIterativeConvergenceWithAnalyticalSolution(HADeviceGrid<Tile>& grid, const std::string algorithm, const int coeff_channel, const int b0_channel, const int grdt_channel, int error_channel, bool is_pure_neumann)
 	{
 		Info("Test Iter-Error with analytical solution on algorithm {}", algorithm);
@@ -1278,21 +1337,14 @@ namespace SolverTests
 		},
 			LEAF);
 
-		if (algorithm == "amg")
-		{
-			for (int max_iters = 0;; max_iters++)
-			{
-				CalculateNeighborTiles(grid);
+		auto solve_system = [&](const std::string algorithm, int max_iters)->std::tuple<int,double> {
+			if (algorithm == "cmg") {
 
-				grid.launchVoxelFuncOnAllTiles(
-					[=] __device__(HATileAccessor<Tile> &acc, HATileInfo<Tile> &info, const Coord & l_ijk)
-				{
-					auto& tile = info.tile();
-					tile(Tile::b_channel, l_ijk) = tile(b0_channel, l_ijk);
-				},
-					LEAF);
-
+			}
+			else if (algorithm == "amg") {
 				AMGSolver solver(coeff_channel, 0.5, 1, 1);
+				solver.omega = 1;
+				solver.mu_cycle_repeat_times = 1;
 				solver.prepareTypesAndCoeffs(grid);
 				// AMGFullNegativeLaplacianOnLeafs(grid, grdt_channel, coeff_channel, Tile::b_channel);
 
@@ -1302,103 +1354,82 @@ namespace SolverTests
 				timer.start();
 				auto [iters, err] = solver.solve(grid, false, max_iters, 0.0, 2, 10, 1, is_pure_neumann);
 				CheckCudaError("AMGPCG solve");
-
-				grid.launchVoxelFuncOnAllTiles(
-					[=] __device__(HATileAccessor<Tile> &acc, HATileInfo<Tile> &info, const Coord & l_ijk)
-				{
-					auto& tile = info.tile();
-					if (tile.type(l_ijk) & INTERIOR)
-					{
-						tile(error_channel, l_ijk) = tile(grdt_channel, l_ijk) - tile(Tile::x_channel, l_ijk);
-					}
-					else
-					{
-						tile(error_channel, l_ijk) = 0;
-					}
-				},
-					LEAF);
-				Info("Solve {} iters, linf {} weighted L1 {} weighted L2 {} full weighted L2 {} pointwise L2 {}",
-					iters,
-					NormSync(grid, -1, error_channel, false, INTERIOR),
-					NormSync(grid, 1, error_channel, true, INTERIOR),
-					NormSync(grid, 2, error_channel, true, INTERIOR),
-					NormSync(grid, 2, error_channel, true, INTERIOR | NEUMANN | DIRICHLET),
-					NormSync(grid, 2, error_channel, false, INTERIOR)
-
-				);
-
-				if (err < 1e-6)
-					break;
+				return std::make_pair(iters, err);
 			}
-		}
-		else
+			else {
+				Assert(false, "TestIterativeConvergenceWithAnalyticalSolution algorithm {} not supported", algorithm);
+			}
+			};
+
+		for (int max_iters = 0;; max_iters++)
 		{
-			Assert(false, "TestIterativeConvergenceWithAnalyticalSolution algorithm {} not supported", algorithm);
+			CalculateNeighborTiles(grid);
+
+			grid.launchVoxelFuncOnAllTiles(
+				[=] __device__(HATileAccessor<Tile> &acc, HATileInfo<Tile> &info, const Coord & l_ijk)
+			{
+				auto& tile = info.tile();
+				tile(Tile::b_channel, l_ijk) = tile(b0_channel, l_ijk);
+			},
+				LEAF);
+
+			MultiGridParams params;
+			params.algorithm = algorithm;
+			params.omega = 1.0;
+			params.mu_repeat_times = 1;
+			params.level_iters = 2;
+			params.bottom_iters = 10;
+			
+			auto [iters, err, elapsed] = SolveLinearSystem(grid, coeff_channel, is_pure_neumann, max_iters, 0, 1, params, false);
+
+			//auto [iters, err] = solve_system(algorithm, max_iters);
+
+
+			grid.launchVoxelFuncOnAllTiles(
+				[=] __device__(HATileAccessor<Tile> &acc, HATileInfo<Tile> &info, const Coord & l_ijk)
+			{
+				auto& tile = info.tile();
+				if (tile.type(l_ijk) & INTERIOR)
+				{
+					tile(error_channel, l_ijk) = tile(grdt_channel, l_ijk) - tile(Tile::x_channel, l_ijk);
+				}
+				else
+				{
+					tile(error_channel, l_ijk) = 0;
+				}
+			},
+				LEAF);
+			Info("Solve {} iters, linf {} weighted L1 {} weighted L2 {} full weighted L2 {} pointwise L2 {}",
+				iters,
+				NormSync(grid, -1, error_channel, false, INTERIOR),
+				NormSync(grid, 1, error_channel, true, INTERIOR),
+				NormSync(grid, 2, error_channel, true, INTERIOR),
+				NormSync(grid, 2, error_channel, true, INTERIOR | NEUMANN | DIRICHLET),
+				NormSync(grid, 2, error_channel, false, INTERIOR)
+
+			);
+
+			if (err < 1e-6)
+				break;
 		}
 	}
 
-	void TestSolverWithAnalyticalSolution(HADeviceGrid<Tile>& grid, const std::string algorithm, const int coeff_channel, const int grdt_channel, int error_channel, bool is_pure_neumann)
+	void TestSolverWithAnalyticalSolution(HADeviceGrid<Tile>& grid, const std::string algorithm, const double omega, const int coeff_channel, const int grdt_channel, int error_channel, bool is_pure_neumann)
 	{
-		if (algorithm == "cmg")
-		{
-			CalculateNeighborTiles(grid);
-			// ConservativeFullNegativeLaplacian(grid, grdt_channel, Tile::b_channel);
+		MultiGridParams params;
+		params.algorithm = algorithm;
+		params.omega = omega;
+		params.mu_repeat_times = 1;
+		params.level_iters = 2;
+		params.bottom_iters = 10;
 
-			_sleep(200);
-			CMGSolver solver(1.0, 1.0);
-			// Copy(grid, Tile::b_channel, Tile::phi_channel, -1, LEAF, LAUNCH_SUBTREE, INTERIOR | DIRICHLET | NEUMANN);
-			CPUTimer<std::chrono::microseconds> timer;
-			timer.start();
-			auto [iters, err] = solver.solve(grid, false, 1000, 1e-6, 2, 10, 1, is_pure_neumann);
-			CheckCudaError("CMGPCG solve");
-			float elapsed = timer.stop("CMGPCG Async");
-			int total_cells = grid.numTotalTiles() * Tile::SIZE;
-			float cells_per_second = (total_cells + 0.0) / (elapsed / 1e6);
-			Info("Total {:.5}M cells, CMGPCG Async speed {:.5} M cells /s", total_cells / (1024.0 * 1024), cells_per_second / (1024.0 * 1024));
-			Info("CMGPCG solved in {} iterations with error {}, average iteration throughput {:.5}M cell/s", iters, err, cells_per_second * iters / (1024.0 * 1024));
-		}
-		else if (algorithm == "amg")
-		{
-			CalculateNeighborTiles(grid);
 
-			AMGSolver solver(coeff_channel, 0.5, 1, 1);
-			solver.prepareTypesAndCoeffs(grid);
-			// AMGFullNegativeLaplacianOnLeafs(grid, grdt_channel, coeff_channel, Tile::b_channel);
-
-			_sleep(200);
-
-			CPUTimer<std::chrono::microseconds> timer;
-			timer.start();
-			auto [iters, err] = solver.solve(grid, true, 6, 1e-6, 2, 10, -1, is_pure_neumann);
-			cudaDeviceSynchronize();
-			CheckCudaError("AMGPCG solve");
-			float elapsed = timer.stop("AMGPCG Async");
-			int total_cells = grid.numTotalLeafTiles() * Tile::SIZE;
-			float cells_per_second = (total_cells + 0.0) / (elapsed / 1e6);
-			Info("Total {:.5}M cells, AMGPCG Async speed {:.5} M cells /s", total_cells / (1024.0 * 1024), cells_per_second / (1024.0 * 1024));
-			Info("AMGPCG solved in {} iterations with error {}, average iteration throughput {:.5}M cell/s", iters, err, cells_per_second * iters / (1024.0 * 1024));
-		}
-		else if (algorithm == "fas_vcycle")
-		{
-			CalculateNeighborTiles(grid);
-			AMGSolver solver(coeff_channel, 0.5, 1, 1);
-			solver.prepareTypesAndCoeffs(grid);
-
-			CPUTimer<std::chrono::microseconds> timer;
-			timer.start();
-			auto [iters, err] = solver.FASMuCycleSolve(1, grid, 10, 1e-6, 2, 10);
-			CheckCudaError("FASMuCycleSolve");
-			float elapsed = timer.stop("FASMuCycleSolve");
-			int total_cells = grid.numTotalLeafTiles() * Tile::SIZE;
-			float cells_per_second = (total_cells + 0.0) / (elapsed / 1e6);
-			Info("Total {:.5}M cells, FASMuCycleSolve speed {:.5} M cells /s", total_cells / (1024.0 * 1024), cells_per_second / (1024.0 * 1024));
-			Info("FASMuCycleSolve solved in {} iterations with error {}, average iteration throughput {:.5}M cell/s", iters, err, cells_per_second * iters / (1024.0 * 1024));
-		}
-		else
-		{
-			Assert(false, "algorithm {} not supported", algorithm);
-		}
-		_sleep(200);
+		//auto [iters, err, elapsed] = SolveLinearSystem(grid, coeff_channel, is_pure_neumann, 1000, 1e-6, 1, params, false);
+		auto [iters, err, elapsed] = SolveLinearSystem(grid, coeff_channel, is_pure_neumann, 6, 1e-6, -1, params, false);
+		int total_cells = grid.numTotalLeafTiles() * Tile::SIZE;
+		float cells_per_second = (total_cells + 0.0) / (elapsed / 1e6);
+		Info("Total {:.5}M cells, {} speed {:.5} M cells /s", total_cells / (1024.0 * 1024), algorithm, cells_per_second / (1024.0 * 1024));
+		Info("{} solved in {} iterations with error {}, average iteration throughput {:.5}M cell/s", algorithm, iters, err, cells_per_second * iters / (1024.0 * 1024));
 
 		// calculate difference from x and grdt in r_channel
 		grid.launchVoxelFuncOnAllTiles(
@@ -1517,7 +1548,7 @@ namespace SolverTests
 		}
 	}
 
-	void TestSolverErrorWithAllNeumannBC(const std::string grid_name, const int min_level, const int max_level, const std::string bc_name, const std::string algorithm)
+	void TestSolverErrorWithAllNeumannBC(const std::string grid_name, const double omega, const int min_level, const int max_level, const std::string bc_name, const std::string algorithm)
 	{
 		Info("TestSolverErrorWithAllNeumannBC on grid {}, min level {} max level {} with given function of {} for {}", grid_name, min_level, max_level, bc_name, algorithm);
 
@@ -1531,37 +1562,119 @@ namespace SolverTests
 		auto [grid_ptr, is_pure_neumann] = CreateTestGrid(grid_name, min_level, max_level, bc_name, rhs_channel, grdt_channel);
 		auto& grid = *grid_ptr;
 
-		TestSolverWithAnalyticalSolution(grid, algorithm, coeff_channel, grdt_channel, error_channel, is_pure_neumann);
+		TestSolverWithAnalyticalSolution(grid, algorithm, omega, coeff_channel, grdt_channel, error_channel, is_pure_neumann);
 		// TestIterativeConvergenceWithAnalyticalSolution(grid, algorithm, coeff_channel, b0_channel, grdt_channel, error_channel, is_pure_neumann);
 
 
 		fmt::print("\n");
 
-		{
-		    auto holder = grid.getHostTileHolderForLeafs();
+		//{
+		//    auto holder = grid.getHostTileHolderForLeafs();
 
 
-		    //IOFunc::OutputPoissonGridAsStructuredVTI(
-		    //    holder,
-		    //    { {-2,"level"}, { -1, "type" }, {rhs_channel, "rhs"}, {grdt_channel, "grdt"}, {Tile::x_channel, "x"}, {Tile::r_channel, "r"} },
-		    //    {  },
-		    //    fmt::format("output/analytical_{}_levels{}_{}_{}_{}.vti", grid_name, min_level, max_level, bc_name, algorithm)
-		    //);
+		//    //IOFunc::OutputPoissonGridAsStructuredVTI(
+		//    //    holder,
+		//    //    { {-2,"level"}, { -1, "type" }, {rhs_channel, "rhs"}, {grdt_channel, "grdt"}, {Tile::x_channel, "x"}, {Tile::r_channel, "r"} },
+		//    //    {  },
+		//    //    fmt::format("output/analytical_{}_levels{}_{}_{}_{}.vti", grid_name, min_level, max_level, bc_name, algorithm)
+		//    //);
 
-			polyscope::init();
-			IOFunc::AddPoissonGridCellCentersToPolyscopePointCloud(
-				holder,
-				{ {-1, "type"}, {rhs_channel, "rhs"}, {grdt_channel, "grdt"}, {Tile::x_channel, "x"}, {error_channel, "error"} },
-				{}
-			);
-			polyscope::show();
+		//	polyscope::init();
+		//	IOFunc::AddPoissonGridCellCentersToPolyscopePointCloud(
+		//		holder,
+		//		{ {-1, "type"}, {rhs_channel, "rhs"}, {grdt_channel, "grdt"}, {Tile::x_channel, "x"}, {error_channel, "error"} },
+		//		{}
+		//	);
+		//	polyscope::show();
 
-			Info("test: {}", holder->cellValue(6, Coord(331,371,331), grdt_channel));//0.0670311
+		//	Info("test: {}", holder->cellValue(6, Coord(331,371,331), grdt_channel));//0.0670311
 
-		}
+		//}
 
 		// IOFunc::OutputTilesAsVTU(holder, "output/tiles.vtu");
 	}
+
+	void TestSolutionItersErrorWithAllNeumannBC(const std::string grid_name, const double omega, const int min_level, const int max_level, const std::string bc_name, const std::string algorithm)
+	{
+		Info("TestSolutionItersErrorWithAllNeumannBC on grid {}, min level {} max level {} with given function of {} for {}", grid_name, min_level, max_level, bc_name, algorithm);
+
+		int grdt_channel = 5;
+		int coeff_channel = 6;             // 6,7,8,9
+		int rhs_channel = Tile::b_channel; // 1
+		int b0_channel = 10;
+		// x:0
+		int error_channel = 2;
+
+		auto [grid_ptr, is_pure_neumann] = CreateTestGrid(grid_name, min_level, max_level, bc_name, rhs_channel, grdt_channel);
+		auto& grid = *grid_ptr;
+
+		Info("Test Iter-Error with analytical solution on algorithm {}", algorithm);
+
+		grid.launchVoxelFuncOnAllTiles(
+			[=] __device__(HATileAccessor<Tile> &acc, HATileInfo<Tile> &info, const Coord & l_ijk)
+		{
+			auto& tile = info.tile();
+			tile(b0_channel, l_ijk) = tile(Tile::b_channel, l_ijk);
+		},
+			LEAF);
+
+		for (int max_iters = 0;; max_iters++)
+		{
+			CalculateNeighborTiles(grid);
+
+			grid.launchVoxelFuncOnAllTiles(
+				[=] __device__(HATileAccessor<Tile> &acc, HATileInfo<Tile> &info, const Coord & l_ijk)
+			{
+				auto& tile = info.tile();
+				tile(Tile::b_channel, l_ijk) = tile(b0_channel, l_ijk);
+			},
+				LEAF);
+
+			MultiGridParams params;
+			params.algorithm = algorithm;
+			params.omega = 1.0;
+			params.mu_repeat_times = 1;
+			params.level_iters = 2;
+			params.bottom_iters = 10;
+
+			auto [iters, err, elapsed] = SolveLinearSystem(grid, coeff_channel, is_pure_neumann, max_iters, 0, 1, params, false);
+
+			//auto [iters, err] = solve_system(algorithm, max_iters);
+
+
+			grid.launchVoxelFuncOnAllTiles(
+				[=] __device__(HATileAccessor<Tile> &acc, HATileInfo<Tile> &info, const Coord & l_ijk)
+			{
+				auto& tile = info.tile();
+				if (tile.type(l_ijk) & INTERIOR)
+				{
+					tile(error_channel, l_ijk) = tile(grdt_channel, l_ijk) - tile(Tile::x_channel, l_ijk);
+				}
+				else
+				{
+					tile(error_channel, l_ijk) = 0;
+				}
+			},
+				LEAF);
+			Info("Solve {} iters, linf {} weighted L1 {} weighted L2 {} full weighted L2 {} pointwise L2 {}",
+				iters,
+				NormSync(grid, -1, error_channel, false, INTERIOR),
+				NormSync(grid, 1, error_channel, true, INTERIOR),
+				NormSync(grid, 2, error_channel, true, INTERIOR),
+				NormSync(grid, 2, error_channel, true, INTERIOR | NEUMANN | DIRICHLET),
+				NormSync(grid, 2, error_channel, false, INTERIOR)
+
+			);
+
+			if (err < 1e-6)
+				break;
+		}
+
+
+		fmt::print("\n");
+
+	}
+
 
 	void TestIterativeResidualReduction(HADeviceGrid<Tile>& grid, const std::string algorithm, const int max_iters, const int b0_channel, const int coeff_channel,  const int final_x_channel, bool is_pure_neumann)
 	{
@@ -1587,8 +1700,9 @@ namespace SolverTests
 				LEAF);
 			};
 
-		if (algorithm == "fas_vcycle") {
+		if (algorithm == "amg_vcycle") {
 			AMGSolver solver(coeff_channel, 0.5, 0.5, 1);
+			solver.omega = 2. / 3;
 			solver.prepareTypesAndCoeffs(grid);
 			int x_channel = Tile::x_channel;//0
 			int b_channel = Tile::b_channel;//1
@@ -2089,7 +2203,8 @@ namespace SolverTests
 		}, LEAF);
 
 		// solve
-		auto [iters, err] = solver.solve(grid, true, 100, 1e-6, 3, 100, 1, is_pure_neumann);
+		solver.omega = 1.5;
+		auto [iters, err] = solver.solve(grid, true, 100, 1e-6, 2, 10, 1, is_pure_neumann);
 		cudaDeviceSynchronize();
 		//AMGAddGradientToFace(grid, -1, LEAF | GHOST, Tile::x_channel, coeff_channel, u_channel);
 		//ClearAllNeumannNeighborFaces(grid, u_channel);
@@ -2121,7 +2236,8 @@ namespace SolverTests
 			{}, -1, FLT_MAX);
 		polyscope::show();
 
-		Info("linf: {}", NormSync(grid, -1, error_channel, false));
+		//Info("linf: {}", NormSync(grid, -1, error_channel, false));
+		Info("volume-weighted RMS: {}", NormSync(grid, 2, error_channel, true));
 
 		//Info("u: {}", holder->cellValue(3, Coord(48, 30, 30), u_channel));
 		//Info("p: {} {} {} {} {}", holder->cellValue(3, Coord(48, 30, 30), grdt_channel), holder->cellValue(4, Coord(95, 60, 60), grdt_channel), holder->cellValue(4, Coord(95, 60, 61), grdt_channel), holder->cellValue(4, Coord(95, 61, 60), grdt_channel), holder->cellValue(4, Coord(95, 61, 61), grdt_channel));
@@ -2209,10 +2325,15 @@ namespace SolverTests
 		AMGFullNegativeLaplacianOnLeafs(grid, grdt_channel, coeff_channel, b0_channel);
 
 		// solve
-		auto [iters, err] = solver.solve(grid, true, 100, 1e-6, 3, 100, 1, is_pure_neumann);
+		int Nx = 8 << max_level;
+		Info("nx: {}", Nx);
+		//solver.omega = 2.0 / (1 + CommonConstants::pi / Nx);
+		Info("theory value: {}", 2.0 / (1 + CommonConstants::pi / Nx));
+		solver.omega = 1.5;
+		auto [iters, err] = solver.solve(grid, true, 100, 1e-6, 2, 10, 1, is_pure_neumann);
 		cudaDeviceSynchronize();
 
-		//TestIterativeResidualReduction(grid, "fas_vcycle", 10, b0_channel, coeff_channel, final_x_channel, is_pure_neumann);
+		//TestIterativeResidualReduction(grid, "amg_vcycle", 10, b0_channel, coeff_channel, final_x_channel, is_pure_neumann);
 
 		//lap(x)
 		AMGFullNegativeLaplacianOnLeafs(grid, grdt_channel, coeff_channel, lap_grdt_channel);
@@ -2236,13 +2357,13 @@ namespace SolverTests
 		},
 			LEAF);
 
-		auto holder = grid.getHostTileHolder(LEAF);
-		polyscope::init();
-		IOFunc::AddLeveledPoissonGridCellCentersToPolyscopePointCloud(holder,
-			{ {-1, "type"}, {coeff_channel, "x-"} , {coeff_channel + 1, "y-"}, {coeff_channel + 2, "z-"}, {coeff_channel + 3, "diag"}, {grdt_channel, "grdt"}, {final_x_channel, "pressure"},
-			{x_diff_channel, "x_diff"}, {lap_diff_channel, "lap_diff"}, {lap_grdt_channel, "lap(grdt)"}, {lap_x_channel, "lap(x)"}},
-			{}, -1, FLT_MAX);
-		polyscope::show();
+		//auto holder = grid.getHostTileHolder(LEAF);
+		//polyscope::init();
+		//IOFunc::AddLeveledPoissonGridCellCentersToPolyscopePointCloud(holder,
+		//	{ {-1, "type"}, {coeff_channel, "x-"} , {coeff_channel + 1, "y-"}, {coeff_channel + 2, "z-"}, {coeff_channel + 3, "diag"}, {grdt_channel, "grdt"}, {final_x_channel, "pressure"},
+		//	{x_diff_channel, "x_diff"}, {lap_diff_channel, "lap_diff"}, {lap_grdt_channel, "lap(grdt)"}, {lap_x_channel, "lap(x)"}},
+		//	{}, -1, FLT_MAX);
+		//polyscope::show();
 
 		Info("tile size: {}", sizeof(Tile));
 		Info("linf: {}", NormSync(grid, -1, x_diff_channel, false));
