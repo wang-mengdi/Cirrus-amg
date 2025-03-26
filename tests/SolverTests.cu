@@ -2071,16 +2071,9 @@ namespace SolverTests
 			tile(u_channel, l_ijk) = 0.0f;
 			tile(w_channel, l_ijk) = 0.0f;
 			auto g_ijk = acc.composeGlobalCoord(info.mTileCoord, l_ijk);
-
-			if (tile.type(l_ijk) == NEUMANN || g_ijk[1] == 1)
-			{
-				tile(v_channel, l_ijk) = 0;
-			}
-			else
-			{
-				tile(v_channel, l_ijk) = vel_val;
-			}
+			tile(v_channel, l_ijk) = vel_val;
 		}, LEAF);
+		ClearAllNeumannNeighborFaces(grid, u_channel);
 		AMGVolumeWeightedDivergenceOnLeafs(grid, u_channel, coeff_channel, rhs_channel);
 
 		int b_copy_channel = 14;
