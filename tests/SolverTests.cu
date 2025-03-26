@@ -1762,6 +1762,65 @@ namespace SolverTests
 		return ret;
 	}
 
+	template<class FuncII>
+	__hostdev__ void IterateFaceNeighborCellTypes(const HATileAccessor<Tile>& acc, const HATileInfo<Tile>& info, const Coord& l_ijk, const int axis, FuncII f) {
+		auto& tile = info.tile();
+		uint8_t type0 = tile.type(l_ijk);
+
+		auto g_ijk = acc.localToGlobalCoord(info, l_ijk);
+		auto ng_ijk = g_ijk; ng_ijk[axis]--;
+		HATileInfo<Tile> ninfo; Coord nl_ijk;
+		acc.findVoxel(info.mLevel, ng_ijk, ninfo, nl_ijk);
+
+		if (!ninfo.empty()) {
+			if (!ninfo.isLeaf()) {
+				for (int offj : {0, 1}) {
+					for (int offk : {0, 1}) {
+						Coord child_offset = acc.rotateCoord(axis, Coord(1, offj, offk));
+						Coord nc_ijk = acc.childCoord(ng_ijk, child_offset);
+						HATileInfo<Tile> nc_info; Coord ncl_ijk;
+						acc.findVoxel(info.mLevel + 1, nc_ijk, nc_info, ncl_ijk);
+						if (!nc_info.empty()) {
+							auto& nctile = nc_info.tile();
+							uint8_t type1 = nctile.type(ncl_ijk);
+							f(type0, type1);
+						}
+					}
+				}
+			}
+			else {
+				if (ninfo.isGhost()) {
+					//it's coarser
+					Coord np_ijk = acc.parentCoord(ng_ijk);
+					acc.findVoxel(info.mLevel - 1, np_ijk, ninfo, nl_ijk);
+
+				}
+				auto& ntile = ninfo.tile();
+				uint8_t type1 = ntile.type(nl_ijk);
+				f(type0, type1);
+			}
+		}
+	}
+
+	void ClearAllNeumannNeighborFaces(HADeviceGrid<Tile>& grid, const int u_channel)
+	{
+		grid.launchVoxelFunc(
+			[=] __device__(HATileAccessor<Tile>&acc, HATileInfo<Tile>&info, const Coord & l_ijk) {
+			for (int axis : {0, 1, 2}) {
+				bool to_set = false;
+				IterateFaceNeighborCellTypes(acc, info, l_ijk, axis, [&](const uint8_t type0, const uint8_t type1) {
+					if ((type0 & NEUMANN) || (type1 & NEUMANN) || ((type0 & DIRICHLET) && (type1 & DIRICHLET))) {
+						to_set = true;
+					}
+					});
+				if (to_set) {
+					info.tile()(u_channel + axis, l_ijk) = 0;
+				}
+			}
+		}, -1, LEAF, LAUNCH_SUBTREE
+		);
+	}
+
 	void TestSolverErrorSolid(const std::string grid_name, const int min_level, const int max_level)
 	{
 		std::shared_ptr<HADeviceGrid<Tile>> grid_ptr;
@@ -2031,64 +2090,17 @@ namespace SolverTests
 			auto& tile = info.tile();
 			auto pos = acc.cellCenter(info, l_ijk);
 			auto h = acc.voxelSize(info);
-			if (tile.type(l_ijk) & INTERIOR)
-			{
-				acc.iterateSameLevelNeighborVoxels(info, l_ijk,
-					[&] __device__(const HATileInfo<Tile> &ninfo, const Coord & nl_ijk, const int axis, const int sgn)
-				{
-					if (axis != 1 || sgn != 1)
-						return;
-					if (!ninfo.empty())
-					{
-						auto& ntile = ninfo.tile();
-						uint8_t ttype1 = ninfo.mType;
-						uint8_t ctype1 = ntile.type(nl_ijk);
-						if (ctype1 == DIRICHLET)
-						{
-							float val;
-							if (ttype1 == GHOST)
-							{
-								auto npos = acc.cellCenter(info, nl_ijk);
-								val = npos[1] + 0.5 * h;
-							}
-							else
-							{
-								auto npos = acc.cellCenter(info, nl_ijk);
-								val = npos[1];
-							}
-							float coeff = ntile(coeff_channel + 1, nl_ijk);
-							tile(rhs_channel, l_ijk) -= coeff * val;
-						}
-					}
-
-				});
-			}
-			else {
+			if (!(tile.type(l_ijk) & INTERIOR))
 				tile(Tile::b_channel, l_ijk) = 0;
-			}
 			tile(b_copy_channel, l_ijk) = tile(Tile::b_channel, l_ijk);
-		}, LEAF);
-
-		// grdt
-		int grdt_channel = 5;
-		grid.launchVoxelFuncOnAllTiles(
-			[=] __device__(HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const Coord& l_ijk)
-		{
-			auto& tile = info.tile();
-			if (tile.type(l_ijk) & INTERIOR)
-			{
-				auto pos = acc.cellCenter(info, l_ijk);
-				tile(grdt_channel, l_ijk) = pos[1];
-			}
 		}, LEAF);
 
 		// solve
 		auto [iters, err] = solver.solve(grid, true, 100, 1e-6, 3, 100, 1, is_pure_neumann);
 		cudaDeviceSynchronize();
-		
-		AMGAddGradientToFace(grid, -1, LEAF | GHOST, grdt_channel, coeff_channel, u_channel);
-		
-		AMGFullNegativeLaplacianOnLeafs(grid, grdt_channel, coeff_channel, Tile::b_channel);
+		AMGAddGradientToFace(grid, -1, LEAF | GHOST, Tile::x_channel, coeff_channel, u_channel);
+		ClearAllNeumannNeighborFaces(grid, u_channel);
+		AMGVolumeWeightedDivergenceOnLeafs(grid, u_channel, coeff_channel, Tile::b_channel);
 		// error
 		int error_channel = 13;
 		grid.launchVoxelFuncOnAllTiles(
@@ -2097,7 +2109,7 @@ namespace SolverTests
 			auto& tile = info.tile();
 			if (tile.type(l_ijk) & INTERIOR)
 			{
-				tile(error_channel, l_ijk) = tile(grdt_channel, l_ijk) - tile(Tile::x_channel, l_ijk);
+				tile(error_channel, l_ijk) = tile(Tile::b_channel, l_ijk);
 			}
 			else
 			{
@@ -2109,16 +2121,16 @@ namespace SolverTests
 		auto holder = grid.getHostTileHolder(LEAF | GHOST);
 		polyscope::init();
 		IOFunc::AddLeveledPoissonGridCellCentersToPolyscopePointCloud(holder,
-			{ {-1, "type"}, {coeff_channel, "x-"} , {coeff_channel + 1, "y-"}, {coeff_channel + 2, "z-"}, {coeff_channel + 3, "diag"}, {b_copy_channel, "b"} , {grdt_channel, "grdt"}, {Tile::x_channel, "pressure"}, {error_channel, "error"}, {u_channel, "u"}, {v_channel, "v"}, 
+			{ {-1, "type"}, {coeff_channel, "x-"} , {coeff_channel + 1, "y-"}, {coeff_channel + 2, "z-"}, {coeff_channel + 3, "diag"}, {b_copy_channel, "b"} , {Tile::x_channel, "pressure"}, {error_channel, "error"}, {u_channel, "u"}, {v_channel, "v"}, 
 			{w_channel, "w"}},
 			{}, -1, FLT_MAX);
 		//polyscope::show();
 
 		Info("linf: {}", NormSync(grid, -1, error_channel, false));
 
-		Info("u: {}", holder->cellValue(3, Coord(48, 30, 30), u_channel));
-		Info("p: {} {} {} {} {}", holder->cellValue(3, Coord(48, 30, 30), grdt_channel), holder->cellValue(4, Coord(95, 60, 60), grdt_channel), holder->cellValue(4, Coord(95, 60, 61), grdt_channel), holder->cellValue(4, Coord(95, 61, 60), grdt_channel), holder->cellValue(4, Coord(95, 61, 61), grdt_channel));
-		Info("coeff: {} {} {} {}", holder->cellValue(4, Coord(96, 60, 60), coeff_channel), holder->cellValue(4, Coord(96, 60, 61), coeff_channel), holder->cellValue(4, Coord(96, 61, 60), coeff_channel), holder->cellValue(4, Coord(96, 61, 61), coeff_channel));
+		//Info("u: {}", holder->cellValue(3, Coord(48, 30, 30), u_channel));
+		//Info("p: {} {} {} {} {}", holder->cellValue(3, Coord(48, 30, 30), grdt_channel), holder->cellValue(4, Coord(95, 60, 60), grdt_channel), holder->cellValue(4, Coord(95, 60, 61), grdt_channel), holder->cellValue(4, Coord(95, 61, 60), grdt_channel), holder->cellValue(4, Coord(95, 61, 61), grdt_channel));
+		//Info("coeff: {} {} {} {}", holder->cellValue(4, Coord(96, 60, 60), coeff_channel), holder->cellValue(4, Coord(96, 60, 61), coeff_channel), holder->cellValue(4, Coord(96, 61, 60), coeff_channel), holder->cellValue(4, Coord(96, 61, 61), coeff_channel));
 }
 
 	void TestRecoveryNew(const std::string grid_name, const int min_level, const int max_level)
