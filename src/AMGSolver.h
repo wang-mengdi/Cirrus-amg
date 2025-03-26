@@ -48,7 +48,7 @@ public:
     void muCycle(int repeat_times, HADeviceGrid<Tile>& grid, const int x_channel, const int f_channel, const int rhs_channel, const int coeff_channel, int level_iters, int coarsest_iters);
     void FASMuCycleStep(int current_level, int repeat_times, HADeviceGrid<Tile>& grid, const int x_channel, const int rhs_channel, const int x0_channel, const int coeff_channel, int level_iters, int coarsest_iters);
 	void FASMuCycle(int repeat_times, HADeviceGrid<Tile>& grid, const int x_channel, const int rhs_channel, const int x0_channel, const int coeff_channel, int level_iters, int coarsest_iters);
-	std::tuple<int, double> FASMuCycleSolve(int repeat_times, HADeviceGrid<Tile>& grid, int max_iters, double relative_tolerance, int level_iters, int coarsest_iters);
+	std::tuple<int, double> FASMuCycleSolve(int repeat_times, HADeviceGrid<Tile>& grid, bool verbose, int max_iters, double relative_tolerance, int level_iters, int coarsest_iters);
 
     //solve -lap(x_channel)=b_channel
     //b channel will be modified

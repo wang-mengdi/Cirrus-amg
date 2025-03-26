@@ -50,13 +50,13 @@ int main(int argc, char** argv) {
 		//	//SolverTests::TestSolverErrorWithAllNeumannBC("sphere_solid_05", 1.0, min_level, min_level + 2, "athena_sin", "amg");
 		//}
 
-		//test 1, iters convergence part
-		for (int min_level : {2, 3, 4, 5}) {
-			//the paper shows the "full weighted L2"
-			SolverTests::TestSolutionItersErrorWithAllNeumannBC("uniform", 1.0, min_level, min_level, "athena_sin", "amg");
-			SolverTests::TestSolutionItersErrorWithAllNeumannBC("sphere_shell_05", 1.0, min_level, min_level + 2, "athena_sin", "amg");
-			SolverTests::TestSolutionItersErrorWithAllNeumannBC("star_shell", 1.0, min_level, min_level + 2, "athena_sin", "amg");
-		}
+		////test 1, iters convergence part
+		//for (int min_level : {2, 3, 4, 5}) {
+		//	//the paper shows the "full weighted L2"
+		//	SolverTests::TestSolutionItersErrorWithAllNeumannBC("uniform", 1.0, min_level, min_level, "athena_sin", "amg");
+		//	SolverTests::TestSolutionItersErrorWithAllNeumannBC("sphere_shell_05", 1.0, min_level, min_level + 2, "athena_sin", "amg");
+		//	SolverTests::TestSolutionItersErrorWithAllNeumannBC("star_shell", 1.0, min_level, min_level + 2, "athena_sin", "amg");
+		//}
 
 
 		//////cmg version of test 1 grid convergence and runtime part
@@ -79,6 +79,14 @@ int main(int argc, char** argv) {
 		//	SolverTests::TestSolverErrorWithAllNeumannBC("sphere_shell_05", 1.0, min_level, min_level + 2, "athena_sin", "amg_vcycle");
 		//	SolverTests::TestSolverErrorWithAllNeumannBC("star_shell", 1.0, min_level, min_level + 2, "athena_sin", "amg_vcycle");
 		//}
+
+		//test 1, iters convergence part
+		for (int min_level : {2, 3, 4, 5}) {
+			//the paper shows the "full weighted L2"
+			SolverTests::TestSolutionItersErrorWithAllNeumannBC("uniform", 1.0, min_level, min_level, "athena_sin", "amg_vcycle");
+			SolverTests::TestSolutionItersErrorWithAllNeumannBC("sphere_shell_05", 1.0, min_level, min_level + 2, "athena_sin", "amg_vcycle");
+			SolverTests::TestSolutionItersErrorWithAllNeumannBC("star_shell", 1.0, min_level, min_level + 2, "athena_sin", "amg_vcycle");
+		}
 	}
 
 	//SolverTests::TestSolverErrorSolid("sphere", 2, 4);

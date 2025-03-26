@@ -1146,7 +1146,7 @@ void AMGSolver::FASMuCycle(int repeat_times, HADeviceGrid<Tile>& grid, const int
     FASMuCycleStep(grid.mMaxLevel, repeat_times, grid, x_channel, rhs_channel, x0_channel, coeff_channel, level_iters, coarsest_iters);
 }
 
-std::tuple<int, double> AMGSolver::FASMuCycleSolve(int repeat_times, HADeviceGrid<Tile>& grid, int max_iters, double relative_tolerance, int level_iters, int coarsest_iters)
+std::tuple<int, double> AMGSolver::FASMuCycleSolve(int repeat_times, HADeviceGrid<Tile>& grid, bool verbose, int max_iters, double relative_tolerance, int level_iters, int coarsest_iters)
 {
     auto x_channel = Tile::x_channel;//0
     auto rhs_channel = Tile::b_channel;//1
@@ -1167,10 +1167,10 @@ std::tuple<int, double> AMGSolver::FASMuCycleSolve(int repeat_times, HADeviceGri
 	double threshold_norm = relative_tolerance * rhs_norm;
 	threshold_norm = std::max(threshold_norm, std::numeric_limits<double>::min());
 
-	Info("FASMuCycleSolve iter 0 norm {}", rhs_norm);
+    if (verbose) Info("FASMuCycleSolve iter 0 norm {}", rhs_norm, max_iters);
 
     int i = 0;
-    double residual_norm;
+    double residual_norm = rhs_norm;
 	for (i = 0; i < max_iters; i++) {
         FASMuCycleStep(grid.mMaxLevel, repeat_times, grid, x_channel, rhs_channel, x0_channel, coeff_channel, level_iters, coarsest_iters);
         //calculate residual to x0 channel
@@ -1184,7 +1184,7 @@ std::tuple<int, double> AMGSolver::FASMuCycleSolve(int repeat_times, HADeviceGri
         }, LEAF, 4);
 		
 		residual_norm = sqrt(Dot(grid, x0_channel, x0_channel, LEAF));
-		Info("FASMuCycleSolve iter {} norm {}", i + 1, residual_norm);
+        if (verbose) Info("FASMuCycleSolve iter {} norm {}", i + 1, residual_norm);
 		if (residual_norm < threshold_norm) {
 			break;
 		}

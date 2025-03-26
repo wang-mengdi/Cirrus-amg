@@ -1312,9 +1312,13 @@ namespace SolverTests
 
 			CPUTimer<std::chrono::microseconds> timer;
 			timer.start();
-			auto [iters, err] = solver.FASMuCycleSolve(params.mu_repeat_times, grid, max_iters, rel_tolerance, params.level_iters, params.bottom_iters);
+			auto [iters, err] = solver.FASMuCycleSolve(params.mu_repeat_times, grid, verbose, max_iters, rel_tolerance, params.level_iters, params.bottom_iters);
 			CheckCudaError("FAS MuCycle Solve");
 			float elapsed = timer.stop("FAS MuCycle");
+
+			Info("iter {} err {}", iters, err);
+
+			return std::make_tuple(iters, err, elapsed);
 		}
 		else {
 			Assert(false, "SolveLinearSystem algorithm {} not supported", params.algorithm);
