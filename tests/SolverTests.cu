@@ -2203,13 +2203,14 @@ namespace SolverTests
 		}, LEAF);
 
 		// solve
-		solver.omega = 1.5;
+		//solver.omega = 1.5;
+		solver.mu_cycle_repeat_times = 1;
 		auto [iters, err] = solver.solve(grid, true, 100, 1e-6, 2, 10, 1, is_pure_neumann);
 		cudaDeviceSynchronize();
-		//AMGAddGradientToFace(grid, -1, LEAF | GHOST, Tile::x_channel, coeff_channel, u_channel);
-		//ClearAllNeumannNeighborFaces(grid, u_channel);
-		//AMGVolumeWeightedDivergenceOnLeafs(grid, u_channel, coeff_channel, Tile::b_channel);
-		AMGFullNegativeLaplacianOnLeafs(grid, Tile::x_channel, coeff_channel, Tile::b_channel);
+		AMGAddGradientToFace(grid, -1, LEAF | GHOST, Tile::x_channel, coeff_channel, u_channel);
+		ClearAllNeumannNeighborFaces(grid, u_channel);
+		AMGVolumeWeightedDivergenceOnLeafs(grid, u_channel, coeff_channel, Tile::b_channel);
+		//AMGFullNegativeLaplacianOnLeafs(grid, Tile::x_channel, coeff_channel, Tile::b_channel);
 
 		// error
 		int error_channel = 13;
@@ -2219,7 +2220,7 @@ namespace SolverTests
 			auto& tile = info.tile();
 			if (tile.type(l_ijk) & INTERIOR)
 			{
-				tile(error_channel, l_ijk) = tile(Tile::b_channel, l_ijk) - tile(b_copy_channel, l_ijk);
+				tile(error_channel, l_ijk) = tile(Tile::b_channel, l_ijk);
 			}
 			else
 			{
@@ -2234,10 +2235,10 @@ namespace SolverTests
 			{ {-1, "type"}, {coeff_channel, "x-"} , {coeff_channel + 1, "y-"}, {coeff_channel + 2, "z-"}, {coeff_channel + 3, "diag"}, {b_copy_channel, "b"} , {Tile::x_channel, "pressure"}, {error_channel, "error"}, {u_channel, "u"}, {v_channel, "v"}, 
 			{w_channel, "w"}},
 			{}, -1, FLT_MAX);
-		polyscope::show();
+		//polyscope::show();
 
-		//Info("linf: {}", NormSync(grid, -1, error_channel, false));
-		Info("volume-weighted RMS: {}", NormSync(grid, 2, error_channel, true));
+		Info("linf: {}", NormSync(grid, -1, error_channel, false));
+		//Info("volume-weighted RMS: {}", NormSync(grid, 2, error_channel, true));
 
 		//Info("u: {}", holder->cellValue(3, Coord(48, 30, 30), u_channel));
 		//Info("p: {} {} {} {} {}", holder->cellValue(3, Coord(48, 30, 30), grdt_channel), holder->cellValue(4, Coord(95, 60, 60), grdt_channel), holder->cellValue(4, Coord(95, 60, 61), grdt_channel), holder->cellValue(4, Coord(95, 61, 60), grdt_channel), holder->cellValue(4, Coord(95, 61, 61), grdt_channel));
