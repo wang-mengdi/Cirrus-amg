@@ -1146,6 +1146,10 @@ void AMGSolver::FASMuCycle(int repeat_times, HADeviceGrid<Tile>& grid, const int
     FASMuCycleStep(grid.mMaxLevel, repeat_times, grid, x_channel, rhs_channel, x0_channel, coeff_channel, level_iters, coarsest_iters);
 }
 
+void AMGSolver::FASFCycle(HADeviceGrid<Tile>& grid, const int x_channel, const int rhs_channel, const int x0_channel, const int coeff_channel, int level_iters, int coarsest_iters)
+{
+}
+
 std::tuple<int, double> AMGSolver::FASMuCycleSolve(int repeat_times, HADeviceGrid<Tile>& grid, bool verbose, int max_iters, double relative_tolerance, int level_iters, int coarsest_iters)
 {
     auto x_channel = Tile::x_channel;//0

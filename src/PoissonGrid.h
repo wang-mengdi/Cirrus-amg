@@ -60,7 +60,7 @@ void PropagateToChildren(HADeviceGrid<Tile>& grid, const int coarse_channel, con
 //calculate on cell_types only, and if child cell is not in cell_type, just ignore its value (set to 0)
 //coeff is: parent+=child*coeff
 //if additive, will add to parent value, otherwise will overwrite parent value
-void AccumulateToParents(HADeviceGrid<Tile>& grid, const int fine_channel, const int coarse_channel, const int target_subtree_level, const uint8_t target_tile_types, const LaunchMode mode, const uint8_t cell_types, const Tile::T coeff, bool additive);
+//void AccumulateToParents(HADeviceGrid<Tile>& grid, const int fine_channel, const int coarse_channel, const int target_subtree_level, const uint8_t target_tile_types, const LaunchMode mode, const uint8_t cell_types, const Tile::T coeff, bool additive);
 
 void AccumulateToParentsOneStep(HADeviceGrid<Tile>& grid, const int fine_channel, const int coarse_channel, const uint8_t fine_tile_types, const Tile::T coeff, bool additive, uint8_t cell_types);
 
