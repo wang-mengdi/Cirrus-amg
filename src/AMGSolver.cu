@@ -1146,9 +1146,22 @@ void AMGSolver::FASMuCycle(int repeat_times, HADeviceGrid<Tile>& grid, const int
     FASMuCycleStep(grid.mMaxLevel, repeat_times, grid, x_channel, rhs_channel, x0_channel, coeff_channel, level_iters, coarsest_iters);
 }
 
-void AMGSolver::FASFCycle(HADeviceGrid<Tile>& grid, const int x_channel, const int rhs_channel, const int x0_channel, const int coeff_channel, int level_iters, int coarsest_iters)
-{
+//LEAF -> NONLEAF
+void RestrictSourceToCoarse(HADeviceGrid<Tile>& grid, int fine_channel, int coarse_channel, int fine_level, T coeff) {
+    AccumulateToParentsOneStepKernel << <grid.hNumTiles[fine_level], 128 >> > (
+        grid.deviceAccessor(),
+        thrust::raw_pointer_cast(grid.dTileArrays[fine_level].data()),
+        fine_level,
+        LEAF,
+        fine_channel,
+        coarse_channel,
+        coeff,
+        false,
+        INTERIOR
+        );
 }
+
+
 
 std::tuple<int, double> AMGSolver::FASMuCycleSolve(int repeat_times, HADeviceGrid<Tile>& grid, bool verbose, int max_iters, double relative_tolerance, int level_iters, int coarsest_iters)
 {
@@ -1197,6 +1210,42 @@ std::tuple<int, double> AMGSolver::FASMuCycleSolve(int repeat_times, HADeviceGri
 	return std::make_tuple(i, residual_norm / rhs_norm);
 }
 
+void AMGSolver::FASFCycle(HADeviceGrid<Tile>& grid, const int x_channel, const int rhs_channel, const int x0_channel, const int coeff_channel, int level_iters, int coarsest_iters)
+{
+    //set initial guess to 0
+    grid.launchVoxelFuncOnAllTiles(
+        [=]__device__(HATileAccessor<Tile>&acc, HATileInfo<Tile>&info, const Coord & l_ijk) {
+        auto& tile = info.tile();
+        int vi = acc.localCoordToOffset(l_ijk);
+        //initial guess is 0 for LEAF | NONLEAF | GHOST cells
+        tile(x_channel, vi) = 0;
+    },
+        LEAF | NONLEAF | GHOST, 4
+    );
+
+    //restrict rhs to coarser level
+    for (int level = grid.mMaxLevel; level > 0; level--) {
+        RestrictSourceToCoarse(grid, rhs_channel, rhs_channel, level, R_restrict_coeff);
+    }
+
+    //solve on coarsest level
+    GaussSeidelAMG(coarsest_iters / 2, 0, grid, 0, x_channel, coeff_channel, rhs_channel, omega);
+    GaussSeidelAMG(coarsest_iters / 2, 1, grid, 0, x_channel, coeff_channel, rhs_channel, omega);
+
+    //prolongate solution to finer levels
+    for (int level = 1; level <= grid.mMaxLevel; level++) {
+        ProlongateAndUpdateAMG128(grid, x_channel, x_channel, level, prolong_coeff);
+
+        //use a v-cycle
+        FASMuCycleStep(level, mu_cycle_repeat_times, grid, x_channel, rhs_channel, x0_channel, coeff_channel, level_iters, coarsest_iters);
+    }
+}
+//
+//std::tuple<int, double> AMGSolver::FASFCycleSolve(HADeviceGrid<Tile>& grid, bool verbose, int max_iters, double relative_tolerance, int level_iters, int coarsest_iters)
+//{
+//    
+//}
+
 void AMGSolver::prepareTypesAndCoeffs(HADeviceGrid<Tile>& grid)
 {
 	CoarsenTypesAndAMGCoeffs(grid, coeff_channel, R_matrix_coeff);
@@ -1237,6 +1286,7 @@ std::tuple<int, double> AMGSolver::solve(HADeviceGrid<Tile>& grid, bool verbose,
     ////z0=Minv*r0
     //r_channel->z_channel
 	//muCycle(mu_cycle_repeat_times, grid, Tile::z_channel, Tile::r_channel, Tile::Ap_channel, coeff_channel, level_iters, coarsest_iters);
+	//FASFCycle(grid, Tile::z_channel, Tile::r_channel, Tile::Ap_channel, coeff_channel, level_iters, coarsest_iters);
     FASMuCycle(mu_cycle_repeat_times, grid, Tile::z_channel, Tile::r_channel, Tile::Ap_channel, coeff_channel, level_iters, coarsest_iters);
 
     //p0=z0
@@ -1305,6 +1355,7 @@ std::tuple<int, double> AMGSolver::solve(HADeviceGrid<Tile>& grid, bool verbose,
         //z_{k+1} = Minv * r_{k+1}
         //r->z
         //muCycle(mu_cycle_repeat_times, grid, Tile::z_channel, Tile::r_channel, Tile::Ap_channel, coeff_channel, level_iters, coarsest_iters);
+        //FASFCycle(grid, Tile::z_channel, Tile::r_channel, Tile::Ap_channel, coeff_channel, level_iters, coarsest_iters);
         FASMuCycle(mu_cycle_repeat_times, grid, Tile::z_channel, Tile::r_channel, Tile::Ap_channel, coeff_channel, level_iters, coarsest_iters);
 
 

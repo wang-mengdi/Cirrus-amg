@@ -2197,6 +2197,7 @@ namespace SolverTests
 		}, LEAF);
 
 		// solve
+		solver.mu_cycle_repeat_times = 2;
 		solver.omega = 1.5;
 		auto [iters, err] = solver.solve(grid, true, 100, 1e-6, 2, 10, 1, is_pure_neumann);
 		cudaDeviceSynchronize();
