@@ -1280,7 +1280,18 @@ namespace SolverTests
 	std::tuple<int, double, double> SolveLinearSystem(HADeviceGrid<Tile>& grid, const int coeff_channel, bool is_pure_neumann, int max_iters, double rel_tolerance, int sync_stride, const MultiGridParams params, bool verbose) {
 		CalculateNeighborTiles(grid);
 
-		if (params.algorithm == "cmg") {
+		if (params.algorithm == "gmg") {
+			GMGSolver solver(1.0, 1.0); // default omega and mu for GMG
+			CPUTimer<std::chrono::microseconds> timer;
+			timer.start();
+			auto [iters, err] = solver.solve(grid, verbose, max_iters, rel_tolerance, params.level_iters, params.bottom_iters, sync_stride, is_pure_neumann);
+			cudaDeviceSynchronize(); // ensure all GPU work is done before measuring time
+			CheckCudaError("GMG solve");
+			double elapsed = timer.stop("GMG Solve");
+			Info("GMG iters {} err {} elapsed {} microseconds", iters, err, elapsed);
+			return std::make_tuple(iters, err, elapsed);
+		}
+		else if (params.algorithm == "cmg") {
 			CMGSolver solver(1.0, 1.0);
 			CPUTimer<std::chrono::microseconds> timer;
 			timer.start();
