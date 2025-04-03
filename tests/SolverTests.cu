@@ -1291,6 +1291,18 @@ namespace SolverTests
 			Info("GMG iters {} err {} elapsed {} microseconds", iters, err, elapsed);
 			return std::make_tuple(iters, err, elapsed);
 		}
+		else if (params.algorithm == "gmg_jacobi") {
+			GMGSolver solver(1.0, 1.0);
+			CPUTimer<std::chrono::microseconds> timer; // for timing the solve
+			timer.start();
+			auto [iters, err] = solver.dampedJacobiSolve(grid, verbose, max_iters, rel_tolerance, 1.);
+			cudaDeviceSynchronize(); // ensure all GPU work is done before measuring time
+			CheckCudaError("GMG Jacobi solve");
+			double elapsed = timer.stop("GMG Jacobi Solve");
+			Info("GMG Jacobi iters {} err {} elapsed {} microseconds", iters, err, elapsed);
+			// Return the number of iterations, relative error, and elapsed time
+			return std::make_tuple(iters, err, elapsed);
+		}
 		else if (params.algorithm == "cmg") {
 			CMGSolver solver(1.0, 1.0);
 			CPUTimer<std::chrono::microseconds> timer;
@@ -1435,7 +1447,8 @@ namespace SolverTests
 		params.bottom_iters = 10;
 
 
-		auto [iters, err, elapsed] = SolveLinearSystem(grid, coeff_channel, is_pure_neumann, 30, 1e-6, 1, params, true);
+		auto [iters, err, elapsed] = SolveLinearSystem(grid, coeff_channel, is_pure_neumann, 1000, 1e-6, 1, params, true);
+		//auto [iters, err, elapsed] = SolveLinearSystem(grid, coeff_channel, is_pure_neumann, 30, 1e-6, 1, params, true);
 		//auto [iters, err, elapsed] = SolveLinearSystem(grid, coeff_channel, is_pure_neumann, 6, 1e-6, -1, params, false);
 		int total_cells = grid.numTotalLeafTiles() * Tile::SIZE;
 		float cells_per_second = (total_cells + 0.0) / (elapsed / 1e6);

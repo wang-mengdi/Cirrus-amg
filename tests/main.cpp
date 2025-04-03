@@ -73,11 +73,18 @@ int main(int argc, char** argv) {
 		//	SolverTests::TestSolutionItersErrorWithAllNeumannBC("star_shell", 1.0, min_level, min_level + 2, "athena_sin", "cmg");
 		//}
 
-		////cmg version of test 1 grid convergence and runtime part
+		//////gmg version of test 1 grid convergence and runtime part
+		//for (int min_level : {2, 3, 4, 5}) {
+		//	SolverTests::TestSolverErrorWithAllNeumannBC("uniform", 1.0, min_level, min_level, "athena_sin", "gmg");
+		//	SolverTests::TestSolverErrorWithAllNeumannBC("sphere_shell_05", 1.0, min_level, min_level + 2, "athena_sin", "gmg");
+		//	SolverTests::TestSolverErrorWithAllNeumannBC("star_shell", 1.0, min_level, min_level + 2, "athena_sin", "gmg");
+		//}
+
+		////gmg version of test 1 grid convergence and runtime part
 		for (int min_level : {2, 3, 4, 5}) {
-			SolverTests::TestSolverErrorWithAllNeumannBC("uniform", 1.0, min_level, min_level, "athena_sin", "gmg");
-			SolverTests::TestSolverErrorWithAllNeumannBC("sphere_shell_05", 1.0, min_level, min_level + 2, "athena_sin", "gmg");
-			SolverTests::TestSolverErrorWithAllNeumannBC("star_shell", 1.0, min_level, min_level + 2, "athena_sin", "gmg");
+			//SolverTests::TestSolverErrorWithAllNeumannBC("uniform", 1.0, min_level, min_level, "athena_sin", "gmg_jacobi");
+			//SolverTests::TestSolverErrorWithAllNeumannBC("sphere_shell_05", 1.0, min_level, min_level + 2, "athena_sin", "gmg");
+			SolverTests::TestSolverErrorWithAllNeumannBC("star_shell", 1.0, min_level, min_level + 2, "athena_sin", "gmg_jacobi");
 		}
 
 		////amg-vcycle version of test 1 grid convergence and runtime part
