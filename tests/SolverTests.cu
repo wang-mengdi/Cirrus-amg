@@ -2393,7 +2393,7 @@ namespace SolverTests
 			}
 		}, LEAF);
 
-		// set rhs as
+		// set rhs as b1 - b2
 		grid.launchVoxelFuncOnAllTiles(
 			[=] __device__(HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const Coord& l_ijk)
 		{
@@ -2403,13 +2403,13 @@ namespace SolverTests
 		}, LEAF);
 
 		//TestSolidDivIter(solver, grid);
-		//TestSolidResIter(solver, grid);
+		TestSolidResIter(solver, grid);
 		auto holder = grid.getHostTileHolder(LEAF);
 		polyscope::init();
 		IOFunc::AddLeveledPoissonGridCellCentersToPolyscopePointCloud(holder,
-			{ {-1, "type"}, {coeff_channel, "x-"} , {coeff_channel + 1, "y-"}, {coeff_channel + 2, "z-"}, {coeff_channel + 3, "diag"}, {b1_channel, "b"} , {Tile::x_channel, "pressure"}},
+			{ {-1, "type"}, {coeff_channel, "x-"} , {coeff_channel + 1, "y-"}, {coeff_channel + 2, "z-"}, {coeff_channel + 3, "diag"}, {Tile::b_channel, "b"} , {Tile::x_channel, "pressure"}},
 			{}, -1, FLT_MAX);
-		polyscope::show();
+		//polyscope::show();
 
 		//Info("linf: {}", NormSync(grid, -1, error_channel, false));
 		//Info("volume-weighted RMS: {}", NormSync(grid, 2, error_channel, true));
