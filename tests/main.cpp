@@ -120,14 +120,14 @@ int main(int argc, char** argv) {
 	}
 
 	//SolverTests::TestSolverErrorSolid("sphere", 2, 4);
-	//SolverTests::TestSolverErrorSolid("sphere", 3, 5);
-	//SolverTests::TestSolverErrorSolid("sphere", 4, 6);
+	SolverTests::TestSolverErrorSolid("sphere", 3, 5);
+	SolverTests::TestSolverErrorSolid("sphere", 4, 6);
 	//SolverTests::TestSolverErrorSolid("sphere", 5, 7);
 	 
-	SolverTests::TestRecoveryNew("sphere", 2, 4);
-	SolverTests::TestRecoveryNew("sphere", 3, 5);
+	//SolverTests::TestRecoveryNew("sphere", 2, 4);
+	//SolverTests::TestRecoveryNew("sphere", 3, 5);
 	SolverTests::TestRecoveryNew("sphere", 4, 6);
-	SolverTests::TestRecoveryNew("sphere", 5, 7);
+	//SolverTests::TestRecoveryNew("sphere", 5, 7);
 
 
 	//for (int min_level : {4, 5}) {

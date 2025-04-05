@@ -1902,6 +1902,10 @@ namespace SolverTests
 
 	void TestSolverErrorSolid(const std::string grid_name, const int min_level, const int max_level)
 	{
+		Info("TestSolverErrorSolid on grid {}, min level {} max level {}",
+			grid_name, min_level, max_level
+		);
+
 		std::shared_ptr<HADeviceGrid<Tile>> grid_ptr;
 		// grid with type
 		if (grid_name == "sphere")
@@ -2264,6 +2268,10 @@ namespace SolverTests
 
 	void TestRecoveryNew(const std::string grid_name, const int min_level, const int max_level)
 	{
+		Info("TestRecoveryNew on grid {}, min level {} max level {}",
+			grid_name, min_level, max_level
+		);
+
 		std::shared_ptr<HADeviceGrid<Tile>> grid_ptr;
 		// grid with type
 		if (grid_name == "sphere")
@@ -2328,6 +2336,15 @@ namespace SolverTests
 
 		//  grdt
 		int grdt_channel = 5;
+
+		//grid.launchVoxelFuncOnAllTiles(
+		//	[=] __device__(HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const Coord& l_ijk)
+		//{
+		//	auto& tile = info.tile();
+		//	tile(b0_channel, l_ijk) = 0;
+		//}, LEAF | GHOST | NONLEAF);
+
+
 		grid.launchVoxelFuncOnAllTiles(
 			[=] __device__(HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const Coord& l_ijk)
 		{
@@ -2337,10 +2354,17 @@ namespace SolverTests
 				auto pos = acc.cellCenter(info, l_ijk);
 				tile(grdt_channel, l_ijk) = pos[1];
 			}
+			//else {
+			//	tile(grdt_channel, l_ijk) = 0;
+			//}
 		}, LEAF);
 
 		// rhs
 		AMGFullNegativeLaplacianOnLeafs(grid, grdt_channel, coeff_channel, b0_channel);
+
+		Info("b0 linf: {}", NormSync(grid, -1, b0_channel, false));
+		Info("b0 L2: {}", NormSync(grid, 2, b0_channel, false));
+		Info("b0 dot: {}", Dot(grid, b0_channel, b0_channel, LEAF));
 
 		// solve
 		int Nx = 8 << max_level;

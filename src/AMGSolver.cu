@@ -434,8 +434,7 @@ __device__ void LoadAMGLaplacianTileData(const HATileAccessor<Tile>& acc, const 
         //HATileInfo<Tile> ninfo = acc.tileInfo(info.mLevel, nb_ijk);
         HATileInfo<Tile> ninfo = (sgn == -1) ? tile.mNeighbors[axis] : tile.mNeighbors[axis + 3];
 
-        bool empty = ninfo.empty();
-        if (empty) {
+        if (ninfo.empty()) {
             shared_data.absttypeT(fl_ijk) = info.mType;
             shared_data.xValueT(fl_ijk) = 0;
             if (sgn == 1) shared_data.offDiagValueT(axis, fl_ijk) = h;
@@ -526,8 +525,8 @@ void NegativeLaplacianSameLevelAMG128(HADeviceGrid<Tile>& grid, thrust::device_v
 
 //on all leafs of the tree
 void AMGFullNegativeLaplacianOnLeafs(HADeviceGrid<Tile>& grid, const int x_channel, const int coeff_channel, const int Ax_channel) {
-    PropagateToChildren(grid, x_channel, x_channel, -1, GHOST, LAUNCH_SUBTREE, INTERIOR | DIRICHLET | NEUMANN);
-    AccumulateToParentsOneStep(grid, x_channel, x_channel, LEAF, 1. / 8, false, INTERIOR | DIRICHLET | NEUMANN);
+    PropagateToChildren(grid, x_channel, x_channel, -1, GHOST, LAUNCH_SUBTREE, INTERIOR);
+    AccumulateToParentsOneStep(grid, x_channel, x_channel, LEAF, 1. / 8, false, INTERIOR);
     NegativeLaplacianSameLevelAMG128(grid, grid.dAllTiles, grid.dAllTiles.size(), -1, LEAF, x_channel, coeff_channel, Ax_channel);
 }
 
