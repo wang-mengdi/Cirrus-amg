@@ -2298,6 +2298,8 @@ namespace SolverTests
 		int v_channel = 11;
 		int w_channel = 12;
 
+		// store nonsolvable rhs in b1 channel
+		int b1_channel = 13;
 		grid.launchVoxelFuncOnAllTiles(
 			[=] __device__(HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const Coord& l_ijk)
 		{
@@ -2316,9 +2318,38 @@ namespace SolverTests
 				tile(v_channel, l_ijk) = vel_val;
 			}
 		}, LEAF);
-		AMGVolumeWeightedDivergenceOnLeafs(grid, u_channel, coeff_channel, rhs_channel);
+		AMGVolumeWeightedDivergenceOnLeafs(grid, u_channel, coeff_channel, b1_channel);
+		grid.launchVoxelFuncOnAllTiles(
+			[=] __device__(HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const Coord& l_ijk)
+		{
+			auto& tile = info.tile();
+			auto pos = acc.cellCenter(info, l_ijk);
+			auto h = acc.voxelSize(info);
+			if (!(tile.type(l_ijk) & INTERIOR))
+				tile(b1_channel, l_ijk) = 0;
+		}, LEAF);
 
-		int b_copy_channel = 14;
+		// store solvable rhs in b2 channel
+		int b2_channel = 14;
+		grid.launchVoxelFuncOnAllTiles(
+			[=] __device__(HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const Coord& l_ijk)
+		{
+			float vel_val = -1.0;
+			Tile& tile = info.tile();
+			tile(u_channel, l_ijk) = 0.0f;
+			tile(w_channel, l_ijk) = 0.0f;
+			auto g_ijk = acc.composeGlobalCoord(info.mTileCoord, l_ijk);
+
+			if (tile.type(l_ijk) == NEUMANN || g_ijk[1] == 1)
+			{
+				tile(v_channel, l_ijk) = 0;
+			}
+			else
+			{
+				tile(v_channel, l_ijk) = vel_val;
+			}
+		}, LEAF);
+		AMGVolumeWeightedDivergenceOnLeafs(grid, u_channel, coeff_channel, b2_channel);
 		grid.launchVoxelFuncOnAllTiles(
 			[=] __device__(HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const Coord& l_ijk)
 		{
@@ -2351,28 +2382,34 @@ namespace SolverTests
 								val = npos[1];
 							}
 							float coeff = ntile(coeff_channel + 1, nl_ijk);
-							tile(rhs_channel, l_ijk) -= coeff * val;
+							tile(b2_channel, l_ijk) -= coeff * val;
 						}
 					}
 
 				});
 			}
 			else {
-				tile(Tile::b_channel, l_ijk) = 0;
+				tile(b2_channel, l_ijk) = 0;
 			}
-			tile(b_copy_channel, l_ijk) = tile(Tile::b_channel, l_ijk);
 		}, LEAF);
 
-		
+		// set rhs as
+		grid.launchVoxelFuncOnAllTiles(
+			[=] __device__(HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const Coord& l_ijk)
+		{
+			float vel_val = -1.0;
+			Tile& tile = info.tile();
+			tile(Tile::b_channel, l_ijk) = tile(b1_channel, l_ijk) - tile(b2_channel, l_ijk);
+		}, LEAF);
+
 		//TestSolidDivIter(solver, grid);
-		TestSolidResIter(solver, grid);
-		//auto holder = grid.getHostTileHolder(LEAF);
-		//polyscope::init();
-		//IOFunc::AddLeveledPoissonGridCellCentersToPolyscopePointCloud(holder,
-		//	{ {-1, "type"}, {coeff_channel, "x-"} , {coeff_channel + 1, "y-"}, {coeff_channel + 2, "z-"}, {coeff_channel + 3, "diag"}, {b_copy_channel, "b"} , {Tile::x_channel, "pressure"}, {error_channel, "error"}, {u_channel, "u"}, {v_channel, "v"}, 
-		//	{w_channel, "w"}},
-		//	{}, -1, FLT_MAX);
-		//polyscope::show();
+		//TestSolidResIter(solver, grid);
+		auto holder = grid.getHostTileHolder(LEAF);
+		polyscope::init();
+		IOFunc::AddLeveledPoissonGridCellCentersToPolyscopePointCloud(holder,
+			{ {-1, "type"}, {coeff_channel, "x-"} , {coeff_channel + 1, "y-"}, {coeff_channel + 2, "z-"}, {coeff_channel + 3, "diag"}, {b1_channel, "b"} , {Tile::x_channel, "pressure"}},
+			{}, -1, FLT_MAX);
+		polyscope::show();
 
 		//Info("linf: {}", NormSync(grid, -1, error_channel, false));
 		//Info("volume-weighted RMS: {}", NormSync(grid, 2, error_channel, true));
