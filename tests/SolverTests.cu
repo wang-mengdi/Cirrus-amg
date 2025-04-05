@@ -1937,6 +1937,73 @@ namespace SolverTests
 		);
 	}
 
+	void TestSolidDivIter(AMGSolver& solver, HADeviceGrid<Tile>& grid)
+	{
+		int b0_channel = 14;
+		int error_channel = 13;
+		int coeff_channel = 6;
+		int u_channel = 10;
+		grid.launchVoxelFuncOnAllTiles(
+			[=] __device__(HATileAccessor<Tile> &acc, HATileInfo<Tile> &info, const Coord & l_ijk)
+		{
+			auto& tile = info.tile();
+			tile(b0_channel, l_ijk) = tile(Tile::b_channel, l_ijk);
+		},
+			LEAF);
+
+		solver.mu_cycle_repeat_times = 1;
+		for (int max_iters = 0;; max_iters++)
+		{
+			CalculateNeighborTiles(grid);
+			grid.launchVoxelFuncOnAllTiles(
+				[=] __device__(HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const Coord& l_ijk)
+			{
+				auto& tile = info.tile();
+				tile(Tile::b_channel, l_ijk) = tile(b0_channel, l_ijk);
+			},
+				LEAF);
+
+			auto [iters, err] = solver.solve(grid, false, max_iters, 0, 2, 10, 1, false);
+
+			cudaDeviceSynchronize();
+			grid.launchVoxelFuncOnAllTiles(
+				[=] __device__(HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const Coord& l_ijk)
+			{
+				float vel_val = -1.0;
+				Tile& tile = info.tile();
+				tile(u_channel, l_ijk) = 0.0f;
+				tile(u_channel+2, l_ijk) = 0.0f;
+				auto g_ijk = acc.composeGlobalCoord(info.mTileCoord, l_ijk);
+				tile(u_channel + 1, l_ijk) = vel_val;
+			}, LEAF);
+			ClearAllNeumannNeighborFaces(grid, u_channel);
+
+			AMGAddGradientToFace(grid, -1, LEAF | GHOST, Tile::x_channel, coeff_channel, u_channel);
+			ClearAllNeumannNeighborFaces(grid, u_channel);
+			
+			AMGVolumeWeightedDivergenceOnLeafs(grid, u_channel, coeff_channel, error_channel);
+			grid.launchVoxelFuncOnAllTiles(
+				[=] __device__(HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const Coord& l_ijk)
+			{
+				auto& tile = info.tile();
+				if (!(tile.type(l_ijk) & INTERIOR))
+					tile(error_channel, l_ijk) = 0;
+			},
+				LEAF);
+			Info("Solve Iter {} full weighted L2: {}", iters, NormSync(grid, 2, error_channel, true, INTERIOR | NEUMANN | DIRICHLET));
+
+			if (err < 1e-6)
+				break;
+		}
+	}
+
+	void TestSolidResIter(AMGSolver& solver, HADeviceGrid<Tile>& grid)
+	{
+		//solver.omega = 1.5;
+		solver.mu_cycle_repeat_times = 1;
+		auto [iter, err] = solver.solve(grid, true, 100, 1e-6, 2, 10, 1, false);
+	}
+
 	void TestSolverErrorSolid(const std::string grid_name, const int min_level, const int max_level)
 	{
 		std::shared_ptr<HADeviceGrid<Tile>> grid_ptr;
@@ -2256,40 +2323,18 @@ namespace SolverTests
 			tile(b_copy_channel, l_ijk) = tile(Tile::b_channel, l_ijk);
 		}, LEAF);
 
-		// solve
-		solver.mu_cycle_repeat_times = 1;
-		auto [iters, err] = solver.solve(grid, true, 100, 1e-6, 2, 10, 1, is_pure_neumann);
-		cudaDeviceSynchronize();
-		AMGAddGradientToFace(grid, -1, LEAF | GHOST, Tile::x_channel, coeff_channel, u_channel);
-		ClearAllNeumannNeighborFaces(grid, u_channel);
-		AMGVolumeWeightedDivergenceOnLeafs(grid, u_channel, coeff_channel, Tile::b_channel);
+		
+		//TestSolidDivIter(solver, grid);
+		TestSolidResIter(solver, grid);
+		//auto holder = grid.getHostTileHolder(LEAF);
+		//polyscope::init();
+		//IOFunc::AddLeveledPoissonGridCellCentersToPolyscopePointCloud(holder,
+		//	{ {-1, "type"}, {coeff_channel, "x-"} , {coeff_channel + 1, "y-"}, {coeff_channel + 2, "z-"}, {coeff_channel + 3, "diag"}, {b_copy_channel, "b"} , {Tile::x_channel, "pressure"}, {error_channel, "error"}, {u_channel, "u"}, {v_channel, "v"}, 
+		//	{w_channel, "w"}},
+		//	{}, -1, FLT_MAX);
+		//polyscope::show();
 
-		// error
-		int error_channel = 13;
-		grid.launchVoxelFuncOnAllTiles(
-			[=] __device__(HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const Coord& l_ijk)
-		{
-			auto& tile = info.tile();
-			if (tile.type(l_ijk) & INTERIOR)
-			{
-				tile(error_channel, l_ijk) = tile(Tile::b_channel, l_ijk);
-			}
-			else
-			{
-				tile(error_channel, l_ijk) = 0;
-			}
-		},
-			LEAF);
-
-		auto holder = grid.getHostTileHolder(LEAF);
-		polyscope::init();
-		IOFunc::AddLeveledPoissonGridCellCentersToPolyscopePointCloud(holder,
-			{ {-1, "type"}, {coeff_channel, "x-"} , {coeff_channel + 1, "y-"}, {coeff_channel + 2, "z-"}, {coeff_channel + 3, "diag"}, {b_copy_channel, "b"} , {Tile::x_channel, "pressure"}, {error_channel, "error"}, {u_channel, "u"}, {v_channel, "v"}, 
-			{w_channel, "w"}},
-			{}, -1, FLT_MAX);
-		polyscope::show();
-
-		Info("linf: {}", NormSync(grid, -1, error_channel, false));
+		//Info("linf: {}", NormSync(grid, -1, error_channel, false));
 		//Info("volume-weighted RMS: {}", NormSync(grid, 2, error_channel, true));
 
 		//Info("u: {}", holder->cellValue(3, Coord(48, 30, 30), u_channel));
