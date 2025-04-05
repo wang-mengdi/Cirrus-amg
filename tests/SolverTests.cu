@@ -1999,8 +1999,8 @@ namespace SolverTests
 
 	void TestSolidResIter(AMGSolver& solver, HADeviceGrid<Tile>& grid)
 	{
-		//solver.omega = 1.5;
-		solver.mu_cycle_repeat_times = 1;
+		solver.omega = 1.5;
+		solver.mu_cycle_repeat_times = 2;
 		auto [iter, err] = solver.solve(grid, true, 100, 1e-6, 2, 10, 1, false);
 	}
 
@@ -2297,7 +2297,7 @@ namespace SolverTests
 		int u_channel = 10;
 		int v_channel = 11;
 		int w_channel = 12;
-	
+
 		grid.launchVoxelFuncOnAllTiles(
 			[=] __device__(HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const Coord& l_ijk)
 		{
@@ -2306,9 +2306,16 @@ namespace SolverTests
 			tile(u_channel, l_ijk) = 0.0f;
 			tile(w_channel, l_ijk) = 0.0f;
 			auto g_ijk = acc.composeGlobalCoord(info.mTileCoord, l_ijk);
-			tile(v_channel, l_ijk) = vel_val;
+
+			if (tile.type(l_ijk) == NEUMANN || g_ijk[1] == 1)
+			{
+				tile(v_channel, l_ijk) = 0;
+			}
+			else
+			{
+				tile(v_channel, l_ijk) = vel_val;
+			}
 		}, LEAF);
-		ClearAllNeumannNeighborFaces(grid, u_channel);
 		AMGVolumeWeightedDivergenceOnLeafs(grid, u_channel, coeff_channel, rhs_channel);
 
 		int b_copy_channel = 14;
@@ -2318,8 +2325,41 @@ namespace SolverTests
 			auto& tile = info.tile();
 			auto pos = acc.cellCenter(info, l_ijk);
 			auto h = acc.voxelSize(info);
-			if (!(tile.type(l_ijk) & INTERIOR))
+			if (tile.type(l_ijk) & INTERIOR)
+			{
+				acc.iterateSameLevelNeighborVoxels(info, l_ijk,
+					[&] __device__(const HATileInfo<Tile> &ninfo, const Coord & nl_ijk, const int axis, const int sgn)
+				{
+					if (axis != 1 || sgn != 1)
+						return;
+					if (!ninfo.empty())
+					{
+						auto& ntile = ninfo.tile();
+						uint8_t ttype1 = ninfo.mType;
+						uint8_t ctype1 = ntile.type(nl_ijk);
+						if (ctype1 == DIRICHLET)
+						{
+							float val = 0;
+							if (ttype1 == GHOST)
+							{
+								auto npos = acc.cellCenter(info, nl_ijk);
+								val = npos[1] + 0.5 * h;
+							}
+							else
+							{
+								auto npos = acc.cellCenter(info, nl_ijk);
+								val = npos[1];
+							}
+							float coeff = ntile(coeff_channel + 1, nl_ijk);
+							tile(rhs_channel, l_ijk) -= coeff * val;
+						}
+					}
+
+				});
+			}
+			else {
 				tile(Tile::b_channel, l_ijk) = 0;
+			}
 			tile(b_copy_channel, l_ijk) = tile(Tile::b_channel, l_ijk);
 		}, LEAF);
 
