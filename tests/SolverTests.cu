@@ -2348,6 +2348,7 @@ namespace SolverTests
 		//solver.omega = 2.0 / (1 + CommonConstants::pi / Nx);
 		Info("theory value: {}", 2.0 / (1 + CommonConstants::pi / Nx));
 		solver.omega = 1.5;
+		solver.mu_cycle_repeat_times = 2; // repeat the mu-cycle to improve convergence
 		auto [iters, err] = solver.solve(grid, true, 100, 1e-6, 2, 10, 1, is_pure_neumann);
 		cudaDeviceSynchronize();
 
