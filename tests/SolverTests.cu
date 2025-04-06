@@ -2399,17 +2399,27 @@ namespace SolverTests
 		{
 			float vel_val = -1.0;
 			Tile& tile = info.tile();
-			tile(Tile::b_channel, l_ijk) = tile(b1_channel, l_ijk) - tile(b2_channel, l_ijk);
+			tile(Tile::b_channel, l_ijk) = tile(b1_channel, l_ijk); -tile(b2_channel, l_ijk);
 		}, LEAF);
 
+		
+		MultiGridParams params;
+		params.algorithm = "amg";
+		params.mu_repeat_times = 2;
+		params.level_iters = 2;
+		params.bottom_iters = 10;
+		params.omega = 1.5;
+
+		SolveLinearSystem(grid, coeff_channel, false, 100, 1e-6, 1, params, true);
+
 		//TestSolidDivIter(solver, grid);
-		TestSolidResIter(solver, grid);
+		//TestSolidResIter(solver, grid);
 		auto holder = grid.getHostTileHolder(LEAF);
 		polyscope::init();
 		IOFunc::AddLeveledPoissonGridCellCentersToPolyscopePointCloud(holder,
 			{ {-1, "type"}, {coeff_channel, "x-"} , {coeff_channel + 1, "y-"}, {coeff_channel + 2, "z-"}, {coeff_channel + 3, "diag"}, {Tile::b_channel, "b"} , {Tile::x_channel, "pressure"}},
 			{}, -1, FLT_MAX);
-		//polyscope::show();
+		polyscope::show();
 
 		//Info("linf: {}", NormSync(grid, -1, error_channel, false));
 		//Info("volume-weighted RMS: {}", NormSync(grid, 2, error_channel, true));
