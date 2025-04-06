@@ -682,44 +682,44 @@ namespace SolverTests
 		}
 	}
 
-	__hostdev__ int ConvergenceTestLevelTarget(const HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const ConvergenceTestGridName grid_name, const int min_level, const int max_level)
-	{
-		if (grid_name == ConvergenceTestGridName::uniform)
-		{
-			return max_level;
-		}
-		else if (grid_name == ConvergenceTestGridName::sphere_shell_05)
-		{
-			auto bbox = acc.tileBBox(info);
-			auto bmin = bbox.min();
-			auto bmax = bbox.max();
-			const Vec ctr(0.5, 0.5, 0.5);
-			constexpr T radius = 0.5 / 2;
-			int inside_cnt = 0;
-			for (int di : {0, 1})
-			{
-				for (int dj : {0, 1})
-				{
-					for (int dk : {0, 1})
-					{
-						Vec vpos;
-						vpos[0] = bmin[0] + di * (bmax[0] - bmin[0]);
-						vpos[1] = bmin[1] + dj * (bmax[1] - bmin[1]);
-						vpos[2] = bmin[2] + dk * (bmax[2] - bmin[2]);
-						if ((vpos - ctr).length() < radius)
-						{
-							inside_cnt++;
-						}
-					}
-				}
-			}
-			if (inside_cnt == 0 || inside_cnt == 8)
-				return min_level;
-			else
-				return max_level;
-		}
-		return max_level;
-	}
+	//__hostdev__ int ConvergenceTestLevelTarget(const HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const ConvergenceTestGridName grid_name, const int min_level, const int max_level)
+	//{
+	//	if (grid_name == ConvergenceTestGridName::uniform)
+	//	{
+	//		return max_level;
+	//	}
+	//	else if (grid_name == ConvergenceTestGridName::sphere_shell_05)
+	//	{
+	//		auto bbox = acc.tileBBox(info);
+	//		auto bmin = bbox.min();
+	//		auto bmax = bbox.max();
+	//		const Vec ctr(0.5, 0.5, 0.5);
+	//		constexpr T radius = 0.5 / 2;
+	//		int inside_cnt = 0;
+	//		for (int di : {0, 1})
+	//		{
+	//			for (int dj : {0, 1})
+	//			{
+	//				for (int dk : {0, 1})
+	//				{
+	//					Vec vpos;
+	//					vpos[0] = bmin[0] + di * (bmax[0] - bmin[0]);
+	//					vpos[1] = bmin[1] + dj * (bmax[1] - bmin[1]);
+	//					vpos[2] = bmin[2] + dk * (bmax[2] - bmin[2]);
+	//					if ((vpos - ctr).length() < radius)
+	//					{
+	//						inside_cnt++;
+	//					}
+	//				}
+	//			}
+	//		}
+	//		if (inside_cnt == 0 || inside_cnt == 8)
+	//			return min_level;
+	//		else
+	//			return max_level;
+	//	}
+	//	return max_level;
+	//}
 
 	class UniformGridCase
 	{
@@ -737,31 +737,21 @@ namespace SolverTests
 	class SphereShell05GridCase
 	{
 	public:
+		__hostdev__ static T phi(const Vec& pos)
+		{
+			/*
+			 * Sphere shell with radius 0.5 centered at (0.5, 0.5, 0.5) with inner radius of 0.25
+			 */
+			const Vec ctr(0.5, 0.5, 0.5);
+			constexpr T radius = 0.5 / 2; // outer radius
+			return (pos - ctr).length() - radius;
+		}
 		__hostdev__ static int target(const HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const int min_level, const int max_level)
 		{
 			auto bbox = acc.tileBBox(info);
-			auto bmin = bbox.min();
-			auto bmax = bbox.max();
-			const Vec ctr(0.5, 0.5, 0.5);
-			constexpr T radius = 0.5 / 2;
-			int inside_cnt = 0;
-			for (int di : {0, 1})
-			{
-				for (int dj : {0, 1})
-				{
-					for (int dk : {0, 1})
-					{
-						Vec vpos;
-						vpos[0] = bmin[0] + di * (bmax[0] - bmin[0]);
-						vpos[1] = bmin[1] + dj * (bmax[1] - bmin[1]);
-						vpos[2] = bmin[2] + dk * (bmax[2] - bmin[2]);
-						if ((vpos - ctr).length() < radius)
-						{
-							inside_cnt++;
-						}
-					}
-				}
-			}
+			int inside_cnt = CornerInteriorCount(phi, bbox);
+
+
 			if (inside_cnt == 0 || inside_cnt == 8)
 				return min_level;
 			else
