@@ -84,7 +84,7 @@ __global__ void CoarsenOffDiagCoefficientsOneStepKernel(HATileAccessor<Tile> acc
 //2. override LEAF face coefficients with the coarsened values if it has GHOST children
 //3. calculate diagonal coefficients for all cells (LEAF, GHOST, and NONLEAF)
 //4. calculate cell types of NONLEAF cells
-void PrepareLaplacianSystemFromLeafAndGhostCellsAndFaceCoeffs(HADeviceGrid<Tile>& grid, const int coeff_channel, const T R_matrix_coeff) {
+void PrepareLaplacianSystemFromLeafAndGhostCellTypesAndFaceCoeffs(HADeviceGrid<Tile>& grid, const int coeff_channel, const T R_matrix_coeff) {
     //accumulate face terms to NONLEAF cells
 	//will override face terms of LEAF cells if they have GHOST children
     for (int i = grid.mMaxLevel; i > 0; i--) {
@@ -287,7 +287,7 @@ void CoarsenTypesAndAMGCoeffs(HADeviceGrid<Tile>& grid, const int coeff_channel,
         }
     }, LEAF | GHOST | NONLEAF);
 
-	PrepareLaplacianSystemFromLeafAndGhostCellsAndFaceCoeffs(grid, coeff_channel, R_matrix_coeff);
+    PrepareLaplacianSystemFromLeafAndGhostCellTypesAndFaceCoeffs(grid, coeff_channel, R_matrix_coeff);
 }
 
 class AMGLaplacianTileData {

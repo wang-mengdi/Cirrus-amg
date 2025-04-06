@@ -2068,7 +2068,7 @@ namespace SolverTests
 			}
 		},
 			LEAF);
-		CalcCellTypesFromLeafs(grid);
+
 		CalculateNeighborTiles(grid);
 
 		// amg with coef
@@ -2219,107 +2219,9 @@ namespace SolverTests
 			},
 				LEAF | GHOST);
 		}
-		//step 3: accumulate face terms
-		for (int i = grid.mMaxLevel; i >= 0; i--) {
-			int num_tiles = grid.hNumTiles[i];
-			if (num_tiles > 0) {
-				CoarsenOffDiagCoefficientsOneStepKernel << <num_tiles, 128 >> > (
-					grid.deviceAccessor(),
-					thrust::raw_pointer_cast(grid.dTileArrays[i].data()),
-					i,
-					LEAF | GHOST,
-					coeff_channel,
-					coeff_channel,
-					R_matrix_coeff,
-					INTERIOR | DIRICHLET | NEUMANN,
-					true
-					);
-			}
-		}
 
-		//step 4: calculate diagonal terms for LEAF cells and coarsen diagonal terms for NONLEAF cells
-		grid.launchVoxelFunc(
-			[=] __device__(HATileAccessor<Tile>&acc, HATileInfo<Tile>&info, const Coord & l_ijk) {
-			auto& tile = info.tile();
-			auto g_ijk = acc.composeGlobalCoord(info.mTileCoord, l_ijk);
 
-			if (info.mType & (LEAF | GHOST)) {
-				auto h = acc.voxelSize(info);
-				T diag_coeff = 0;
-				if (tile.type(l_ijk) & INTERIOR) {
-					acc.iterateSameLevelNeighborVoxels(info, l_ijk,
-						[&]__device__(const HATileInfo<Tile>&ninfo, const Coord & nl_ijk, const int axis, const int sgn) {
-						T c0 = tile(coeff_channel + axis, l_ijk);
-						//if ninfo if empty, we regard it as DIRICHLET and has coeff -h
-						T c1 = ninfo.empty() ? -h : ninfo.tile()(coeff_channel + axis, nl_ijk);
-						T face_term = (sgn == -1) ? c0 : c1;
-
-						//if (ninfo.mType == GHOST) face_term /= 8;
-						//if (ninfo.mType == GHOST) face_term /= 4;
-
-						diag_coeff -= face_term;
-					});
-				}
-				tile(coeff_channel + 3, l_ijk) = diag_coeff;
-			}
-			else {
-				//coarsen diagonal terms at NONLEAF cells
-				int interior_cnt = 0;
-				bool has_ghost_child = false;
-				uint8_t ctypes[2][2][2];
-				T coff_diag[3][2][2][2];//8 children
-				T diag_sum = 0;
-				for (int ci = 0; ci < 2; ci++) {
-					for (int cj = 0; cj < 2; cj++) {
-						for (int ck = 0; ck < 2; ck++) {
-							Coord cg_ijk(g_ijk[0] * 2 + ci, g_ijk[1] * 2 + cj, g_ijk[2] * 2 + ck);
-							HATileInfo<Tile> cinfo; Coord cl_ijk;
-							acc.findVoxel(info.mLevel + 1, cg_ijk, cinfo, cl_ijk);
-							if (!cinfo.empty()) {
-								if (cinfo.mType == GHOST) has_ghost_child = true;
-								auto& ctile = cinfo.tile();
-								diag_sum += ctile(coeff_channel + 3, cl_ijk);
-								interior_cnt += (ctile.type(cl_ijk) == INTERIOR);
-								ctypes[ci][cj][ck] = ctile.type(cl_ijk);
-								for (int axis : {0, 1, 2}) {
-									coff_diag[axis][ci][cj][ck] = ctile(coeff_channel + axis, cl_ijk);
-								}
-							}
-							else {
-								ctypes[ci][cj][ck] = DIRICHLET;
-								for (int axis : {0, 1, 2}) {
-									coff_diag[axis][ci][cj][ck] = 0;
-								}
-							}
-
-						}
-					}
-				}
-
-				for (int ci = 0; ci < 2; ci++) {
-					for (int cj = 0; cj < 2; cj++) {
-						for (int ck = 0; ck < 2; ck++) {
-							if (ctypes[0][cj][ck] == INTERIOR && ctypes[1][cj][ck] == INTERIOR) {
-								//it will be added twice
-								diag_sum += coff_diag[0][1][cj][ck];
-							}
-							if (ctypes[ci][0][ck] == INTERIOR && ctypes[ci][1][ck] == INTERIOR) {
-								//it will be added twice
-								diag_sum += coff_diag[1][ci][1][ck];
-							}
-							if (ctypes[ci][cj][0] == INTERIOR && ctypes[ci][cj][1] == INTERIOR) {
-								//it will be added twice
-								diag_sum += coff_diag[2][ci][cj][1];
-							}
-						}
-					}
-				}
-
-				tile.type(l_ijk) = interior_cnt > 0 ? INTERIOR : DIRICHLET;
-				tile(coeff_channel + 3, l_ijk) = diag_sum * R_matrix_coeff;
-			}
-		},
-			-1, LEAF | GHOST | NONLEAF, LAUNCH_SUBTREE, FINE_FIRST);
+		PrepareLaplacianSystemFromLeafAndGhostCellTypesAndFaceCoeffs(grid, coeff_channel, R_matrix_coeff);
 
 		//rhs
 		int rhs_channel = 1;
@@ -2430,10 +2332,21 @@ namespace SolverTests
 		{
 			float vel_val = -1.0;
 			Tile& tile = info.tile();
-			tile(Tile::b_channel, l_ijk) = tile(b1_channel, l_ijk);// -tile(b2_channel, l_ijk);
+			tile(Tile::b_channel, l_ijk) = tile(b1_channel, l_ijk);
+			//tile(Tile::b_channel, l_ijk) = tile(b1_channel, l_ijk) -tile(b2_channel, l_ijk);
+			//tile(Tile::b_channel, l_ijk) = tile(b2_channel, l_ijk);
 		}, LEAF);
 
 		
+		{
+			auto holder = grid.getHostTileHolder(LEAF);
+			polyscope::init();
+			IOFunc::AddLeveledPoissonGridCellCentersToPolyscopePointCloud(holder,
+				{ {-1, "type"}, {coeff_channel, "x-"} , {coeff_channel + 1, "y-"}, {coeff_channel + 2, "z-"}, {coeff_channel + 3, "diag"}, {Tile::b_channel, "b"} , {Tile::x_channel, "pressure"} },
+				{}, -1, FLT_MAX);
+			polyscope::show();
+		}
+
 		MultiGridParams params;
 		params.algorithm = "amg";
 		params.mu_repeat_times = 2;
@@ -2445,12 +2358,7 @@ namespace SolverTests
 
 		//TestSolidDivIter(solver, grid);
 		//TestSolidResIter(solver, grid);
-		auto holder = grid.getHostTileHolder(LEAF);
-		polyscope::init();
-		IOFunc::AddLeveledPoissonGridCellCentersToPolyscopePointCloud(holder,
-			{ {-1, "type"}, {coeff_channel, "x-"} , {coeff_channel + 1, "y-"}, {coeff_channel + 2, "z-"}, {coeff_channel + 3, "diag"}, {Tile::b_channel, "b"} , {Tile::x_channel, "pressure"}},
-			{}, -1, FLT_MAX);
-		polyscope::show();
+
 
 		//Info("linf: {}", NormSync(grid, -1, error_channel, false));
 		//Info("volume-weighted RMS: {}", NormSync(grid, 2, error_channel, true));
