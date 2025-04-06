@@ -2231,7 +2231,8 @@ namespace SolverTests
 					coeff_channel,
 					coeff_channel,
 					R_matrix_coeff,
-					INTERIOR | DIRICHLET | NEUMANN
+					INTERIOR | DIRICHLET | NEUMANN,
+					true
 					);
 			}
 		}
@@ -2421,21 +2422,9 @@ namespace SolverTests
 			}
 		}, LEAF);
 
-//<<<<<<< HEAD
-//		// solve
-//		solver.mu_cycle_repeat_times = 2;
-//		solver.omega = 1.5;
-//		auto [iters, err] = solver.solve(grid, true, 100, 1e-6, 2, 10, 1, is_pure_neumann);
-//		cudaDeviceSynchronize();
-//		
-//		AMGAddGradientToFace(grid, -1, LEAF | GHOST, grdt_channel, coeff_channel, u_channel);
-//		
-//		AMGFullNegativeLaplacianOnLeafs(grid, grdt_channel, coeff_channel, Tile::b_channel);
 //		// error
 		int error_channel = 13;
-//=======
 		// set rhs as b1 - b2
-//>>>>>>> solid
 		grid.launchVoxelFuncOnAllTiles(
 			[=] __device__(HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const Coord& l_ijk)
 		{

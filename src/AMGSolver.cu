@@ -22,12 +22,13 @@ __forceinline__ __device__ T NegativeLaplacianCoeff(T h, uint8_t ttype0, uint8_t
 }
 
 //will be called on fine tiles
-__global__ void CoarsenOffDiagCoefficientsOneStepKernel(HATileAccessor<Tile> acc, HATileInfo<Tile>* fine_tiles, int fine_subtree_level, uint8_t fine_tile_types, int fine_u_channel, int coarse_u_channel, Tile::T R_mat_coeff, uint8_t cell_types) {
+__global__ void CoarsenOffDiagCoefficientsOneStepKernel(HATileAccessor<Tile> acc, HATileInfo<Tile>* fine_tiles, int fine_subtree_level, uint8_t fine_tile_types, int fine_u_channel, int coarse_u_channel, Tile::T R_mat_coeff, uint8_t cell_types, bool additive) {
     __shared__ T data[3][8 * 8 * 8];
     int bi = blockIdx.x, ti = threadIdx.x;
     auto& finfo = fine_tiles[bi];
 
     if (!(finfo.subtreeType(fine_subtree_level) & fine_tile_types)) {
+        //printf("subtree type: %d, fine_tile_types: %d\n", finfo.subtreeType(fine_subtree_level), fine_tile_types);
         return;
     }
     auto& ftile = finfo.tile();
@@ -66,78 +67,27 @@ __global__ void CoarsenOffDiagCoefficientsOneStepKernel(HATileAccessor<Tile> acc
                 
                 //T coeff = finfo.mType == GHOST ? 1 : R_mat_coeff;
                 T coeff = R_mat_coeff;
-                ctile(coarse_u_channel + axis, cl_ijk) += sum * coeff;
+                if (additive) ctile(coarse_u_channel + axis, cl_ijk) += sum * coeff;
+                else ctile(coarse_u_channel + axis, cl_ijk) = sum * coeff;
             }
         }
 
     }
 }
 
-void CoarsenTypesAndAMGCoeffs(HADeviceGrid<Tile>& grid, const int coeff_channel, const T R_matrix_coeff) {
-    // Before calling this function, cell types for LEAFs must be filled
-    // This function will:
-    // 1. fill GHOST cell types
-    // 2. calculate off-diag and diag coeffs for LEAF and GHOST cells
-    // 3. calculate cell types off-diag and diag coeffs for NONLEAF cells
-    // all non-zero entries in R equal to R_matrix_coeff
-
-    //step 0: clear coeff channel for all tiles
-    grid.launchVoxelFuncOnAllTiles(
-        [=] __device__(HATileAccessor<Tile>&acc, HATileInfo<Tile>&info, const Coord & l_ijk) {
-        auto& tile = info.tile();
-        for (int axis : {0, 1, 2}) {
-            tile(coeff_channel + axis, l_ijk) = 0;
-        }
-        tile(coeff_channel + 3, l_ijk) = 0;
-    },
-        LEAF | GHOST | NONLEAF
-    );
-
-    //step 1: fill GHOST cell types
-    grid.launchVoxelFuncOnAllTiles(
-        [=] __device__(HATileAccessor<Tile>&acc, HATileInfo<Tile>&info, const Coord & l_ijk) {
-        auto& tile = info.tile();
-        auto g_ijk = acc.composeGlobalCoord(info.mTileCoord, l_ijk);
-        auto pg_ijk = acc.parentCoord(g_ijk);
-        HATileInfo<Tile> pinfo; Coord pl_ijk;
-        acc.findVoxel(info.mLevel - 1, pg_ijk, pinfo, pl_ijk);
-        if (!pinfo.empty()) tile.type(l_ijk) = pinfo.tile().type(pl_ijk);
-        else tile.type(l_ijk) = DIRICHLET;
-    }, GHOST);
-
-    //step 2: calculate face terms on LEAF and GHOST cells
-    grid.launchVoxelFuncOnAllTiles(
-        [=] __device__(HATileAccessor<Tile>&acc, HATileInfo<Tile>&info, const Coord & l_ijk) {
-        auto h = acc.voxelSize(info);
-        Tile& tile = info.tile();
-        uint8_t ttype0 = info.mType;
-        uint8_t ctype0 = tile.type(l_ijk);
-
-        //iterate neighbors
-        acc.iterateSameLevelNeighborVoxels(info, l_ijk,
-            [&]__device__(const HATileInfo<Tile>&ninfo, const Coord & nl_ijk, const int axis, const int sgn) {
-            if (sgn != -1) return;
-
-            uint8_t ttype1;
-            uint8_t ctype1;
-            T coeff = 0;
-            if (ninfo.empty()) {
-                ttype1 = ttype0;
-                ctype1 = DIRICHLET;
-            }
-            else {
-                auto& ntile = ninfo.tile();
-                ttype1 = ninfo.mType;
-                ctype1 = ntile.type(nl_ijk);
-            }
-            coeff = NegativeLaplacianCoeff(h, ttype0, ttype1, ctype0, ctype1);
-            //if (ttype0 == GHOST) coeff *= 0.5;
-            tile(coeff_channel + axis, l_ijk) = -coeff;
-        });
-    }, LEAF | GHOST);
-
-    //step 3: accumulate face terms
-    for (int i = grid.mMaxLevel; i >= 0; i--) {
+//requires:
+//1. LEAF and GHOST cell types
+//2. face coefficients on LEAF and GHOST cells
+//3. LEAF-NONLEAF face coeffs and NONLEAF face coeffs must be set to 0
+//will calculate:
+//1. off-diagonal coefficients for NONLEAF cells coarsened from LEAF/GHOST cells
+//2. override LEAF face coefficients with the coarsened values if it has GHOST children
+//3. calculate diagonal coefficients for all cells (LEAF, GHOST, and NONLEAF)
+//4. calculate cell types of NONLEAF cells
+void PrepareLaplacianSystemFromLeafAndGhostCellsAndFaceCoeffs(HADeviceGrid<Tile>& grid, const int coeff_channel, const T R_matrix_coeff) {
+    //accumulate face terms to NONLEAF cells
+	//will override face terms of LEAF cells if they have GHOST children
+    for (int i = grid.mMaxLevel; i > 0; i--) {
         int num_tiles = grid.hNumTiles[i];
         if (num_tiles > 0) {
             CoarsenOffDiagCoefficientsOneStepKernel << <num_tiles, 128 >> > (
@@ -148,14 +98,17 @@ void CoarsenTypesAndAMGCoeffs(HADeviceGrid<Tile>& grid, const int coeff_channel,
                 coeff_channel,
                 coeff_channel,
                 R_matrix_coeff,
-                INTERIOR | DIRICHLET | NEUMANN
+                INTERIOR | DIRICHLET | NEUMANN,
+                true
                 );
         }
     }
 
-    //step 4: calculate diagonal terms for LEAF cells and coarsen diagonal terms for NONLEAF cells
+    //calculate diagonal terms for LEAF/GHOST cells
+    //calculate diagonal terms for NONLEAF cells
+    //calculate cell types for NONLEAF cells
     grid.launchVoxelFunc(
-        [=] __device__(HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const Coord& l_ijk) {
+        [=] __device__(HATileAccessor<Tile>&acc, HATileInfo<Tile>&info, const Coord & l_ijk) {
         auto& tile = info.tile();
         auto g_ijk = acc.composeGlobalCoord(info.mTileCoord, l_ijk);
 
@@ -271,6 +224,70 @@ void CoarsenTypesAndAMGCoeffs(HADeviceGrid<Tile>& grid, const int coeff_channel,
         }
     },
         -1, LEAF | GHOST | NONLEAF, LAUNCH_SUBTREE, FINE_FIRST);
+}
+
+void CoarsenTypesAndAMGCoeffs(HADeviceGrid<Tile>& grid, const int coeff_channel, const T R_matrix_coeff) {
+    // Before calling this function, cell types for LEAFs must be filled
+    // This function will:
+    // 1. fill GHOST cell types
+    // 2. calculate off-diag and diag coeffs for LEAF and GHOST cells
+    // 3. calculate cell types off-diag and diag coeffs for NONLEAF cells
+    // all non-zero entries in R equal to R_matrix_coeff
+
+    //fill GHOST cell types
+    grid.launchVoxelFuncOnAllTiles(
+        [=] __device__(HATileAccessor<Tile>&acc, HATileInfo<Tile>&info, const Coord & l_ijk) {
+        auto& tile = info.tile();
+        auto g_ijk = acc.composeGlobalCoord(info.mTileCoord, l_ijk);
+        auto pg_ijk = acc.parentCoord(g_ijk);
+        HATileInfo<Tile> pinfo; Coord pl_ijk;
+        acc.findVoxel(info.mLevel - 1, pg_ijk, pinfo, pl_ijk);
+        if (!pinfo.empty()) tile.type(l_ijk) = pinfo.tile().type(pl_ijk);
+        else tile.type(l_ijk) = DIRICHLET;
+    }, GHOST);
+
+    //step 2: calculate face terms on LEAF and GHOST cells, set face term to 0 for NONLEAF cells
+    grid.launchVoxelFuncOnAllTiles(
+        [=] __device__(HATileAccessor<Tile>&acc, HATileInfo<Tile>&info, const Coord & l_ijk) {
+        auto h = acc.voxelSize(info);
+        Tile& tile = info.tile();
+        uint8_t ttype0 = info.mType;
+        uint8_t ctype0 = tile.type(l_ijk);
+
+        if (ttype0 == NONLEAF) {
+            for (int axis : {0, 1, 2}) {
+				//for non-leaf, set the face coeffs to 0, they will be accumulated later
+				tile(coeff_channel + axis, l_ijk) = 0;
+            }
+        }
+        else {
+            //LEAF or GHOST
+
+            //iterate neighbors
+            acc.iterateSameLevelNeighborVoxels(info, l_ijk,
+                [&]__device__(const HATileInfo<Tile>&ninfo, const Coord & nl_ijk, const int axis, const int sgn) {
+                if (sgn != -1) return;
+
+                uint8_t ttype1;
+                uint8_t ctype1;
+                T coeff = 0;
+                if (ninfo.empty()) {
+                    ttype1 = ttype0;
+                    ctype1 = DIRICHLET;
+                }
+                else {
+                    auto& ntile = ninfo.tile();
+                    ttype1 = ninfo.mType;
+                    ctype1 = ntile.type(nl_ijk);
+                }
+                coeff = NegativeLaplacianCoeff(h, ttype0, ttype1, ctype0, ctype1);
+                //if (ttype0 == GHOST) coeff *= 0.5;
+                tile(coeff_channel + axis, l_ijk) = -coeff;
+            });
+        }
+    }, LEAF | GHOST | NONLEAF);
+
+	PrepareLaplacianSystemFromLeafAndGhostCellsAndFaceCoeffs(grid, coeff_channel, R_matrix_coeff);
 }
 
 class AMGLaplacianTileData {
