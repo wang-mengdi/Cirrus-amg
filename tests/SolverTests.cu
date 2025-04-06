@@ -119,6 +119,151 @@ namespace SolverTests
 		}
 	}
 
+	__hostdev__ float FracInside(float a, float b)
+	{
+		if (a < 0.0 && b < 0.0)
+			return 0.0;
+		else if (a < 0.0 && b >= 0.0)
+			return b / (b - a);
+		else if (a >= 0.0 && b < 0.0)
+			return a / (a - b);
+		else
+			return 1.0;
+	}
+
+	__hostdev__ float FaceFluidRatio(float phi0, float phi1, float phi2, float phi3)
+	{
+		// calculate vol
+		float ret;
+		if (phi0 < 0 && phi1 < 0 && phi2 < 0 && phi3 < 0)
+		{
+			ret = 0;
+		}
+		else if (phi0 < 0 && phi1 < 0 && phi2 < 0 && phi3 >= 0)
+		{
+			float edge1 = FracInside(phi3, phi2);
+			float edge2 = FracInside(phi3, phi0);
+			ret = 0.5 * edge1 * edge2;
+		}
+		else if (phi0 < 0 && phi1 < 0 && phi2 >= 0 && phi3 < 0)
+		{
+			float edge1 = FracInside(phi2, phi1);
+			float edge2 = FracInside(phi2, phi3);
+			ret = 0.5 * edge1 * edge2;
+		}
+		else if (phi0 < 0 && phi1 < 0 && phi2 >= 0 && phi3 >= 0)
+		{
+			float edge1 = FracInside(phi2, phi1);
+			float edge2 = FracInside(phi3, phi0);
+			ret = 0.5 * (edge1 + edge2);
+		}
+		else if (phi0 < 0 && phi1 >= 0 && phi2 < 0 && phi3 < 0)
+		{
+			float edge1 = FracInside(phi1, phi0);
+			float edge2 = FracInside(phi1, phi2);
+			ret = 0.5 * edge1 * edge2;
+		}
+		else if (phi0 < 0 && phi1 >= 0 && phi2 < 0 && phi3 >= 0)
+		{
+			float edge1 = FracInside(phi1, phi0);
+			float edge2 = FracInside(phi1, phi2);
+			float edge3 = FracInside(phi3, phi2);
+			float edge4 = FracInside(phi3, phi0);
+			ret = 0.5 * edge1 * edge2 + 0.5 * edge3 * edge4;
+		}
+		else if (phi0 < 0 && phi1 >= 0 && phi2 >= 0 && phi3 < 0)
+		{
+			float edge1 = FracInside(phi1, phi0);
+			float edge2 = FracInside(phi2, phi3);
+			ret = 0.5 * (edge1 + edge2);
+		}
+		else if (phi0 < 0 && phi1 >= 0 && phi2 >= 0 && phi3 >= 0)
+		{
+			float edge1 = 1.0 - FracInside(phi0, phi1);
+			float edge2 = 1.0 - FracInside(phi0, phi3);
+			ret = 1.0 - 0.5 * edge1 * edge2;
+		}
+		else if (phi0 >= 0 && phi1 < 0 && phi2 < 0 && phi3 < 0)
+		{
+			float edge1 = FracInside(phi0, phi1);
+			float edge2 = FracInside(phi0, phi3);
+			ret = 0.5 * edge1 * edge2;
+		}
+		else if (phi0 >= 0 && phi1 < 0 && phi2 < 0 && phi3 >= 0)
+		{
+			float edge1 = FracInside(phi0, phi1);
+			float edge2 = FracInside(phi3, phi2);
+			ret = 0.5 * (edge1 + edge2);
+		}
+		else if (phi0 >= 0 && phi1 < 0 && phi2 >= 0 && phi3 < 0)
+		{
+			float edge1 = FracInside(phi0, phi1);
+			float edge2 = FracInside(phi0, phi3);
+			float edge3 = FracInside(phi2, phi1);
+			float edge4 = FracInside(phi2, phi3);
+			ret = 0.5 * edge1 * edge2 + 0.5 * edge3 * edge4;
+		}
+		else if (phi0 >= 0 && phi1 < 0 && phi2 >= 0 && phi3 >= 0)
+		{
+			float edge1 = 1.0 - FracInside(phi1, phi0);
+			float edge2 = 1.0 - FracInside(phi1, phi2);
+			ret = 1.0 - 0.5 * edge1 * edge2;
+		}
+		else if (phi0 >= 0 && phi1 >= 0 && phi2 < 0 && phi3 < 0)
+		{
+			float edge1 = FracInside(phi0, phi3);
+			float edge2 = FracInside(phi1, phi2);
+			ret = 0.5 * (edge1 + edge2);
+		}
+		else if (phi0 >= 0 && phi1 >= 0 && phi2 < 0 && phi3 >= 0)
+		{
+			float edge1 = 1.0 - FracInside(phi2, phi1);
+			float edge2 = 1.0 - FracInside(phi2, phi3);
+			ret = 1.0 - 0.5 * edge1 * edge2;
+		}
+		else if (phi0 >= 0 && phi1 >= 0 && phi2 >= 0 && phi3 < 0)
+		{
+			float edge1 = 1.0 - FracInside(phi3, phi0);
+			float edge2 = 1.0 - FracInside(phi3, phi2);
+			ret = 1.0 - 0.5 * edge1 * edge2;
+		}
+		else
+		{
+			ret = 1;
+		}
+		if (ret < 0.1 && ret != 0)
+			ret = 0.1;
+		return ret;
+	}
+
+	template<class FuncV>
+	__hostdev__ static int CornerInteriorCount(FuncV phi, const nanovdb::BBox<Vec>& bbox)
+	{
+		// Count how many of the 8 corners of the bbox are inside the solid (phi < 0).
+		const Vec& bmin = bbox.min();
+		const Vec& bmax = bbox.max();
+
+		int inside_cnt = 0;
+		for (int di : {0, 1})
+		{
+			for (int dj : {0, 1})
+			{
+				for (int dk : {0, 1})
+				{
+					Vec vpos;
+					vpos[0] = (di == 0) ? bmin[0] : bmax[0];
+					vpos[1] = (dj == 0) ? bmin[1] : bmax[1];
+					vpos[2] = (dk == 0) ? bmin[2] : bmax[2];
+					if (phi(vpos) < 0)
+					{
+						inside_cnt++;
+					}
+				}
+			}
+		}
+		return inside_cnt;
+	}
+
 	void TestAMGLaplacianAndFluxConsistency(TestGrids grid_name)
 	{
 		fmt::print("==========================================================\n");
@@ -641,26 +786,7 @@ namespace SolverTests
 		__hostdev__ static int target(const HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const int min_level, const int max_level)
 		{
 			auto bbox = acc.tileBBox(info);
-			auto bmin = bbox.min();
-			auto bmax = bbox.max();
-			int inside_cnt = 0;
-			for (int di : {0, 1})
-			{
-				for (int dj : {0, 1})
-				{
-					for (int dk : {0, 1})
-					{
-						Vec vpos;
-						vpos[0] = bmin[0] + di * (bmax[0] - bmin[0]);
-						vpos[1] = bmin[1] + dj * (bmax[1] - bmin[1]);
-						vpos[2] = bmin[2] + dk * (bmax[2] - bmin[2]);
-						if (phi(vpos) < 0)
-						{
-							inside_cnt++;
-						}
-					}
-				}
-			}
+			int inside_cnt = CornerInteriorCount(phi, bbox);
 			if (inside_cnt == 0 || inside_cnt == 8)
 				return min_level;
 			else
@@ -668,27 +794,9 @@ namespace SolverTests
 		}
 		__hostdev__ static uint8_t type(const HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const nanovdb::Coord& l_ijk)
 		{
-			auto pos = acc.cellCenter(info, l_ijk);
-			auto dx = acc.voxelSize(info);
-			Vec bmin(pos[0] - 0.5 * dx, pos[1] - 0.5 * dx, pos[2] - 0.5 * dx);
-			int inside_cnt = 0;
-			for (int di : {0, 1})
-			{
-				for (int dj : {0, 1})
-				{
-					for (int dk : {0, 1})
-					{
-						Vec vpos;
-						vpos[0] = bmin[0] + di * dx;
-						vpos[1] = bmin[1] + dj * dx;
-						vpos[2] = bmin[2] + dk * dx;
-						if (phi(vpos) < 0)
-						{
-							inside_cnt++;
-						}
-					}
-				}
-			}
+			auto bbox = acc.cellBBox(info, l_ijk);
+			int inside_cnt = CornerInteriorCount(phi, bbox);
+
 			if (inside_cnt == 8)
 				return CellType::NEUMANN;
 			else
@@ -696,88 +804,106 @@ namespace SolverTests
 		}
 	};
 
-	class SphereAir05GridCase
-	{
-	public:
-		__hostdev__ static int target(const HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const int min_level, const int max_level)
-		{
-			auto bbox = acc.tileBBox(info);
-			auto bmin = bbox.min();
-			auto bmax = bbox.max();
-			const Vec ctr(0.5, 0.5, 0.5);
-			constexpr T radius = 0.5 / 2;
-			int inside_cnt = 0;
-			for (int di : {0, 1})
-			{
-				for (int dj : {0, 1})
-				{
-					for (int dk : {0, 1})
-					{
-						Vec vpos;
-						vpos[0] = bmin[0] + di * (bmax[0] - bmin[0]);
-						vpos[1] = bmin[1] + dj * (bmax[1] - bmin[1]);
-						vpos[2] = bmin[2] + dk * (bmax[2] - bmin[2]);
-						if ((vpos - ctr).length() < radius)
-						{
-							inside_cnt++;
-						}
-					}
-				}
-			}
-			if (inside_cnt == 0 || inside_cnt == 8)
-				return min_level;
-			else
-				return max_level;
-		}
-		__hostdev__ static uint8_t type(const HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const nanovdb::Coord& l_ijk)
-		{
-			auto pos = acc.cellCenter(info, l_ijk);
-			const Vec ctr(0.5, 0.5, 0.5);
-			constexpr T radius = 0.5 / 2;
-			if ((pos - ctr).length() < radius)
-				return CellType::DIRICHLET;
-			else
-				return CellType::INTERIOR;
-		}
-	};
+	//class SphereAir05GridCase
+	//{
+	//public:
+	//	__hostdev__ static int target(const HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const int min_level, const int max_level)
+	//	{
+	//		auto bbox = acc.tileBBox(info);
+	//		auto bmin = bbox.min();
+	//		auto bmax = bbox.max();
+	//		const Vec ctr(0.5, 0.5, 0.5);
+	//		constexpr T radius = 0.5 / 2;
+	//		int inside_cnt = 0;
+	//		for (int di : {0, 1})
+	//		{
+	//			for (int dj : {0, 1})
+	//			{
+	//				for (int dk : {0, 1})
+	//				{
+	//					Vec vpos;
+	//					vpos[0] = bmin[0] + di * (bmax[0] - bmin[0]);
+	//					vpos[1] = bmin[1] + dj * (bmax[1] - bmin[1]);
+	//					vpos[2] = bmin[2] + dk * (bmax[2] - bmin[2]);
+	//					if ((vpos - ctr).length() < radius)
+	//					{
+	//						inside_cnt++;
+	//					}
+	//				}
+	//			}
+	//		}
+	//		if (inside_cnt == 0 || inside_cnt == 8)
+	//			return min_level;
+	//		else
+	//			return max_level;
+	//	}
+	//	__hostdev__ static uint8_t type(const HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const nanovdb::Coord& l_ijk)
+	//	{
+	//		auto pos = acc.cellCenter(info, l_ijk);
+	//		const Vec ctr(0.5, 0.5, 0.5);
+	//		constexpr T radius = 0.5 / 2;
+	//		if ((pos - ctr).length() < radius)
+	//			return CellType::DIRICHLET;
+	//		else
+	//			return CellType::INTERIOR;
+	//	}
+	//};
 	class StarShellGerrisGridCase
 	{
 	public:
+		__hostdev__ static T phi(const Vec& pos)
+		{
+			// Star shape in spherical coordinates
+			T x = pos[0] - 0.5;
+			T y = pos[1] - 0.5;
+			T z = pos[2] - 0.5;
+			T r = sqrt(x * x + y * y + z * z);
+			if (r == 0)
+				return T(FLT_MAX); // avoid division by zero
+			T theta = acos(z / r);
+			T phi = atan2(y, x);
+
+			T r0 = 0.237 + 0.079 * cos(6 * theta) * cos(6 * phi);
+			return r - r0;
+		}
+
 		__hostdev__ static int target(const HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const int min_level, const int max_level)
 		{
 			auto bbox = acc.tileBBox(info);
-			auto bmin = bbox.min();
-			auto bmax = bbox.max();
-			int inside_cnt = 0;
-			for (int di : {0, 1})
-			{
-				for (int dj : {0, 1})
-				{
-					for (int dk : {0, 1})
-					{
-						Vec vpos;
-						vpos[0] = bmin[0] + di * (bmax[0] - bmin[0]);
-						vpos[1] = bmin[1] + dj * (bmax[1] - bmin[1]);
-						vpos[2] = bmin[2] + dk * (bmax[2] - bmin[2]);
+			int inside_cnt = CornerInteriorCount(phi, bbox);
 
-						T x = vpos[0] - 0.5;
-						T y = vpos[1] - 0.5;
-						T z = vpos[2] - 0.5;
-						T r = sqrt(x * x + y * y + z * z);
-						T theta = acos(z / r);
-						T phi = atan2(y, x);
+			//auto bmin = bbox.min();
+			//auto bmax = bbox.max();
+			//int inside_cnt = 0;
+			//for (int di : {0, 1})
+			//{
+			//	for (int dj : {0, 1})
+			//	{
+			//		for (int dk : {0, 1})
+			//		{
+			//			Vec vpos;
+			//			vpos[0] = bmin[0] + di * (bmax[0] - bmin[0]);
+			//			vpos[1] = bmin[1] + dj * (bmax[1] - bmin[1]);
+			//			vpos[2] = bmin[2] + dk * (bmax[2] - bmin[2]);
 
-						T r0 = 0.237 + 0.079 * cos(6 * theta) * cos(6 * phi);
+			//			T x = vpos[0] - 0.5;
+			//			T y = vpos[1] - 0.5;
+			//			T z = vpos[2] - 0.5;
+			//			T r = sqrt(x * x + y * y + z * z);
+			//			T theta = acos(z / r);
+			//			T phi = atan2(y, x);
 
-						// T r0 = 0.237 + 0.079 * cos(6 * theta);
+			//			T r0 = 0.237 + 0.079 * cos(6 * theta) * cos(6 * phi);
 
-						if (r < r0)
-						{
-							inside_cnt++;
-						}
-					}
-				}
-			}
+			//			// T r0 = 0.237 + 0.079 * cos(6 * theta);
+
+			//			if (r < r0)
+			//			{
+			//				inside_cnt++;
+			//			}
+			//		}
+			//	}
+			//}
 			if (inside_cnt == 0 || inside_cnt == 8)
 				return min_level;
 			else
@@ -789,83 +915,83 @@ namespace SolverTests
 		}
 	};
 
-	class StarSolidGerrisGridCase
-	{
-	public:
-		__hostdev__ static T phi(const Vec& pos)
-		{
-			T x = pos[0] - 0.5;
-			T y = pos[1] - 0.5;
-			T z = pos[2] - 0.5;
-			T r = sqrt(x * x + y * y + z * z);
-			T theta = acos(z / r);
-			T phi = atan2(y, x);
+	//class StarSolidGerrisGridCase
+	//{
+	//public:
+	//	__hostdev__ static T phi(const Vec& pos)
+	//	{
+	//		T x = pos[0] - 0.5;
+	//		T y = pos[1] - 0.5;
+	//		T z = pos[2] - 0.5;
+	//		T r = sqrt(x * x + y * y + z * z);
+	//		T theta = acos(z / r);
+	//		T phi = atan2(y, x);
 
-			T r0 = 0.237 + 0.079 * cos(6 * theta) * cos(6 * phi);
-			return r - r0;
-		}
-		__hostdev__ static int target(const HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const int min_level, const int max_level)
-		{
-			auto bbox = acc.tileBBox(info);
-			auto bmin = bbox.min();
-			auto bmax = bbox.max();
-			int inside_cnt = 0;
-			for (int di : {0, 1})
-			{
-				for (int dj : {0, 1})
-				{
-					for (int dk : {0, 1})
-					{
-						Vec vpos;
-						vpos[0] = bmin[0] + di * (bmax[0] - bmin[0]);
-						vpos[1] = bmin[1] + dj * (bmax[1] - bmin[1]);
-						vpos[2] = bmin[2] + dk * (bmax[2] - bmin[2]);
+	//		T r0 = 0.237 + 0.079 * cos(6 * theta) * cos(6 * phi);
+	//		return r - r0;
+	//	}
+	//	__hostdev__ static int target(const HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const int min_level, const int max_level)
+	//	{
+	//		auto bbox = acc.tileBBox(info);
+	//		auto bmin = bbox.min();
+	//		auto bmax = bbox.max();
+	//		int inside_cnt = 0;
+	//		for (int di : {0, 1})
+	//		{
+	//			for (int dj : {0, 1})
+	//			{
+	//				for (int dk : {0, 1})
+	//				{
+	//					Vec vpos;
+	//					vpos[0] = bmin[0] + di * (bmax[0] - bmin[0]);
+	//					vpos[1] = bmin[1] + dj * (bmax[1] - bmin[1]);
+	//					vpos[2] = bmin[2] + dk * (bmax[2] - bmin[2]);
 
-						if (phi(vpos) < 0)
-						{
-							inside_cnt++;
-						}
-					}
-				}
-			}
-			if (inside_cnt == 0 || inside_cnt == 8)
-				return min_level;
-			else
-				return max_level;
-		}
+	//					if (phi(vpos) < 0)
+	//					{
+	//						inside_cnt++;
+	//					}
+	//				}
+	//			}
+	//		}
+	//		if (inside_cnt == 0 || inside_cnt == 8)
+	//			return min_level;
+	//		else
+	//			return max_level;
+	//	}
 
-		__hostdev__ static uint8_t type(const HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const nanovdb::Coord& l_ijk)
-		{
-			auto pos = acc.cellCenter(info, l_ijk);
-			auto dx = acc.voxelSize(info);
-			Vec bmin(pos[0] - 0.5 * dx, pos[1] - 0.5 * dx, pos[2] - 0.5 * dx);
-			const Vec ctr(0.5, 0.5, 0.5);
-			constexpr T radius = 0.5 / 2;
-			int inside_cnt = 0;
-			for (int di : {0, 1})
-			{
-				for (int dj : {0, 1})
-				{
-					for (int dk : {0, 1})
-					{
-						Vec vpos;
-						vpos[0] = bmin[0] + di * dx;
-						vpos[1] = bmin[1] + dj * dx;
-						vpos[2] = bmin[2] + dk * dx;
+	//	__hostdev__ static uint8_t type(const HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const nanovdb::Coord& l_ijk)
+	//	{
+	//		auto pos = acc.cellCenter(info, l_ijk);
+	//		auto dx = acc.voxelSize(info);
+	//		Vec bmin(pos[0] - 0.5 * dx, pos[1] - 0.5 * dx, pos[2] - 0.5 * dx);
+	//		const Vec ctr(0.5, 0.5, 0.5);
+	//		constexpr T radius = 0.5 / 2;
+	//		int inside_cnt = 0;
+	//		for (int di : {0, 1})
+	//		{
+	//			for (int dj : {0, 1})
+	//			{
+	//				for (int dk : {0, 1})
+	//				{
+	//					Vec vpos;
+	//					vpos[0] = bmin[0] + di * dx;
+	//					vpos[1] = bmin[1] + dj * dx;
+	//					vpos[2] = bmin[2] + dk * dx;
 
-						if (phi(vpos) < 0)
-						{
-							inside_cnt++;
-						}
-					}
-				}
-			}
-			if (inside_cnt == 8)
-				return CellType::NEUMANN;
-			else
-				return CellType::INTERIOR;
-		}
-	};
+	//					if (phi(vpos) < 0)
+	//					{
+	//						inside_cnt++;
+	//					}
+	//				}
+	//			}
+	//		}
+	//		if (inside_cnt == 8)
+	//			return CellType::NEUMANN;
+	//		else
+	//			return CellType::INTERIOR;
+	//	}
+	//};
 
 	class GerrisSinFunc
 	{
@@ -1785,122 +1911,22 @@ namespace SolverTests
 		}
 	}
 
-	__hostdev__ float FracInside(float a, float b)
-	{
-		if (a < 0.0 && b < 0.0)
-			return 0.0;
-		else if (a < 0.0 && b >= 0.0)
-			return b / (b - a);
-		else if (a >= 0.0 && b < 0.0)
-			return a / (a - b);
-		else
-			return 1.0;
-	}
 
-	__hostdev__ float FaceFluidRatio(float phi0, float phi1, float phi2, float phi3)
-	{
-		// calculate vol
-		float ret;
-		if (phi0 < 0 && phi1 < 0 && phi2 < 0 && phi3 < 0)
-		{
-			ret = 0;
-		}
-		else if (phi0 < 0 && phi1 < 0 && phi2 < 0 && phi3 >= 0)
-		{
-			float edge1 = FracInside(phi3, phi2);
-			float edge2 = FracInside(phi3, phi0);
-			ret = 0.5 * edge1 * edge2;
-		}
-		else if (phi0 < 0 && phi1 < 0 && phi2 >= 0 && phi3 < 0)
-		{
-			float edge1 = FracInside(phi2, phi1);
-			float edge2 = FracInside(phi2, phi3);
-			ret = 0.5 * edge1 * edge2;
-		}
-		else if (phi0 < 0 && phi1 < 0 && phi2 >= 0 && phi3 >= 0)
-		{
-			float edge1 = FracInside(phi2, phi1);
-			float edge2 = FracInside(phi3, phi0);
-			ret = 0.5 * (edge1 + edge2);
-		}
-		else if (phi0 < 0 && phi1 >= 0 && phi2 < 0 && phi3 < 0)
-		{
-			float edge1 = FracInside(phi1, phi0);
-			float edge2 = FracInside(phi1, phi2);
-			ret = 0.5 * edge1 * edge2;
-		}
-		else if (phi0 < 0 && phi1 >= 0 && phi2 < 0 && phi3 >= 0)
-		{
-			float edge1 = FracInside(phi1, phi0);
-			float edge2 = FracInside(phi1, phi2);
-			float edge3 = FracInside(phi3, phi2);
-			float edge4 = FracInside(phi3, phi0);
-			ret = 0.5 * edge1 * edge2 + 0.5 * edge3 * edge4;
-		}
-		else if (phi0 < 0 && phi1 >= 0 && phi2 >= 0 && phi3 < 0)
-		{
-			float edge1 = FracInside(phi1, phi0);
-			float edge2 = FracInside(phi2, phi3);
-			ret = 0.5 * (edge1 + edge2);
-		}
-		else if (phi0 < 0 && phi1 >= 0 && phi2 >= 0 && phi3 >= 0)
-		{
-			float edge1 = 1.0 - FracInside(phi0, phi1);
-			float edge2 = 1.0 - FracInside(phi0, phi3);
-			ret = 1.0 - 0.5 * edge1 * edge2;
-		}
-		else if (phi0 >= 0 && phi1 < 0 && phi2 < 0 && phi3 < 0)
-		{
-			float edge1 = FracInside(phi0, phi1);
-			float edge2 = FracInside(phi0, phi3);
-			ret = 0.5 * edge1 * edge2;
-		}
-		else if (phi0 >= 0 && phi1 < 0 && phi2 < 0 && phi3 >= 0)
-		{
-			float edge1 = FracInside(phi0, phi1);
-			float edge2 = FracInside(phi3, phi2);
-			ret = 0.5 * (edge1 + edge2);
-		}
-		else if (phi0 >= 0 && phi1 < 0 && phi2 >= 0 && phi3 < 0)
-		{
-			float edge1 = FracInside(phi0, phi1);
-			float edge2 = FracInside(phi0, phi3);
-			float edge3 = FracInside(phi2, phi1);
-			float edge4 = FracInside(phi2, phi3);
-			ret = 0.5 * edge1 * edge2 + 0.5 * edge3 * edge4;
-		}
-		else if (phi0 >= 0 && phi1 < 0 && phi2 >= 0 && phi3 >= 0)
-		{
-			float edge1 = 1.0 - FracInside(phi1, phi0);
-			float edge2 = 1.0 - FracInside(phi1, phi2);
-			ret = 1.0 - 0.5 * edge1 * edge2;
-		}
-		else if (phi0 >= 0 && phi1 >= 0 && phi2 < 0 && phi3 < 0)
-		{
-			float edge1 = FracInside(phi0, phi3);
-			float edge2 = FracInside(phi1, phi2);
-			ret = 0.5 * (edge1 + edge2);
-		}
-		else if (phi0 >= 0 && phi1 >= 0 && phi2 < 0 && phi3 >= 0)
-		{
-			float edge1 =1.0 - FracInside(phi2, phi1);
-			float edge2 =1.0 - FracInside(phi2, phi3);
-			ret = 1.0 - 0.5 * edge1 * edge2;
-		}
-		else if (phi0 >= 0 && phi1 >= 0 && phi2 >= 0 && phi3 < 0)
-		{
-			float edge1 = 1.0 - FracInside(phi3, phi0);
-			float edge2 = 1.0 - FracInside(phi3, phi2);
-			ret = 1.0 - 0.5 * edge1 * edge2;
-		}
-		else
-		{
-			ret = 1;
-		}
-		if (ret < 0.1 && ret != 0)
-			ret = 0.1;
-		return ret;
-	}
+
+	//template<class FuncV>
+	//void CreateLaplacianSystemWithSolidCut(HADeviceGrid<Tile>& grid, FuncV phi, const int coeff_channel, const T R_matrix_coeff) {
+	//	//1. set pure NEUMANN cells to NEUMANN if they're currently INTERIOR
+	//	//2. calculate face/diag coeffs for all LEAF/GHOST/NONLEAF cells
+
+	//	//set cell types to NEUMANN for pure NEUMANN cells
+	//	grid.launchVoxelFuncOnAllTiles(
+	//		[=] __device__(HATileAccessor<Tile> &acc, HATileInfo<Tile> &info, const Coord & l_ijk)
+	//	{
+	//		auto& tile = info.tile();
+	//		tile.type(l_ijk) = GridCase::type(acc, info, l_ijk);
+	//	},
+	//		LEAF);
+	//}
 
 	template<class FuncII>
 	__hostdev__ void IterateFaceNeighborCellTypes(const HATileAccessor<Tile>& acc, const HATileInfo<Tile>& info, const Coord& l_ijk, const int axis, FuncII f) {

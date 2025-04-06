@@ -68,7 +68,7 @@ void ReseedMarkerParticles(HADeviceGrid<Tile>& grid, const int tmp_channel, Func
 			auto l_ijk = acc.localOffsetToCoord(l_idx);
 
 			//sample random particles
-			auto bbox = acc.voxelBBox(info, l_ijk);
+			auto bbox = acc.cellBBox(info, l_ijk);
 			auto minPoint = bbox.min();
 			auto maxPoint = bbox.max();
 

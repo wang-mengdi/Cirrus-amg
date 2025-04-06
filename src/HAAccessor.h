@@ -126,15 +126,15 @@ public:
 	__hostdev__ nanovdb::BBox<Vec> tileBBox(const HATileInfo<Tile>& info)const {
 		return tileBBox(info.mLevel, info.mTileCoord);
 	}
-	__hostdev__ nanovdb::BBox<Vec> voxelBBox(const uint32_t level, const Coord& b_ijk, const Coord& l_ijk) const {
+	__hostdev__ nanovdb::BBox<Vec> cellBBox(const uint32_t level, const Coord& b_ijk, const Coord& l_ijk) const {
 		auto h = voxelSize(level);
 		auto g_ijk = composeGlobalCoord(b_ijk, l_ijk);
 		auto mn = Vec(g_ijk[0], g_ijk[1], g_ijk[2]) * h;
 		auto mx = Vec(g_ijk[0] + 1, g_ijk[1] + 1, g_ijk[2] + 1) * h;
 		return nanovdb::BBox<Vec>(mn, mx);
 	}
-	__hostdev__ nanovdb::BBox<Vec> voxelBBox(const HATileInfo<Tile>& info, const Coord& l_ijk)const {
-		return voxelBBox(info.mLevel, info.mTileCoord, l_ijk);
+	__hostdev__ nanovdb::BBox<Vec> cellBBox(const HATileInfo<Tile>& info, const Coord& l_ijk)const {
+		return cellBBox(info.mLevel, info.mTileCoord, l_ijk);
 	}
 
 	//idx in [0,7] indicating which child
