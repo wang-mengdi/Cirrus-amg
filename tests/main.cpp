@@ -40,15 +40,15 @@ int main(int argc, char** argv) {
 	{
 		//test 1
 
-		//test 1, grid convergence and runtime part
-		for (int min_level : {2, 3, 4, 5}) {
-			SolverTests::TestSolverErrorWithAllNeumannBC("uniform", 1.0, min_level, min_level, "athena_sin", "amg");
-			SolverTests::TestSolverErrorWithAllNeumannBC("sphere_shell_05", 1.0, min_level, min_level + 2, "athena_sin", "amg");
-			SolverTests::TestSolverErrorWithAllNeumannBC("star_shell", 1.0, min_level, min_level + 2, "athena_sin", "amg");
+		////test 1, grid convergence and runtime part
+		//for (int min_level : {2, 3, 4, 5}) {
+		//	SolverTests::TestSolverErrorWithAllNeumannBC("uniform", 1.0, min_level, min_level, "athena_sin", "amg");
+		//	SolverTests::TestSolverErrorWithAllNeumannBC("sphere_shell_05", 1.0, min_level, min_level + 2, "athena_sin", "amg");
+		//	SolverTests::TestSolverErrorWithAllNeumannBC("star_shell", 1.0, min_level, min_level + 2, "athena_sin", "amg");
 
-			//an additional test for sphere with solid inside
-			//SolverTests::TestSolverErrorWithAllNeumannBC("sphere_solid_05", 1.0, min_level, min_level + 2, "athena_sin", "amg");
-		}
+		//	//an additional test for sphere with solid inside
+		//	//SolverTests::TestSolverErrorWithAllNeumannBC("sphere_solid_05", 1.0, min_level, min_level + 2, "athena_sin", "amg");
+		//}
 
 		////test 1, iters convergence part
 		//for (int min_level : {2, 3, 4, 5}) {
@@ -96,13 +96,13 @@ int main(int argc, char** argv) {
 	}
 
 	//SolverTests::TestSolverErrorSolid("sphere", 2, 4);
-	//SolverTests::TestSolverErrorSolid("sphere", 3, 5);
+	SolverTests::TestSolverErrorSolid("sphere", 3, 5);
 	//SolverTests::TestSolverErrorSolid("sphere", 4, 6);
 	//SolverTests::TestSolverErrorSolid("sphere", 5, 7);
 	 
-	SolverTests::TestRecoveryNew("sphere", 2, 4);
-	SolverTests::TestRecoveryNew("sphere", 3, 5);
-	SolverTests::TestRecoveryNew("sphere", 4, 6);
+	//SolverTests::TestRecoveryNew("sphere", 2, 4);
+	//SolverTests::TestRecoveryNew("sphere", 3, 5);
+	//SolverTests::TestRecoveryNew("sphere", 4, 6);
 	//SolverTests::TestRecoveryNew("sphere", 5, 7);
 
 

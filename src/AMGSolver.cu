@@ -686,8 +686,8 @@ void AMGVolumeWeightedDivergenceOnLeafs(HADeviceGrid<Tile>& grid, int u_channel,
     //        }
         });
 
-        tile(x_channel, l_ijk) = sum;
-        //tile(x_channel, l_ijk) = (ctype0 & INTERIOR) ? sum : 0;
+        //tile(x_channel, l_ijk) = sum;
+        tile(x_channel, l_ijk) = (ctype0 & INTERIOR) ? sum : 0;
 
     }, LEAF);
 }

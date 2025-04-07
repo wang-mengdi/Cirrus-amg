@@ -237,7 +237,7 @@ namespace SolverTests
 	}
 
 	template<class FuncV>
-	__hostdev__ static int CornerInteriorCount(FuncV phi, const nanovdb::BBox<Vec>& bbox)
+	__hostdev__ static int CornerInteriorCount(FuncV phi, const nanovdb::BBox<Vec>& bbox, T isovalue = 0)
 	{
 		// Count how many of the 8 corners of the bbox are inside the solid (phi < 0).
 		const Vec& bmin = bbox.min();
@@ -254,7 +254,7 @@ namespace SolverTests
 					vpos[0] = (di == 0) ? bmin[0] : bmax[0];
 					vpos[1] = (dj == 0) ? bmin[1] : bmax[1];
 					vpos[2] = (dk == 0) ? bmin[2] : bmax[2];
-					if (phi(vpos) < 0)
+					if (phi(vpos) - isovalue < 0)
 					{
 						inside_cnt++;
 					}
@@ -776,11 +776,18 @@ namespace SolverTests
 		__hostdev__ static int target(const HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const int min_level, const int max_level)
 		{
 			auto bbox = acc.tileBBox(info);
-			int inside_cnt = CornerInteriorCount(phi, bbox);
-			if (inside_cnt == 0 || inside_cnt == 8)
-				return min_level;
-			else
-				return max_level;
+
+			int inside_cnt0 = CornerInteriorCount(phi, bbox, 0.0); // count corners inside the solid
+			int inside_cnt1 = CornerInteriorCount(phi, bbox, 0.01); 
+
+			if (inside_cnt0 == 8 || inside_cnt1 == 0) return min_level;
+			return max_level;
+
+			//int inside_cnt = CornerInteriorCount(phi, bbox);
+			//if (inside_cnt == 0 || inside_cnt == 8)
+			//	return min_level;
+			//else
+			//	return max_level;
 		}
 		__hostdev__ static uint8_t type(const HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const nanovdb::Coord& l_ijk)
 		{
@@ -1903,20 +1910,126 @@ namespace SolverTests
 
 
 
-	//template<class FuncV>
-	//void CreateLaplacianSystemWithSolidCut(HADeviceGrid<Tile>& grid, FuncV phi, const int coeff_channel, const T R_matrix_coeff) {
-	//	//1. set pure NEUMANN cells to NEUMANN if they're currently INTERIOR
-	//	//2. calculate face/diag coeffs for all LEAF/GHOST/NONLEAF cells
+	template<class FuncV>
+	void CreateLaplacianSystemWithSolidCut(HADeviceGrid<Tile>& grid, FuncV func_phi, const int coeff_channel, const T R_matrix_coeff) {
+		//1. make sure pure NEUMANN cells defined by phi are set to NEUMANN
+		//2. calculate face/diag coeffs for all LEAF/GHOST/NONLEAF cells
 
-	//	//set cell types to NEUMANN for pure NEUMANN cells
-	//	grid.launchVoxelFuncOnAllTiles(
-	//		[=] __device__(HATileAccessor<Tile> &acc, HATileInfo<Tile> &info, const Coord & l_ijk)
-	//	{
-	//		auto& tile = info.tile();
-	//		tile.type(l_ijk) = GridCase::type(acc, info, l_ijk);
-	//	},
-	//		LEAF);
-	//}
+		//set cell types to NEUMANN for pure NEUMANN cells
+		grid.launchVoxelFuncOnAllTiles(
+			[=] __device__(HATileAccessor<Tile> &acc, HATileInfo<Tile> &info, const Coord & l_ijk)
+		{
+			auto& tile = info.tile();
+			auto bbox = acc.cellBBox(info, l_ijk);
+			int interior_cnt = CornerInteriorCount(func_phi, bbox);
+			if (interior_cnt == 8) tile.type(l_ijk) = NEUMANN;
+		},
+			LEAF);
+		//here we have correct cell types for all LEAF cells
+		CheckCudaError("CreateLaplacianSystemWithSolidCut: setting NEUMANN cell types failed");
+
+		//set GHOST cell types
+		grid.launchVoxelFuncOnAllTiles(
+			[=] __device__(HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const Coord& l_ijk)
+		{
+			auto& tile = info.tile();
+			auto g_ijk = acc.composeGlobalCoord(info.mTileCoord, l_ijk);
+			auto pg_ijk = acc.parentCoord(g_ijk);
+			HATileInfo<Tile> pinfo;
+			Coord pl_ijk;
+			acc.findVoxel(info.mLevel - 1, pg_ijk, pinfo, pl_ijk);
+			if (!pinfo.empty())
+				tile.type(l_ijk) = pinfo.tile().type(pl_ijk);
+			else
+				tile.type(l_ijk) = DIRICHLET;
+		},
+			GHOST);
+		CheckCudaError("CreateLaplacianSystemWithSolidCut: setting GHOST cell types failed");
+
+		//calculate face terms for LEAF and GHOST cells
+		grid.launchVoxelFuncOnAllTiles(
+			[=] __device__(HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const Coord& l_ijk)
+		{
+			auto h = acc.voxelSize(info);
+			Tile& tile = info.tile();
+			uint8_t ttype0 = info.mType;
+			uint8_t ctype0 = tile.type(l_ijk);
+
+			if (ttype0 == NONLEAF) {
+				// for NONLEAF, we will calculate the coefficients later in the solver
+				for (int axis = 0; axis < 3; ++axis) {
+					tile(coeff_channel + axis, l_ijk) = 0;
+				}
+			}
+			else {
+				//LEAF or GHOST
+
+				auto cell_center = acc.cellCenter(info, l_ijk);
+				// iterate neighbors
+				acc.iterateSameLevelNeighborVoxels(info, l_ijk,
+					[&] __device__(const HATileInfo<Tile> &ninfo, const Coord & nl_ijk, const int axis, const int sgn)
+				{
+					if (sgn != -1)
+						return;
+					T coeff = 0;
+
+					uint8_t ttype1;
+					uint8_t ctype1;
+					if (ninfo.empty())
+					{
+						ttype1 = ttype0;
+						ctype1 = DIRICHLET;
+					}
+					else
+					{
+						auto& ntile = ninfo.tile();
+						ttype1 = ninfo.mType;
+						ctype1 = ntile.type(nl_ijk);
+					}
+					bool both_leafs = ((ttype0 & LEAF) && (ttype1 & LEAF));
+					bool one_leaf_one_ghost = ((ttype0 & LEAF && ttype1 & GHOST) || (ttype0 & GHOST && ttype1 & LEAF));
+					bool has_neumann = (ctype0 & NEUMANN || ctype1 & NEUMANN);
+					bool has_interior = (ctype0 & INTERIOR || ctype1 & INTERIOR);
+					if ((both_leafs || one_leaf_one_ghost) && !has_neumann && has_interior)
+					{
+						Vec face_corner[4];
+						if (axis == 0)
+						{
+							face_corner[0] = cell_center + Vec(-0.5, -0.5, -0.5) * h;
+							face_corner[1] = cell_center + Vec(-0.5, -0.5, 0.5) * h;
+							face_corner[2] = cell_center + Vec(-0.5, 0.5, 0.5) * h;
+							face_corner[3] = cell_center + Vec(-0.5, 0.5, -0.5) * h;
+						}
+						else if (axis == 1)
+						{
+							face_corner[0] = cell_center + Vec(-0.5, -0.5, -0.5) * h;
+							face_corner[1] = cell_center + Vec(-0.5, -0.5, 0.5) * h;
+							face_corner[2] = cell_center + Vec(0.5, -0.5, 0.5) * h;
+							face_corner[3] = cell_center + Vec(0.5, -0.5, -0.5) * h;
+						}
+						else if (axis == 2)
+						{
+							face_corner[0] = cell_center + Vec(-0.5, -0.5, -0.5) * h;
+							face_corner[1] = cell_center + Vec(-0.5, 0.5, -0.5) * h;
+							face_corner[2] = cell_center + Vec(0.5, 0.5, -0.5) * h;
+							face_corner[3] = cell_center + Vec(0.5, -0.5, -0.5) * h;
+						}
+						float phi[4];
+						for (int i = 0; i < 4; i++)
+						{
+							phi[i] = func_phi(face_corner[i]);
+						}
+						coeff = h * FaceFluidRatio(phi[0], phi[1], phi[2], phi[3]);
+					}
+					tile(coeff_channel + axis, l_ijk) = -coeff;
+				});
+			}
+		},
+			LEAF | GHOST | NONLEAF);
+		CheckCudaError("CreateLaplacianSystemWithSolidCut: calculating face coefficients failed");
+
+		PrepareLaplacianSystemFromLeafAndGhostCellTypesAndFaceCoeffs(grid, coeff_channel, R_matrix_coeff);
+	}
 
 	template<class FuncII>
 	__hostdev__ void IterateFaceNeighborCellTypes(const HATileAccessor<Tile>& acc, const HATileInfo<Tile>& info, const Coord& l_ijk, const int axis, FuncII f) {
@@ -1956,6 +2069,9 @@ namespace SolverTests
 				f(type0, type1);
 			}
 		}
+		else {
+			f(type0, type0);
+		}
 	}
 
 	void ClearAllNeumannNeighborFaces(HADeviceGrid<Tile>& grid, const int u_channel)
@@ -1965,7 +2081,8 @@ namespace SolverTests
 			for (int axis : {0, 1, 2}) {
 				bool to_set = false;
 				IterateFaceNeighborCellTypes(acc, info, l_ijk, axis, [&](const uint8_t type0, const uint8_t type1) {
-					if ((type0 & NEUMANN) || (type1 & NEUMANN) || ((type0 & DIRICHLET) && (type1 & DIRICHLET))) {
+					//if ((type0 & NEUMANN) || (type1 & NEUMANN) || ((type0 & DIRICHLET) && (type1 & DIRICHLET))) {
+					if ((type0 & NEUMANN) || (type1 & NEUMANN)) {
 						to_set = true;
 					}
 					});
@@ -2050,6 +2167,17 @@ namespace SolverTests
 			grid_name, min_level, max_level
 		);
 
+		//0,1,2,3,4: AMG
+		//6,7,8,9: coefficients
+		//10,11,12: u,v,w
+		//13: error
+		int coeff_channel = 6;
+		int u_channel = 10;
+		int v_channel = 11;
+		int w_channel = 12;
+		int error_channel = 13;
+
+
 		std::shared_ptr<HADeviceGrid<Tile>> grid_ptr;
 		// grid with type
 		if (grid_name == "sphere")
@@ -2085,165 +2213,96 @@ namespace SolverTests
 		},
 			LEAF);
 
-		CalculateNeighborTiles(grid);
 
 		// amg with coef
-		int coeff_channel = 6;
 		float R_matrix_coeff = 0.5;
-		AMGSolver solver(coeff_channel, R_matrix_coeff, 1, 1);
-		// step 0: clear coeff channel for all tiles
-		grid.launchVoxelFuncOnAllTiles(
-			[=] __device__(HATileAccessor<Tile> &acc, HATileInfo<Tile> &info, const Coord & l_ijk)
-		{
-			auto& tile = info.tile();
-			for (int axis : {0, 1, 2})
-			{
-				tile(coeff_channel + axis, l_ijk) = 0;
-			}
-			tile(coeff_channel + 3, l_ijk) = 0;
-		},
-			LEAF | GHOST | NONLEAF);
-		// step 1: fill GHOST cell types
-		grid.launchVoxelFuncOnAllTiles(
-			[=] __device__(HATileAccessor<Tile> &acc, HATileInfo<Tile> &info, const Coord & l_ijk)
-		{
-			auto& tile = info.tile();
-			auto g_ijk = acc.composeGlobalCoord(info.mTileCoord, l_ijk);
-			auto pg_ijk = acc.parentCoord(g_ijk);
-			HATileInfo<Tile> pinfo;
-			Coord pl_ijk;
-			acc.findVoxel(info.mLevel - 1, pg_ijk, pinfo, pl_ijk);
-			if (!pinfo.empty())
-				tile.type(l_ijk) = pinfo.tile().type(pl_ijk);
-			else
-				tile.type(l_ijk) = DIRICHLET;
-		},
-			GHOST);
-		// step 2: calculate face terms on LEAF and GHOST cells
-		if (grid_name == "sphere")
-		{
-			grid.launchVoxelFuncOnAllTiles(
-				[=] __device__(HATileAccessor<Tile> &acc, HATileInfo<Tile> &info, const Coord & l_ijk)
-			{
-				auto h = acc.voxelSize(info);
-				Tile& tile = info.tile();
-				uint8_t ttype0 = info.mType;
-				uint8_t ctype0 = tile.type(l_ijk);
-				auto cell_center = acc.cellCenter(info, l_ijk);
-				// iterate neighbors
-				acc.iterateSameLevelNeighborVoxels(info, l_ijk,
-					[&] __device__(const HATileInfo<Tile> &ninfo, const Coord & nl_ijk, const int axis, const int sgn)
-				{
-					if (sgn != -1)
-						return;
-					T coeff = 0;
 
-					uint8_t ttype1;
-					uint8_t ctype1;
-					if (ninfo.empty())
-					{
-						ttype1 = ttype0;
-						ctype1 = DIRICHLET;
-					}
-					else
-					{
-						auto& ntile = ninfo.tile();
-						ttype1 = ninfo.mType;
-						ctype1 = ntile.type(nl_ijk);
-					}
-					bool both_leafs = ((ttype0 & LEAF) && (ttype1 & LEAF));
-					bool one_leaf_one_ghost = ((ttype0 & LEAF && ttype1 & GHOST) || (ttype0 & GHOST && ttype1 & LEAF));
-					bool has_neumann = (ctype0 & NEUMANN || ctype1 & NEUMANN);
-					bool has_interior = (ctype0 & INTERIOR || ctype1 & INTERIOR);
-					if ((both_leafs || one_leaf_one_ghost) && !has_neumann && has_interior)
-					{
-						Vec face_corner[4];
-						if (axis == 0)
-						{
-							face_corner[0] = cell_center + Vec(-0.5, -0.5, -0.5) * h;
-							face_corner[1] = cell_center + Vec(-0.5, -0.5, 0.5) * h;
-							face_corner[2] = cell_center + Vec(-0.5, 0.5, 0.5) * h;
-							face_corner[3] = cell_center + Vec(-0.5, 0.5, -0.5) * h;
-						}
-						else if (axis == 1)
-						{
-							face_corner[0] = cell_center + Vec(-0.5, -0.5, -0.5) * h;
-							face_corner[1] = cell_center + Vec(-0.5, -0.5, 0.5) * h;
-							face_corner[2] = cell_center + Vec(0.5, -0.5, 0.5) * h;
-							face_corner[3] = cell_center + Vec(0.5, -0.5, -0.5) * h;
-						}
-						else if (axis == 2)
-						{
-							face_corner[0] = cell_center + Vec(-0.5, -0.5, -0.5) * h;
-							face_corner[1] = cell_center + Vec(-0.5, 0.5, -0.5) * h;
-							face_corner[2] = cell_center + Vec(0.5, 0.5, -0.5) * h;
-							face_corner[3] = cell_center + Vec(0.5, -0.5, -0.5) * h;
-						}
-						float phi[4];
-						for (int i = 0; i < 4; i++)
-						{
-							phi[i] = SphereSolid05GridCase::phi(face_corner[i]);
-						}
-						coeff = h * FaceFluidRatio(phi[0], phi[1], phi[2], phi[3]);
-					}
-					tile(coeff_channel + axis, l_ijk) = -coeff;
-				});
-			},
-				LEAF | GHOST);
+		if (grid_name == "sphere") {
+			auto func_phi = []__hostdev__(const Vec & pt) {
+				// sphere solid case, phi is defined by SphereSolid05GridCase::phi
+				return SphereSolid05GridCase::phi(pt);
+			};
+			CreateLaplacianSystemWithSolidCut(grid, func_phi, coeff_channel, R_matrix_coeff);
 		}
-		else if (grid_name == "uniform")
-		{
-			grid.launchVoxelFuncOnAllTiles(
-				[=] __device__(HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const Coord& l_ijk)
-			{
-				auto h = acc.voxelSize(info);
-				Tile& tile = info.tile();
-				uint8_t ttype0 = info.mType;
-				uint8_t ctype0 = tile.type(l_ijk);
-				auto cell_center = acc.cellCenter(info, l_ijk);
-				// iterate neighbors
-				acc.iterateSameLevelNeighborVoxels(info, l_ijk,
-					[&] __device__(const HATileInfo<Tile> &ninfo, const Coord & nl_ijk, const int axis, const int sgn)
-				{
-					if (sgn != -1)
-						return;
-					T coeff = 0;
-
-					uint8_t ttype1;
-					uint8_t ctype1;
-					if (ninfo.empty())
-					{
-						ttype1 = ttype0;
-						ctype1 = DIRICHLET;
-					}
-					else
-					{
-						auto& ntile = ninfo.tile();
-						ttype1 = ninfo.mType;
-						ctype1 = ntile.type(nl_ijk);
-					}
-					bool both_leafs = ((ttype0 & LEAF) && (ttype1 & LEAF));
-					bool one_leaf_one_ghost = ((ttype0 & LEAF && ttype1 & GHOST) || (ttype0 & GHOST && ttype1 & LEAF));
-					bool has_neumann = (ctype0 & NEUMANN || ctype1 & NEUMANN);
-					bool has_interior = (ctype0 & INTERIOR || ctype1 & INTERIOR);
-					if ((both_leafs || one_leaf_one_ghost) && !has_neumann && has_interior)
-					{
-						coeff = h;
-					}
-					tile(coeff_channel + axis, l_ijk) = -coeff;
-				});
-			},
-				LEAF | GHOST);
+		else if (grid_name == "uniform") {
+			//phi is defined as a constant 1 in uniform
+			auto func_phi = []__hostdev__(const Vec& pt) {
+				// uniform grid, phi is constant 1
+				return 1.0f; // this is a solid everywhere
+			};
+			CreateLaplacianSystemWithSolidCut(grid, func_phi, coeff_channel, R_matrix_coeff);
+		}
+		else {
+			Assert(false, "grid_name {} not supported for CreateLaplacianSystemWithSolidCut", grid_name);
 		}
 
+		CalculateNeighborTiles(grid);
 
-		PrepareLaplacianSystemFromLeafAndGhostCellTypesAndFaceCoeffs(grid, coeff_channel, R_matrix_coeff);
+
+		//{
+		//	//closure test
+		//	//0 for x
+		//	//2,3,4 for grad(x)
+		//	//1 for -lap(x)
+		//	//5 for div(grad)
+		//	//set x to athena_sin_func
+
+		//	grid.launchVoxelFuncOnAllTiles(
+		//		[=] __device__(HATileAccessor<Tile>&acc, HATileInfo<Tile>&info, const Coord & l_ijk)
+		//	{
+		//		auto& tile = info.tile();
+		//		if (tile.type(l_ijk) & INTERIOR)
+		//		{
+		//			// set x to a known function, e.g., sin
+		//			auto pos = acc.cellCenter(info, l_ijk); // get cell center in global coordinates
+		//			auto x = pos[0]; // x coordinate
+		//			auto y = pos[1]; // y coordinate
+		//			auto z = pos[2]; // z coordinate
+		//			tile(Tile::x_channel, l_ijk) = static_cast<T>(sin(x) * sin(y) * sin(z)); // known function, e.g., sin(x)*sin(y)*sin(z)
+		//		}
+		//		else
+		//		{
+		//			tile(Tile::x_channel, l_ijk) = 0;
+		//		}
+		//		for (int axis : {0, 1, 2}) {
+		//			tile(2 + axis, l_ijk) = 0;
+		//		}
+		//	},
+		//		LEAF
+		//	);
+		//	AMGFullNegativeLaplacianOnLeafs(grid, Tile::x_channel, coeff_channel, 1);
+		//	AMGAddGradientToFace(grid, -1, LEAF | GHOST, Tile::x_channel, coeff_channel, 2);
+		//	AMGVolumeWeightedDivergenceOnLeafs(grid, 2, coeff_channel, 5); // div(grad)
+
+		//	//calculate div(grad(x))-lap(x) to error_channel
+		//	grid.launchVoxelFuncOnAllTiles(
+		//		[=] __device__(HATileAccessor<Tile>&acc, HATileInfo<Tile>&info, const Coord & l_ijk)
+		//	{
+		//		auto& tile = info.tile();
+		//		if (tile.type(l_ijk) & INTERIOR)
+		//		{
+		//			// calculate div(grad(x)) - lap(x)
+		//			T div_grad = tile(5, l_ijk);
+		//			T neg_lap_x = tile(1, l_ijk);
+		//			tile(error_channel, l_ijk) = div_grad + neg_lap_x;
+		//		}
+		//		else
+		//		{
+		//			tile(error_channel, l_ijk) = 0;
+		//		}
+		//	},
+		//		LEAF
+		//	);
+		//	//linf norm
+		//	double linf_norm = NormSync(grid, -1, error_channel, false, INTERIOR | NEUMANN | DIRICHLET);
+		//	Info("Closure test: linf norm of div(grad(x)) - lap(x) is: {}", linf_norm);
+		//	return;
+		//}
+		//
 
 		//rhs
 		int rhs_channel = 1;
-		int u_channel = 10;
-		int v_channel = 11;
-		int w_channel = 12;
+
 
 		// store nonsolvable rhs in b1 channel
 		int b1_channel = 13;
@@ -2256,15 +2315,16 @@ namespace SolverTests
 			tile(w_channel, l_ijk) = 0.0f;
 			auto g_ijk = acc.composeGlobalCoord(info.mTileCoord, l_ijk);
 
-			if (tile.type(l_ijk) == NEUMANN || g_ijk[1] == 1)
-			{
-				tile(v_channel, l_ijk) = 0;
-			}
-			else
+			//if (tile.type(l_ijk) == NEUMANN || g_ijk[1] == 1)
+			//{
+			//	tile(v_channel, l_ijk) = 0;
+			//}
+			//else
 			{
 				tile(v_channel, l_ijk) = vel_val;
 			}
 		}, LEAF);
+		ClearAllNeumannNeighborFaces(grid, u_channel);
 		AMGVolumeWeightedDivergenceOnLeafs(grid, u_channel, coeff_channel, b1_channel);
 		grid.launchVoxelFuncOnAllTiles(
 			[=] __device__(HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const Coord& l_ijk)
@@ -2275,6 +2335,8 @@ namespace SolverTests
 			if (!(tile.type(l_ijk) & INTERIOR))
 				tile(b1_channel, l_ijk) = 0;
 		}, LEAF);
+		
+
 
 		// store solvable rhs in b2 channel
 		int b2_channel = 14;
@@ -2286,17 +2348,14 @@ namespace SolverTests
 			tile(u_channel, l_ijk) = 0.0f;
 			tile(w_channel, l_ijk) = 0.0f;
 			auto g_ijk = acc.composeGlobalCoord(info.mTileCoord, l_ijk);
-
-			if (tile.type(l_ijk) == NEUMANN || g_ijk[1] == 1)
-			{
-				tile(v_channel, l_ijk) = 0;
-			}
-			else
 			{
 				tile(v_channel, l_ijk) = vel_val;
 			}
 		}, LEAF);
+		ClearAllNeumannNeighborFaces(grid, u_channel);
+
 		AMGVolumeWeightedDivergenceOnLeafs(grid, u_channel, coeff_channel, b2_channel);
+
 		grid.launchVoxelFuncOnAllTiles(
 			[=] __device__(HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const Coord& l_ijk)
 		{
@@ -2328,6 +2387,7 @@ namespace SolverTests
 								auto npos = acc.cellCenter(info, nl_ijk);
 								val = npos[1];
 							}
+							val = 0;
 							float coeff = ntile(coeff_channel + 1, nl_ijk);
 							tile(b2_channel, l_ijk) -= coeff * val;
 						}
@@ -2341,7 +2401,7 @@ namespace SolverTests
 		}, LEAF);
 
 //		// error
-		int error_channel = 13;
+		
 		// set rhs as b1 - b2
 		grid.launchVoxelFuncOnAllTiles(
 			[=] __device__(HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const Coord& l_ijk)
@@ -2353,15 +2413,9 @@ namespace SolverTests
 			//tile(Tile::b_channel, l_ijk) = tile(b2_channel, l_ijk);
 		}, LEAF);
 
-		
-		{
-			auto holder = grid.getHostTileHolder(LEAF);
-			polyscope::init();
-			IOFunc::AddLeveledPoissonGridCellCentersToPolyscopePointCloud(holder,
-				{ {-1, "type"}, {coeff_channel, "x-"} , {coeff_channel + 1, "y-"}, {coeff_channel + 2, "z-"}, {coeff_channel + 3, "diag"}, {Tile::b_channel, "b"} , {Tile::x_channel, "pressure"} },
-				{}, -1, FLT_MAX);
-			polyscope::show();
-		}
+
+
+
 
 		MultiGridParams params;
 		params.algorithm = "amg";
@@ -2372,8 +2426,25 @@ namespace SolverTests
 
 		SolveLinearSystem(grid, coeff_channel, false, 100, 1e-6, 1, params, true);
 
+
+
+
 		//TestSolidDivIter(solver, grid);
 		//TestSolidResIter(solver, grid);
+
+		AMGAddGradientToFace(grid, -1, LEAF | GHOST, Tile::x_channel, coeff_channel, u_channel); // add gradient to face for u
+		ClearAllNeumannNeighborFaces(grid, u_channel); // clear neumann faces to avoid divergence
+		AMGVolumeWeightedDivergenceOnLeafs(grid, u_channel, coeff_channel, error_channel); // calculate divergence of u
+		Info("div linf: {} (should be close to 0 for a good solution)", NormSync(grid, -1, error_channel, false, INTERIOR | NEUMANN | DIRICHLET));
+
+		{
+			auto holder = grid.getHostTileHolder(LEAF);
+			polyscope::init();
+			IOFunc::AddLeveledPoissonGridCellCentersToPolyscopePointCloud(holder,
+				{ {-1, "type"}, {coeff_channel, "x-"} , {coeff_channel + 1, "y-"}, {coeff_channel + 2, "z-"}, {coeff_channel + 3, "diag"}, {Tile::b_channel, "residual"} , {Tile::x_channel, "pressure"}, {error_channel, "div"} },
+				{ {u_channel, "vel"} }, -1, FLT_MAX);
+			polyscope::show();
+		}
 
 
 		//Info("linf: {}", NormSync(grid, -1, error_channel, false));
