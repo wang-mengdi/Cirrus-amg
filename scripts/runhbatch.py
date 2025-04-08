@@ -51,7 +51,8 @@ def is_render_successful(output_dir, frame):
 def render_frame(hip_file, frame, output_path):
     #render_command = f"render -V -f {frame} {frame} /stage/usdrender_rop1 -o {output_path}/frame_{frame:04d}.png"
     #render_command = f"render -V -f {frame} {frame} /out/mantra_ipr -o {output_path}/frame_{frame}.exr"
-    render_command = f"render -V -f {frame} {frame} /out/mantra_ipr"
+    #render_command = f"render -V -f {frame} {frame} /out/mantra_ipr"
+    render_command = f"render -V -f {frame} {frame} /out/mantra_ipr -o {output_path}/frame_{frame:04d}.png"
     print(f"Rendering frame {frame}...")
 
     # 启动 hbatch 进程，直接将 stdout 和 stderr 转发到父进程的终端
@@ -110,7 +111,8 @@ def main():
         print(f"Error: {args.hip_file} does not exist.")
         return
 
-    output_dir = os.path.join(os.path.dirname(args.hip_file), args.output_dir)
+    #output_dir = os.path.join(os.path.dirname(args.hip_file), args.output_dir)
+    os.makedirs(args.output_dir, exist_ok=True)
 
     # 记录开始时间
     start_time = time.time()
