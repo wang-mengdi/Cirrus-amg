@@ -112,7 +112,8 @@ def main():
         return
 
     #output_dir = os.path.join(os.path.dirname(args.hip_file), args.output_dir)
-    os.makedirs(args.output_dir, exist_ok=True)
+    output_dir = args.output_dir
+    os.makedirs(output_dir, exist_ok=True)
 
     # 记录开始时间
     start_time = time.time()
