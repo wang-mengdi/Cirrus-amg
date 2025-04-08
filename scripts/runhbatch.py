@@ -38,7 +38,7 @@ def is_render_successful(output_dir, frame):
 
     for filename in os.listdir(output_dir):
         # 检查是否存在以 .png 或 .jpg 结尾的文件
-        if frame_pattern in filename and (filename.endswith(".png") or filename.endswith(".jpg")):
+        if frame_pattern in filename and (filename.endswith(".png") or filename.endswith(".jpg") or filename.endswith(".exr")):
             has_image_file = True
 
         # 检查是否存在以 checkpoint 结尾的文件
@@ -49,9 +49,9 @@ def is_render_successful(output_dir, frame):
     return has_image_file and not has_checkpoint_file
 
 def render_frame(hip_file, frame, output_path):
-    render_command = f"render -V -f {frame} {frame} /stage/usdrender_rop1 -o {output_path}/frame_{frame:04d}.png"
+    #render_command = f"render -V -f {frame} {frame} /stage/usdrender_rop1 -o {output_path}/frame_{frame:04d}.png"
     #render_command = f"render -V -f {frame} {frame} /out/mantra_ipr -o {output_path}/frame_{frame}.exr"
-    #render_command = f"render -V -f {frame} {frame} /out/mantra_ipr"
+    render_command = f"render -V -f {frame} {frame} /out/mantra_ipr"
     print(f"Rendering frame {frame}...")
 
     # 启动 hbatch 进程，直接将 stdout 和 stderr 转发到父进程的终端

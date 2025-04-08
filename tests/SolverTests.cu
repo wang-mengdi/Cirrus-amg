@@ -2437,14 +2437,14 @@ namespace SolverTests
 		AMGVolumeWeightedDivergenceOnLeafs(grid, u_channel, coeff_channel, error_channel); // calculate divergence of u
 		Info("div linf: {} (should be close to 0 for a good solution)", NormSync(grid, -1, error_channel, false, INTERIOR | NEUMANN | DIRICHLET));
 
-		{
-			auto holder = grid.getHostTileHolder(LEAF);
-			polyscope::init();
-			IOFunc::AddLeveledPoissonGridCellCentersToPolyscopePointCloud(holder,
-				{ {-1, "type"}, {coeff_channel, "x-"} , {coeff_channel + 1, "y-"}, {coeff_channel + 2, "z-"}, {coeff_channel + 3, "diag"}, {Tile::b_channel, "residual"} , {Tile::x_channel, "pressure"}, {error_channel, "div"} },
-				{ {u_channel, "vel"} }, -1, FLT_MAX);
-			polyscope::show();
-		}
+		//{
+		//	auto holder = grid.getHostTileHolder(LEAF);
+		//	polyscope::init();
+		//	IOFunc::AddLeveledPoissonGridCellCentersToPolyscopePointCloud(holder,
+		//		{ {-1, "type"}, {coeff_channel, "x-"} , {coeff_channel + 1, "y-"}, {coeff_channel + 2, "z-"}, {coeff_channel + 3, "diag"}, {Tile::b_channel, "residual"} , {Tile::x_channel, "pressure"}, {error_channel, "div"} },
+		//		{ {u_channel, "vel"} }, -1, FLT_MAX);
+		//	polyscope::show();
+		//}
 
 
 		//Info("linf: {}", NormSync(grid, -1, error_channel, false));

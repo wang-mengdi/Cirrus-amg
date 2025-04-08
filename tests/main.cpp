@@ -95,10 +95,10 @@ int main(int argc, char** argv) {
 		//}
 	}
 
-	//SolverTests::TestSolverErrorSolid("sphere", 2, 4);
+	SolverTests::TestSolverErrorSolid("sphere", 2, 4);
 	SolverTests::TestSolverErrorSolid("sphere", 3, 5);
-	//SolverTests::TestSolverErrorSolid("sphere", 4, 6);
-	//SolverTests::TestSolverErrorSolid("sphere", 5, 7);
+	SolverTests::TestSolverErrorSolid("sphere", 4, 6);
+	SolverTests::TestSolverErrorSolid("sphere", 5, 7);
 	 
 	//SolverTests::TestRecoveryNew("sphere", 2, 4);
 	//SolverTests::TestRecoveryNew("sphere", 3, 5);
