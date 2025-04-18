@@ -734,6 +734,28 @@ namespace SolverTests
 		}
 	};
 
+	class CenterPointGridCase {
+	public:
+		//if the tile contains (0.5-eps, 0.5-eps, 0.5-eps), the target level is max_level
+		//otherwise it's min_level
+		//eps=1e-6
+		//type is always INTERIOR
+		__hostdev__ static int target(const HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const int min_level, const int max_level)
+		{
+			auto bbox = acc.tileBBox(info);
+			const double eps = 1e-6;
+			Vec ctr(0.5, 0.5, 0.5);
+			ctr = ctr - Vec(eps, eps, eps);
+
+			if (bbox.isInside(ctr)) return max_level;
+			else return min_level;
+		};
+		__hostdev__ static uint8_t type(const HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const nanovdb::Coord& l_ijk)
+		{
+			return CellType::INTERIOR;
+		}
+	};
+
 	class SphereShell05GridCase
 	{
 	public:
@@ -1333,6 +1355,9 @@ namespace SolverTests
 		if (grid_name == "uniform")
 		{
 			grid_ptr = CreateTestGridCase<UniformGridCase>(grid_name, min_level, max_level);
+		}
+		else if (grid_name == "center") {
+			grid_ptr = CreateTestGridCase<CenterPointGridCase>(grid_name, min_level, max_level);
 		}
 		else if (grid_name == "sphere_shell_05")
 		{
