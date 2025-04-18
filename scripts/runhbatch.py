@@ -116,7 +116,7 @@ def main():
         frame_start_time = time.time()
 
         while not success:
-            return_code = render_frame_with_husk(args.hip_file, frame, output_dir)
+            return_code = render_frame_with_husk(args.hip_file, frame, output_dir, "/stage/usdrender_rop1")
             if return_code == 0 and is_render_successful(output_dir, frame):
                 frame_end_time = time.time()
                 elapsed = frame_end_time - frame_start_time
