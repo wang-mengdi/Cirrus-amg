@@ -1806,7 +1806,7 @@ namespace SolverTests
 		// grid with type
 		//if (grid_name == "sphere")
 		//{
-		//	grid_ptr = CreateTestGridCase<SphereSolid05GridCase>(grid_name, min_level, max_level);
+		//	grid_ptr = CreateTestGridCase<SphereSolidGridCase>(grid_name, min_level, max_level);
 		//}
 		//else if (grid_name == "uniform")
 		//{
@@ -1843,8 +1843,8 @@ namespace SolverTests
 
 		if (grid_name == "sphere") {
 			auto func_phi = []__hostdev__(const Vec & pt) {
-				// sphere solid case, phi is defined by SphereSolid05GridCase::phi
-				return SphereSolid05GridCase::phi(pt);
+				// sphere solid case, phi is defined by SphereSolidGridCase::phi
+				return SphereSolidGridCase::phi(pt);
 			};
 			CreateLaplacianSystemWithSolidCut(grid, func_phi, coeff_channel, R_matrix_coeff);
 		}
@@ -2090,7 +2090,7 @@ namespace SolverTests
 
 		//if (grid_name == "sphere")
 		//{
-		//	grid_ptr = CreateTestGridCase<SphereSolid05GridCase>(grid_name, min_level, max_level);
+		//	grid_ptr = CreateTestGridCase<SphereSolidGridCase>(grid_name, min_level, max_level);
 		//}
 		//else
 		//{

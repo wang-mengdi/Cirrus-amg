@@ -20,42 +20,42 @@ __hostdev__ uint8_t CenterPointGridCase::type(const HATileAccessor<Tile>& acc, H
     return CellType::INTERIOR;
 }
 
-__hostdev__ T SphereShell05GridCase::phi(const Vec& pos) {
+__hostdev__ T SphereEmptyGridCase::phi(const Vec& pos) {
     const Vec ctr(0.5, 0.5, 0.5);
     constexpr T radius = 0.5 / 2;
     return (pos - ctr).length() - radius;
 }
 
-__hostdev__ int SphereShell05GridCase::target(const HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, int min_level, int max_level) {
+__hostdev__ int SphereEmptyGridCase::target(const HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, int min_level, int max_level) {
     auto bbox = acc.tileBBox(info);
     int inside_cnt = CornerInteriorCount(phi, bbox);
     return (inside_cnt == 0 || inside_cnt == 8) ? min_level : max_level;
 }
 
-__hostdev__ uint8_t SphereShell05GridCase::type(const HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const nanovdb::Coord& l_ijk) {
+__hostdev__ uint8_t SphereEmptyGridCase::type(const HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const nanovdb::Coord& l_ijk) {
     return CellType::INTERIOR;
 }
 
-__hostdev__ T SphereSolid05GridCase::phi(const Vec& pos) {
+__hostdev__ T SphereSolidGridCase::phi(const Vec& pos) {
     const Vec ctr(0.5, 0.5, 0.5);
     constexpr T radius = 0.5 / 2;
     return (pos - ctr).length() - radius;
 }
 
-__hostdev__ int SphereSolid05GridCase::target(const HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, int min_level, int max_level) {
+__hostdev__ int SphereSolidGridCase::target(const HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, int min_level, int max_level) {
     auto bbox = acc.tileBBox(info);
     int inside_cnt0 = CornerInteriorCount(phi, bbox, 0.0);
     int inside_cnt1 = CornerInteriorCount(phi, bbox, 0.01);
     return (inside_cnt0 == 8 || inside_cnt1 == 0) ? min_level : max_level;
 }
 
-__hostdev__ uint8_t SphereSolid05GridCase::type(const HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const nanovdb::Coord& l_ijk) {
+__hostdev__ uint8_t SphereSolidGridCase::type(const HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const nanovdb::Coord& l_ijk) {
     auto bbox = acc.cellBBox(info, l_ijk);
     int inside_cnt = CornerInteriorCount(phi, bbox);
     return (inside_cnt == 8) ? CellType::NEUMANN : CellType::INTERIOR;
 }
 
-__hostdev__ T StarShellGerrisGridCase::phi(const Vec& pos) {
+__hostdev__ T StarEmptyGridCase::phi(const Vec& pos) {
     T x = pos[0] - 0.5;
     T y = pos[1] - 0.5;
     T z = pos[2] - 0.5;
@@ -67,13 +67,13 @@ __hostdev__ T StarShellGerrisGridCase::phi(const Vec& pos) {
     return r - r0;
 }
 
-__hostdev__ int StarShellGerrisGridCase::target(const HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, int min_level, int max_level) {
+__hostdev__ int StarEmptyGridCase::target(const HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, int min_level, int max_level) {
     auto bbox = acc.tileBBox(info);
     int inside_cnt = CornerInteriorCount(phi, bbox);
     return (inside_cnt == 0 || inside_cnt == 8) ? min_level : max_level;
 }
 
-__hostdev__ uint8_t StarShellGerrisGridCase::type(const HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const nanovdb::Coord& l_ijk) {
+__hostdev__ uint8_t StarEmptyGridCase::type(const HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const nanovdb::Coord& l_ijk) {
     return CellType::INTERIOR;
 }
 
@@ -235,20 +235,20 @@ std::shared_ptr<HADeviceGrid<Tile>> CreateTestGrid(const std::string grid_name, 
     {
         return CreateTestGrid<UniformGridCase>(min_level, max_level);
     }
-    else if (grid_name == "center") {
+    else if (grid_name == "center_point") {
         return CreateTestGrid<CenterPointGridCase>(min_level, max_level);
     }
-    else if (grid_name == "sphere_shell_05")
+    else if (grid_name == "sphere_empty")
     {
-        return CreateTestGrid<SphereShell05GridCase>(min_level, max_level);
+        return CreateTestGrid<SphereEmptyGridCase>(min_level, max_level);
     }
-    else if (grid_name == "sphere_solid_05")
+    else if (grid_name == "sphere_solid")
     {
-        return CreateTestGrid<SphereSolid05GridCase>(min_level, max_level);
+        return CreateTestGrid<SphereSolidGridCase>(min_level, max_level);
     }
-    else if (grid_name == "star_shell")
+    else if (grid_name == "star_empty")
     {
-        return CreateTestGrid<StarShellGerrisGridCase>(min_level, max_level);
+        return CreateTestGrid<StarEmptyGridCase>(min_level, max_level);
     }
     else
     {
