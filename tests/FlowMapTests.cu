@@ -532,46 +532,6 @@ namespace FlowMapTests {
             Info("Linf error between flowmap advected phi(psi) and original points: {:.3e}", LinfErrorBetweenPointCloud(phi_of_psi_flowmap_d, points));
             Info("Linf error between T_forward and F_back: {:.3e}", LinfErrorBetweenMatrixForbenius2(T_flowmap_forward_d, F_flowmap_back_d));
             fmt::print("\n");
-
-            //{
-            //    // 将 psi_flowmap_d 从设备复制到主机
-            //    thrust::host_vector<Vec> psi_flowmap_h = psi_flowmap_d;
-
-            //    // 创建线段的顶点和索引
-            //    std::vector<std::array<size_t, 2>> edges; // 每条线段由两个点的索引组成
-
-            //    for (size_t i = 0; i < points.size(); ++i) {
-            //        edges.push_back({ i, points.size() + i }); // 连接 points[i] 和 psi_flowmap_h[i]
-            //    }
-
-            //    // 合并起点和终点为一个顶点集合
-            //    thrust::host_vector<Vec> all_points = points;
-            //    all_points.insert(all_points.end(), psi_flowmap_h.begin(), psi_flowmap_h.end());
-
-            //    // 初始化 Polyscope
-            //    polyscope::init();
-
-            //    std::vector<double> errs = CalcLinfErrorBetweenMatrixForbenius2(T_flowmap_forward_d, F_flowmap_back_d);
-            //    // 可视化起点
-            //    auto pc = polyscope::registerPointCloud("points", points);
-            //    pc->addScalarQuantity("error", errs);
-
-            //    // 注册运动轨迹
-            //    auto cn = polyscope::registerCurveNetwork("motion trajectories", all_points, edges);
-
-            //    IOFunc::AddTilesToPolyscopeVolumetricMesh(*grid_ptrs[0], LEAF, "leaf tiles");
-
-            //    // 显示 Polyscope
-            //    polyscope::show();
-            //}
-
-			//std::vector<double> errs = CalcLinfErrorBetweenMatrixForbenius2(T_flowmap_forward_d, F_flowmap_back_d);
-   //         polyscope::init();
-   //         IOFunc::AddTilesToPolyscopeVolumetricMesh(*grid_ptrs[0], LEAF, "leaf tiles");
-
-			//auto pc = polyscope::registerPointCloud("points", points);
-			//pc->addScalarQuantity("error", errs);
-   //         polyscope::show();
         }
     }
     
