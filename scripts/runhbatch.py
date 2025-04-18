@@ -30,22 +30,9 @@ def is_render_successful(output_dir, frame):
 
     return has_image_file and not has_checkpoint_file
 
-def render_frame_with_husk(hip_file, frame, output_path, render_node):
-    render_command = [
-        "husk",
-        "-f", str(frame), str(frame),
-        "-o", f"{output_path}/{frame:04d}.png",
-        hip_file,
-        render_node
-    ]
-    print(f"Rendering frame {frame} with husk...")
-    process = subprocess.Popen(render_command, stdout=sys.stdout, stderr=sys.stderr)
-    process.wait()
-    return process.returncode
-
 
 def render_frame_with_command(hip_file, frame, output_path):
-    render_command = f"render -V -f {frame} {frame} /stage/usdrender_rop1 -o {output_path}/{frame:04d}.png"
+    render_command = f"render -V -f {frame} {frame} /stage/usdrender_rop1"
     #render_command = f"render -V -f {frame} {frame} /out/mantra_ipr"
     print(f"Rendering frame {frame}...")
 
