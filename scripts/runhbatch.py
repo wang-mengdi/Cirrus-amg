@@ -33,8 +33,7 @@ def is_render_successful(output_dir, frame):
 def render_frame_with_husk(hip_file, frame, output_path, render_node):
     render_command = [
         "husk",
-        "-f", str(frame),
-        "-l", "1",
+        "-f", str(frame), str(frame),
         "-o", f"{output_path}/{frame:04d}.png",
         hip_file,
         render_node
