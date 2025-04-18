@@ -58,7 +58,7 @@ def main():
     parser.add_argument("hip_file", help="Path to the .hipnc file")
     parser.add_argument("frame_range", help="Slice of frames to render (e.g., '0:10:2' or '10:0:-1')")
     parser.add_argument("--output_dir", help="Output directory for rendered frames (optional)")
-    parser.add_argument("--renderer", required=True, choices=["karma", "mantra"], help="Choose renderer: 'karma' or 'mantra'")
+    parser.add_argument("--renderer", choices=["karma", "mantra"], default="mantra", help="Choose renderer: 'karma' or 'mantra'")
     args = parser.parse_args()
 
     # 根据 renderer 设置节点
