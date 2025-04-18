@@ -45,8 +45,8 @@ def render_frame_with_husk(hip_file, frame, output_path, render_node):
 
 
 def render_frame_with_command(hip_file, frame, output_path):
-    render_command = f"render -V -f {frame} {frame} /stage/usdrender_rop1 -o {output_path}/{frame:04d}.png"
-    #render_command = f"render -V -f {frame} {frame} /out/mantra_ipr"
+    #render_command = f"render -V -f {frame} {frame} /stage/usdrender_rop1 -o {output_path}/{frame:04d}.png"
+    render_command = f"render -V -f {frame} {frame} /out/mantra_ipr"
     print(f"Rendering frame {frame}...")
 
     process = subprocess.Popen(
