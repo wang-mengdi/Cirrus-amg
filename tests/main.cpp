@@ -1,6 +1,6 @@
 #include "Common.h"
 #include "SolverTests.h"
-
+#include "FlowMapTests.h"
 
 int main(int argc, char** argv) {
 
@@ -36,13 +36,22 @@ int main(int argc, char** argv) {
 
 	//SolverTests::TestSolverErrorWithAllNeumannBC("star_shell", 2, 4, "athena_sin", "amg");
 
-
 	{
-		//added projection test for SIG revision
-		for (int min_level : {2, 3, 4, 5}) {
-			SolverTests::TestSolverErrorWithAllNeumannBC("center", 1.0, min_level, min_level + 2, "athena_sin", "gmg");
+		//advection convergence test for SIG revision
+		for (int i : {8, 0, 9, 7, 2}) {
+			//TestNeumannBC(i);
+			FlowMapTests::TestFlowMapAdvection(i);
+			fmt::print("====================================\n");
 		}
 	}
+
+
+	//{
+	//	//added projection test for SIG revision
+	//	for (int min_level : {2, 3, 4, 5}) {
+	//		SolverTests::TestSolverErrorWithAllNeumannBC("center", 1.0, min_level, min_level + 2, "athena_sin", "gmg");
+	//	}
+	//}
 
 	{
 		//test 1

@@ -6,6 +6,7 @@ includes("./src/xmake.lua")
 set_rundir("$(projectdir)")
 
 add_requires("magic_enum >=0.9.7")
+add_requires("tbb")
 
 -- target("cirrus")
 --     set_kind("binary")
@@ -36,3 +37,5 @@ target("tests")
     add_cuflags("-std=c++17 --expt-relaxed-constexpr --expt-extended-lambda")
     add_deps("src")
     add_packages("magic_enum")
+    add_packages("tbb")
+

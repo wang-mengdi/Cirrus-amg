@@ -804,12 +804,6 @@ namespace SolverTests
 
 			if (inside_cnt0 == 8 || inside_cnt1 == 0) return min_level;
 			return max_level;
-
-			//int inside_cnt = CornerInteriorCount(phi, bbox);
-			//if (inside_cnt == 0 || inside_cnt == 8)
-			//	return min_level;
-			//else
-			//	return max_level;
 		}
 		__hostdev__ static uint8_t type(const HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const nanovdb::Coord& l_ijk)
 		{
@@ -891,38 +885,6 @@ namespace SolverTests
 			auto bbox = acc.tileBBox(info);
 			int inside_cnt = CornerInteriorCount(phi, bbox);
 
-			//auto bmin = bbox.min();
-			//auto bmax = bbox.max();
-			//int inside_cnt = 0;
-			//for (int di : {0, 1})
-			//{
-			//	for (int dj : {0, 1})
-			//	{
-			//		for (int dk : {0, 1})
-			//		{
-			//			Vec vpos;
-			//			vpos[0] = bmin[0] + di * (bmax[0] - bmin[0]);
-			//			vpos[1] = bmin[1] + dj * (bmax[1] - bmin[1]);
-			//			vpos[2] = bmin[2] + dk * (bmax[2] - bmin[2]);
-
-			//			T x = vpos[0] - 0.5;
-			//			T y = vpos[1] - 0.5;
-			//			T z = vpos[2] - 0.5;
-			//			T r = sqrt(x * x + y * y + z * z);
-			//			T theta = acos(z / r);
-			//			T phi = atan2(y, x);
-
-			//			T r0 = 0.237 + 0.079 * cos(6 * theta) * cos(6 * phi);
-
-			//			// T r0 = 0.237 + 0.079 * cos(6 * theta);
-
-			//			if (r < r0)
-			//			{
-			//				inside_cnt++;
-			//			}
-			//		}
-			//	}
-			//}
 			if (inside_cnt == 0 || inside_cnt == 8)
 				return min_level;
 			else
