@@ -968,61 +968,12 @@ namespace SolverTests
 			LEAF, 8);
 	}
 
-	template <class GridCase>
-	std::shared_ptr<HADeviceGrid<Tile>> CreateTestGridCase(const std::string grid_name, const int min_level, const int max_level)
-	{
-		uint32_t scale = 8;
-		float h = 1.0 / scale;
-		// 0:8, 1:16, 2:32, 3:64, 4:128, 5:256, 6:512, 7:1024
-		auto grid_ptr = std::make_shared<HADeviceGrid<Tile>>(h, thrust::host_vector{ 16, 16, 16, 16, 16, 16, 20, 20, 16, 16 });
-		auto& grid = *grid_ptr;
-		grid.setTileHost(0, nanovdb::Coord(0, 0, 0), Tile(), LEAF);
-		grid.rebuild();
-		grid.iterativeRefine([=] __device__(const HATileAccessor<Tile> &acc, HATileInfo<Tile> &info)
-		{
-			return GridCase::target(acc, info, min_level, max_level);
-		}, false);
-		int num_cells = grid.numTotalLeafTiles() * Tile::SIZE;
-		int total_hash_bytes = grid.hashTableDeviceBytes();
-		Info("Total {}M cells, hash table {}GB", num_cells / (1024.0 * 1024), total_hash_bytes / (1024.0 * 1024 * 1024));
 
-		grid.launchVoxelFuncOnAllTiles(
-			[=] __device__(HATileAccessor<Tile> &acc, HATileInfo<Tile> &info, const Coord & l_ijk)
-		{
-			auto& tile = info.tile();
-			tile.type(l_ijk) = GridCase::type(acc, info, l_ijk);
-		},
-			LEAF);
-		return grid_ptr;
-	}
 
 	// return <grid, is_pure_neumann>
-	std::tuple<std::shared_ptr<HADeviceGrid<Tile>>, bool> CreateTestGrid(const std::string grid_name, const int min_level, const int max_level, const std::string bc_name, const int rhs_channel, const int grdt_channel)
+	std::tuple<std::shared_ptr<HADeviceGrid<Tile>>, bool> CreateNeumannProblem(const std::string grid_name, const int min_level, const int max_level, const std::string bc_name, const int rhs_channel, const int grdt_channel)
 	{
-		std::shared_ptr<HADeviceGrid<Tile>> grid_ptr;
-		if (grid_name == "uniform")
-		{
-			grid_ptr = CreateTestGridCase<UniformGridCase>(grid_name, min_level, max_level);
-		}
-		else if (grid_name == "center") {
-			grid_ptr = CreateTestGridCase<CenterPointGridCase>(grid_name, min_level, max_level);
-		}
-		else if (grid_name == "sphere_shell_05")
-		{
-			grid_ptr = CreateTestGridCase<SphereShell05GridCase>(grid_name, min_level, max_level);
-		}
-		else if (grid_name == "sphere_solid_05")
-		{
-			grid_ptr = CreateTestGridCase<SphereSolid05GridCase>(grid_name, min_level, max_level);
-		}
-		else if (grid_name == "star_shell")
-		{
-			grid_ptr = CreateTestGridCase<StarShellGerrisGridCase>(grid_name, min_level, max_level);
-		}
-		else
-		{
-			Assert(false, "grid_name {} not supported", grid_name);
-		}
+		std::shared_ptr<HADeviceGrid<Tile>> grid_ptr = CreateTestGrid(grid_name, min_level, max_level);
 		auto& grid = *grid_ptr;
 
 		bool is_pure_neumann = false;
@@ -1313,7 +1264,7 @@ namespace SolverTests
 		int residual_channel = 3;
 		int coeff_channel = 6;
 
-		auto [grid_ptr, is_pure_neumann] = CreateTestGrid(grid_name, min_level, max_level, bc_name, analytical_nlap_channel, x_channel);
+		auto [grid_ptr, is_pure_neumann] = CreateNeumannProblem(grid_name, min_level, max_level, bc_name, analytical_nlap_channel, x_channel);
 		auto& grid = *grid_ptr;
 
 		{
@@ -1381,7 +1332,7 @@ namespace SolverTests
 		// x:0
 		int error_channel = 2;
 
-		auto [grid_ptr, is_pure_neumann] = CreateTestGrid(grid_name, min_level, max_level, bc_name, rhs_channel, grdt_channel);
+		auto [grid_ptr, is_pure_neumann] = CreateNeumannProblem(grid_name, min_level, max_level, bc_name, rhs_channel, grdt_channel);
 		auto& grid = *grid_ptr;
 
 		TestSolverWithAnalyticalSolution(grid, algorithm, omega, coeff_channel, grdt_channel, error_channel, is_pure_neumann);
@@ -1427,7 +1378,7 @@ namespace SolverTests
 		// x:0
 		int error_channel = 2;
 
-		auto [grid_ptr, is_pure_neumann] = CreateTestGrid(grid_name, min_level, max_level, bc_name, rhs_channel, grdt_channel);
+		auto [grid_ptr, is_pure_neumann] = CreateNeumannProblem(grid_name, min_level, max_level, bc_name, rhs_channel, grdt_channel);
 		auto& grid = *grid_ptr;
 
 		Info("Test Iter-Error with analytical solution on algorithm {}", algorithm);
@@ -1851,20 +1802,20 @@ namespace SolverTests
 		int error_channel = 13;
 
 
-		std::shared_ptr<HADeviceGrid<Tile>> grid_ptr;
+		std::shared_ptr<HADeviceGrid<Tile>> grid_ptr = CreateTestGrid(grid_name, min_level, max_level);
 		// grid with type
-		if (grid_name == "sphere")
-		{
-			grid_ptr = CreateTestGridCase<SphereSolid05GridCase>(grid_name, min_level, max_level);
-		}
-		else if (grid_name == "uniform")
-		{
-			grid_ptr = CreateTestGridCase<UniformGridCase>(grid_name, min_level, max_level);
-		}
-		else
-		{
-			Assert(false, "grid_name {} not supported", grid_name);
-		}
+		//if (grid_name == "sphere")
+		//{
+		//	grid_ptr = CreateTestGridCase<SphereSolid05GridCase>(grid_name, min_level, max_level);
+		//}
+		//else if (grid_name == "uniform")
+		//{
+		//	grid_ptr = CreateTestGridCase<UniformGridCase>(grid_name, min_level, max_level);
+		//}
+		//else
+		//{
+		//	Assert(false, "grid_name {} not supported", grid_name);
+		//}
 		auto& grid = *grid_ptr;
 		bool is_pure_neumann = false;
 
@@ -2134,16 +2085,17 @@ namespace SolverTests
 			grid_name, min_level, max_level
 		);
 
-		std::shared_ptr<HADeviceGrid<Tile>> grid_ptr;
+		std::shared_ptr<HADeviceGrid<Tile>> grid_ptr = CreateTestGrid(grid_name, min_level, max_level);
 		// grid with type
-		if (grid_name == "sphere")
-		{
-			grid_ptr = CreateTestGridCase<SphereSolid05GridCase>(grid_name, min_level, max_level);
-		}
-		else
-		{
-			Assert(false, "grid_name {} not supported", grid_name);
-		}
+
+		//if (grid_name == "sphere")
+		//{
+		//	grid_ptr = CreateTestGridCase<SphereSolid05GridCase>(grid_name, min_level, max_level);
+		//}
+		//else
+		//{
+		//	Assert(false, "grid_name {} not supported", grid_name);
+		//}
 		auto& grid = *grid_ptr;
 		bool is_pure_neumann = false;
 

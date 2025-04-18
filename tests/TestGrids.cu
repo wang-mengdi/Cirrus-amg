@@ -200,3 +200,59 @@ __hostdev__ uint8_t StarShellGerrisGridCase::type(const HATileAccessor<Tile>& ac
 //			return CellType::INTERIOR;
 //	}
 //};
+
+template <class GridCase>
+std::shared_ptr<HADeviceGrid<Tile>> CreateTestGrid(const int min_level, const int max_level)
+{
+    uint32_t scale = 8;
+    float h = 1.0 / scale;
+    // 0:8, 1:16, 2:32, 3:64, 4:128, 5:256, 6:512, 7:1024
+    auto grid_ptr = std::make_shared<HADeviceGrid<Tile>>(h, thrust::host_vector{ 16, 16, 16, 16, 16, 16, 20, 20, 16, 16 });
+    auto& grid = *grid_ptr;
+    grid.setTileHost(0, nanovdb::Coord(0, 0, 0), Tile(), LEAF);
+    grid.rebuild();
+    grid.iterativeRefine([=] __device__(const HATileAccessor<Tile> &acc, HATileInfo<Tile> &info)
+    {
+        return GridCase::target(acc, info, min_level, max_level);
+    }, false);
+    int num_cells = grid.numTotalLeafTiles() * Tile::SIZE;
+    int total_hash_bytes = grid.hashTableDeviceBytes();
+    Info("Total {}M cells, hash table {}GB", num_cells / (1024.0 * 1024), total_hash_bytes / (1024.0 * 1024 * 1024));
+
+    grid.launchVoxelFuncOnAllTiles(
+        [=] __device__(HATileAccessor<Tile> &acc, HATileInfo<Tile> &info, const Coord & l_ijk)
+    {
+        auto& tile = info.tile();
+        tile.type(l_ijk) = GridCase::type(acc, info, l_ijk);
+    },
+        LEAF);
+    return grid_ptr;
+}
+
+std::shared_ptr<HADeviceGrid<Tile>> CreateTestGrid(const std::string grid_name, const int min_level, const int max_level)
+{
+    if (grid_name == "uniform")
+    {
+        return CreateTestGrid<UniformGridCase>(min_level, max_level);
+    }
+    else if (grid_name == "center") {
+        return CreateTestGrid<CenterPointGridCase>(min_level, max_level);
+    }
+    else if (grid_name == "sphere_shell_05")
+    {
+        return CreateTestGrid<SphereShell05GridCase>(min_level, max_level);
+    }
+    else if (grid_name == "sphere_solid_05")
+    {
+        return CreateTestGrid<SphereSolid05GridCase>(min_level, max_level);
+    }
+    else if (grid_name == "star_shell")
+    {
+        return CreateTestGrid<StarShellGerrisGridCase>(min_level, max_level);
+    }
+    else
+    {
+        Assert(false, "grid_name {} not supported", grid_name);
+		return nullptr;
+    }
+}

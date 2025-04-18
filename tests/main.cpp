@@ -36,22 +36,22 @@ int main(int argc, char** argv) {
 
 	//SolverTests::TestSolverErrorWithAllNeumannBC("star_shell", 2, 4, "athena_sin", "amg");
 
-	{
-		//advection convergence test for SIG revision
-		for (int i : {7}) {
-			//TestNeumannBC(i);
-			FlowMapTests::TestFlowMapAdvection(i);
-			fmt::print("====================================\n");
-		}
-	}
-
-
 	//{
-	//	//added projection test for SIG revision
-	//	for (int min_level : {2, 3, 4, 5}) {
-	//		SolverTests::TestSolverErrorWithAllNeumannBC("center", 1.0, min_level, min_level + 2, "athena_sin", "gmg");
+	//	//advection convergence test for SIG revision
+	//	for (int i : {7}) {
+	//		//TestNeumannBC(i);
+	//		FlowMapTests::TestFlowMapAdvection(i);
+	//		fmt::print("====================================\n");
 	//	}
 	//}
+
+
+	{
+		//added projection test for SIG revision
+		for (int min_level : {2, 3, 4, 5}) {
+			SolverTests::TestSolverErrorWithAllNeumannBC("center", 1.0, min_level, min_level + 2, "athena_sin", "gmg");
+		}
+	}
 
 	{
 		//test 1
@@ -111,15 +111,15 @@ int main(int argc, char** argv) {
 		//}
 	}
 
-	//SolverTests::TestSolverErrorSolid("sphere", 2, 4);
-	//SolverTests::TestSolverErrorSolid("sphere", 3, 5);
-	//SolverTests::TestSolverErrorSolid("sphere", 4, 6);
-	//SolverTests::TestSolverErrorSolid("sphere", 5, 7);
+	//SolverTests::TestSolverErrorSolid("sphere_solid_05", 2, 4);
+	//SolverTests::TestSolverErrorSolid("sphere_solid_05", 3, 5);
+	//SolverTests::TestSolverErrorSolid("sphere_solid_05", 4, 6);
+	//SolverTests::TestSolverErrorSolid("sphere_solid_05", 5, 7);
 	 
-	//SolverTests::TestRecoveryNew("sphere", 2, 4);
-	//SolverTests::TestRecoveryNew("sphere", 3, 5);
-	//SolverTests::TestRecoveryNew("sphere", 4, 6);
-	//SolverTests::TestRecoveryNew("sphere", 5, 7);
+	//SolverTests::TestRecoveryNew("sphere_solid_05", 2, 4);
+	//SolverTests::TestRecoveryNew("sphere_solid_05", 3, 5);
+	//SolverTests::TestRecoveryNew("sphere_solid_05", 4, 6);
+	//SolverTests::TestRecoveryNew("sphere_solid_05", 5, 7);
 
 
 	//for (int min_level : {4, 5}) {
