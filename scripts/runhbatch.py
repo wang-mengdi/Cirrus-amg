@@ -87,12 +87,11 @@ def main():
 
     # 自动设置 output_dir（若未指定）
     if args.output_dir:
-        output_dir = os.path.join(os.path.dirname(args.hip_file), args.output_dir)
+        output_dir = args.output_dir
     else:
         hip_basename = os.path.basename(args.hip_file)
         output_name = hip_basename.rsplit('.', 1)[0]  # 去掉后缀
         output_dir = os.path.join(os.path.dirname(args.hip_file), output_name)
-
     os.makedirs(output_dir, exist_ok=True)
 
     start_time = time.time()
