@@ -7,7 +7,7 @@ from threading import Timer
 import sys
 from datetime import timedelta
 
-RETRY_DELAY = 10      # 每次重试间隔秒数
+RETRY_DELAY = 10          # 每次重试间隔秒数
 RENDER_TIMEOUT = 10 * 60  # 渲染超时秒数
 
 def kill_process_tree(pid):
@@ -17,7 +17,7 @@ def kill_process_tree(pid):
     parent.kill()
 
 def is_render_successful(output_dir, frame):
-    """检查渲染是否成功"""
+    """ 检查渲染是否成功 """
     frame_pattern = f"{frame:04d}"
     has_image_file = False
     has_checkpoint_file = False
@@ -30,11 +30,9 @@ def is_render_successful(output_dir, frame):
 
     return has_image_file and not has_checkpoint_file
 
-
-def render_frame_with_command(hip_file, frame, output_path):
-    render_command = f"render -V -f {frame} {frame} /stage/usdrender_rop1"
-    #render_command = f"render -V -f {frame} {frame} /out/mantra_ipr"
-    print(f"Rendering frame {frame}...")
+def render_frame_with_command(hip_file, frame, render_node):
+    render_command = f"render -V -f {frame} {frame} {render_node}"
+    print(f"Rendering frame {frame} with node {render_node}...")
 
     process = subprocess.Popen(
         ['hbatch', hip_file],
@@ -60,7 +58,11 @@ def main():
     parser.add_argument("hip_file", help="Path to the .hipnc file")
     parser.add_argument("frame_range", help="Slice of frames to render (e.g., '0:10:2' or '10:0:-1')")
     parser.add_argument("--output_dir", help="Output directory for rendered frames (optional)")
+    parser.add_argument("--renderer", required=True, choices=["karma", "mantra"], help="Choose renderer: 'karma' or 'mantra'")
     args = parser.parse_args()
+
+    # 根据 renderer 设置节点
+    render_node = "/stage/usdrender_rop1" if args.renderer == "karma" else "/out/mantra_ipr"
 
     frame_range_parts = args.frame_range.split(":")
     if len(frame_range_parts) not in {2, 3}:
@@ -86,12 +88,11 @@ def main():
         print(f"Error: {args.hip_file} does not exist.")
         return
 
-    # 自动设置 output_dir（若未指定）
     if args.output_dir:
         output_dir = args.output_dir
     else:
         hip_basename = os.path.basename(args.hip_file)
-        output_name = hip_basename.rsplit('.', 1)[0]  # 去掉后缀
+        output_name = hip_basename.rsplit('.', 1)[0]
         output_dir = os.path.join(os.path.dirname(args.hip_file), output_name)
     os.makedirs(output_dir, exist_ok=True)
 
@@ -102,8 +103,7 @@ def main():
         frame_start_time = time.time()
 
         while not success:
-            #return_code = render_frame_with_husk(args.hip_file, frame, output_dir, "/stage/usdrender_rop1")
-            return_code = render_frame_with_command(args.hip_file, frame, output_dir)
+            return_code = render_frame_with_command(args.hip_file, frame, render_node)
             if return_code == 0 and is_render_successful(output_dir, frame):
                 frame_end_time = time.time()
                 elapsed = frame_end_time - frame_start_time
