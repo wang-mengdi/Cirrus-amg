@@ -1,4 +1,5 @@
 #include "FlowMapTests.h"
+#include "TestGrids.h"
 #include "PoissonIOFunc.h"
 #include "FMParticles.h"
 #include "Common.h"
@@ -374,8 +375,8 @@ namespace FlowMapTests {
         return pos + c1 * vel1 + c2 * vel2 + c3 * vel3 + c4 * vel4;
     }
 
-    void TestFlowMapAdvection(const int grid_case) {
-        Info("Test flow map advection with grid case {}", grid_case);
+    void TestFlowMapAdvection(const std::string grid_name, const int min_level, const int max_level) {
+        Info("TestFlowMapAdvection on grid {}, min level {} max level {}", grid_name, min_level, max_level);
         int test_flowmap_stride = 5; // x dt
 
         std::vector<std::shared_ptr<HADeviceGrid<Tile>>> grid_ptrs;
@@ -384,23 +385,8 @@ namespace FlowMapTests {
         float h = 1.0 / Tile::DIM;
         for (int i = 0; i <= test_flowmap_stride; i++) {
             //0:8, 1:16, 2:32, 3:64, 4:128, 5:256, 6:512, 7:1024
-            auto ptr = std::make_shared<HADeviceGrid<Tile>>(h, std::initializer_list<uint32_t>{ 16, 16, 16, 16, 16, 16, 16, 16, 16, 16 });
+            auto ptr = CreateTestGrid(grid_name, min_level, max_level);
             grid_ptrs.push_back(ptr);
-
-            auto& grid = *ptr;
-            grid.setTileHost(0, nanovdb::Coord(0, 0, 0), Tile(), LEAF);
-            grid.compressHost(false);
-            grid.syncHostAndDevice();
-			grid.spawnGhostTiles();
-
-			grid.iterativeRefine([=]__device__(const HATileAccessor<Tile>&acc, HATileInfo<Tile>&info) { return FlowMapTestsLevelTarget(acc, info, grid_case); }, false);
-            grid.launchVoxelFunc(
-                [=] __device__(HATileAccessor<Tile>&acc, HATileInfo<Tile>&info, const Coord & l_ijk) {
-                auto& tile = info.tile();
-                tile.type(l_ijk) = INTERIOR;
-            }, -1, LEAF, LAUNCH_SUBTREE
-            );
-            CalcCellTypesFromLeafs(grid);
         }
         thrust::host_vector<HATileAccessor<Tile>> accs_h;
         for (int i = 0; i <= test_flowmap_stride; i++) {
@@ -410,11 +396,6 @@ namespace FlowMapTests {
         auto accs_d_ptr = thrust::raw_pointer_cast(accs_d.data());
 
         Deformation3D vel_func;
-
-
-        auto base_dir = fs::current_path() / "data" / fmt::format("flowmap_advection_test{}", grid_case);
-        fs::create_directories(base_dir);
-
 
         double cfl = 1.0;//max vel=1
         double dt = 1.0 / 1024 * cfl;
