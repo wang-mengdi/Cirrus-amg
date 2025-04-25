@@ -303,6 +303,10 @@ namespace FlowMapTests {
         int max_idx = -1;
 
         for (int i = 0; i < pc1.size(); ++i) {
+
+            if (pc1[i][0] == NODATA) continue;
+            if (pc2[i][0] == NODATA) continue;
+
             double error = (pc1[i] - pc2[i]).length(); // Compute distance (norm)
             if (error > max_error || max_idx == -1) {
                 max_error = error;
@@ -440,8 +444,10 @@ namespace FlowMapTests {
         RandomGenerator rng;
         //thrust::host_vector<Vec> points(100000);
         thrust::host_vector<Vec> points(1*1024*1024);
-        double lo = 1.0 / 16, hi = 1 - lo;
+        //double lo = 1.0 / 16, hi = 1 - lo;
         //double lo = 1.0 / 8, hi = 1 - lo;
+		double lo = 0.0, hi = 1.0;
+		//double lo = 2.0 / 8 / (1 << min_level), hi = 1 - lo;
         for (auto& p : points) {
             p = Vec(rng.uniform(lo, hi), rng.uniform(lo, hi), rng.uniform(lo, hi));
         }
@@ -483,6 +489,7 @@ namespace FlowMapTests {
             auto F_flowmap_back_d_ptr = thrust::raw_pointer_cast(F_flowmap_back_d.data());
             auto T_flowmap_forward_d_ptr = thrust::raw_pointer_cast(T_flowmap_forward_d.data());
             LaunchIndexFunc([=]__device__(int i) {
+                bool success = true;
                 Vec psi = points_d_ptr[i]; Eigen::Matrix3<T> F_back = Eigen::Matrix3<T>::Identity();
 
                 HATileInfo<Tile> info; Coord l_ijk; Vec frac;
@@ -491,18 +498,23 @@ namespace FlowMapTests {
                 int reference_level = info.mLevel;
 
                 for (int i = test_flowmap_stride - 1; i >= 0; i--) {
-                    RK4ForwardPositionAndF(accs_d_ptr[i], fine_level, coarse_level, -dt, u_channel, node_u_channel, psi, F_back);
-
+                    success = success && RK4ForwardPositionAndF(accs_d_ptr[i], fine_level, coarse_level, -dt, u_channel, node_u_channel, psi, F_back);
                 }
                 F_flowmap_back_d_ptr[i] = F_back;
 				psi_flowmap_d_ptr[i] = psi;
 
                 Vec phi1 = psi; Eigen::Matrix3<T> T_forward = Eigen::Matrix3<T>::Identity();
                 for (int i = 0; i < test_flowmap_stride; i++) {
-                    RK4ForwardPositionAndT(accs_d_ptr[i], fine_level, coarse_level, dt, u_channel, node_u_channel, phi1, T_forward);
+                    success = success && RK4ForwardPositionAndT(accs_d_ptr[i], fine_level, coarse_level, dt, u_channel, node_u_channel, phi1, T_forward);
                 }
                 phi_of_psi_flowmap_d_ptr[i] = phi1;
                 T_flowmap_forward_d_ptr[i] = T_forward;
+
+                if (!success) {
+                    phi_of_psi_flowmap_d_ptr[i] = Vec(NODATA, NODATA, NODATA);
+					F_flowmap_back_d_ptr[i] = Eigen::Matrix3<T>::Zero();
+					T_flowmap_forward_d_ptr[i] = Eigen::Matrix3<T>::Zero();
+				}
 
             }, points.size(), 128
                 );

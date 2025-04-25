@@ -36,23 +36,27 @@ int main(int argc, char** argv) {
 
 	//SolverTests::TestSolverErrorWithAllNeumannBC("star_empty", 2, 4, "athena_sin", "amg");
 
-	{
-		//advection convergence test for SIG revision
-		//for (int i : {7}) {
-		//	//TestNeumannBC(i);
-		//	FlowMapTests::TestFlowMapAdvection(i);
-		//	fmt::print("====================================\n");
-		//}
+	//{
+	//	for (int min_level : {1, 2, 3, 4, 5}) {
+	//		FlowMapTests::TestFlowMapAdvection("center_point", min_level, min_level + 2);
+	//	}
 
-		FlowMapTests::TestFlowMapAdvection("center_point", 0, 6);
-	}
+	////	//for (int min_level : {1, 2, 3, 4, 5}) {
+	////	//	FlowMapTests::TestFlowMapAdvection("uniform", min_level, min_level);
+	////	//}
+	//}
 
 
 	//{
-	//	//added projection test for SIG revision
-	//	for (int min_level : {2, 3, 4, 5}) {
-	//		SolverTests::TestSolverErrorWithAllNeumannBC("center_point", 1.0, min_level, min_level + 2, "athena_sin", "gmg");
-	//	}
+		//added projection test for SIG revision
+		for (int min_level : {1, 2, 3, 4, 5}) {
+		//for (int min_level : {5}){
+			//SolverTests::TestSolverErrorWithAllNeumannBC("center_point", 1.0, min_level, min_level + 2, "athena_sin", "gmg");
+
+			SolverTests::TestSolutionItersErrorWithAllNeumannBC("center_point", 1.0, min_level, min_level + 2, "athena_sin", "cmg");
+		}
+
+
 	//}
 
 	{

@@ -11,8 +11,10 @@ __hostdev__ uint8_t UniformGridCase::type(const HATileAccessor<Tile>& acc, HATil
 __hostdev__ int CenterPointGridCase::target(const HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, int min_level, int max_level) {
     auto bbox = acc.tileBBox(info);
     const double eps = 1e-6;
+	bbox.min() = bbox.min() - Vec(eps, eps, eps);
+	bbox.max() = bbox.max() + Vec(eps, eps, eps);
     Vec ctr(0.5, 0.5, 0.5);
-    ctr = ctr - Vec(eps, eps, eps);
+    //ctr = ctr - Vec(eps, eps, eps);
     return bbox.isInside(ctr) ? max_level : min_level;
 }
 

@@ -1383,6 +1383,19 @@ namespace SolverTests
 
 		Info("Test Iter-Error with analytical solution on algorithm {}", algorithm);
 
+		{
+			std::string output_name = fmt::format("output/posson_iter_{}_{}_{}", grid_name, min_level, max_level);
+
+			auto holder_ptr = grid.getHostTileHolderForLeafs();
+			IOFunc::OutputTilesAsVTU(holder_ptr, fmt::format("{}_tiles.vtu", output_name));
+			IOFunc::OutputPoissonGridAsStructuredVTI(
+				holder_ptr,
+				{ {-1, "type"}, {rhs_channel, "rhs"}, {grdt_channel, "f"}, {Tile::x_channel, "x"}, {error_channel, "error"} },
+				{},
+				fmt::format("{}.vti", output_name)
+			);
+		}
+
 		grid.launchVoxelFuncOnAllTiles(
 			[=] __device__(HATileAccessor<Tile> &acc, HATileInfo<Tile> &info, const Coord & l_ijk)
 		{
@@ -1410,7 +1423,8 @@ namespace SolverTests
 			params.level_iters = 2;
 			params.bottom_iters = 10;
 
-			auto [iters, err, elapsed] = SolveLinearSystem(grid, coeff_channel, is_pure_neumann, max_iters, 0, -1, params, false);
+			auto [iters, err, elapsed] = SolveLinearSystem(grid, coeff_channel, is_pure_neumann, max_iters, 1e-8, -1, params, false);
+			if (iters < max_iters) break;
 
 			//auto [iters, err] = solve_system(algorithm, max_iters);
 

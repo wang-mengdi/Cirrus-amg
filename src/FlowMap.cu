@@ -487,10 +487,12 @@ __device__ bool RK4ForwardPosition(const HATileAccessor<Tile>& acc, const int fi
 //	F = F + dt * dFdt2;
 //}
 
-__device__ void RK4ForwardPositionAndF(const HATileAccessor<Tile>& acc, const int fine_level, const int coarse_level, const T dt, const int u_channel, const int node_u_channel, Vec& phi, Eigen::Matrix3<T>& F) {
+__device__ bool RK4ForwardPositionAndF(const HATileAccessor<Tile>& acc, const int fine_level, const int coarse_level, const T dt, const int u_channel, const int node_u_channel, Vec& phi, Eigen::Matrix3<T>& F) {
+	bool success = true;
+
 	Vec u1; Eigen::Matrix3<T> gradu1;
 	//VelocityAndJacobian(acc, phi, node_u_channel, u1, gradu1);
-	KernelIntpVelocityAndJacobianMAC2(acc, fine_level, coarse_level, phi, u_channel, u1, gradu1);
+	success = success && KernelIntpVelocityAndJacobianMAC2(acc, fine_level, coarse_level, phi, u_channel, u1, gradu1);
 
 	//printf("advect rk4 forward phi and F with phi=%f %f %f u1=%f %f %f\n", phi[0], phi[1], phi[2], u1[0], u1[1], u1[2]);
 
@@ -501,7 +503,7 @@ __device__ void RK4ForwardPositionAndF(const HATileAccessor<Tile>& acc, const in
 
 	Vec u2; Eigen::Matrix3<T> gradu2;
 	//VelocityAndJacobian(acc, phi1, node_u_channel, u2, gradu2);
-	KernelIntpVelocityAndJacobianMAC2(acc, fine_level, coarse_level, phi1, u_channel, u2, gradu2);
+	success = success && KernelIntpVelocityAndJacobianMAC2(acc, fine_level, coarse_level, phi1, u_channel, u2, gradu2);
 
 	//printf("advect rk4 forward phi and F with phi=%f %f %f u1=%f %f %f\n", phi[0], phi[1], phi[2], u1[0], u1[1], u1[2]);
 
@@ -511,7 +513,7 @@ __device__ void RK4ForwardPositionAndF(const HATileAccessor<Tile>& acc, const in
 
 	Vec u3; Eigen::Matrix3<T> gradu3;
 	//VelocityAndJacobian(acc, phi2, node_u_channel, u3, gradu3);
-	KernelIntpVelocityAndJacobianMAC2(acc, fine_level, coarse_level, phi2, u_channel, u3, gradu3);
+	success = success && KernelIntpVelocityAndJacobianMAC2(acc, fine_level, coarse_level, phi2, u_channel, u3, gradu3);
 
 	//printf("advect rk4 forward phi and F with phi=%f %f %f u1=%f %f %f\n", phi[0], phi[1], phi[2], u1[0], u1[1], u1[2]);
 
@@ -521,13 +523,15 @@ __device__ void RK4ForwardPositionAndF(const HATileAccessor<Tile>& acc, const in
 
 	Vec u4; Eigen::Matrix3<T> gradu4;
 	//VelocityAndJacobian(acc, phi3, node_u_channel, u4, gradu4);
-	KernelIntpVelocityAndJacobianMAC2(acc, fine_level, coarse_level, phi3, u_channel, u4, gradu4);
+	success = success && KernelIntpVelocityAndJacobianMAC2(acc, fine_level, coarse_level, phi3, u_channel, u4, gradu4);
 
 	//printf("advect rk4 forward phi and F with phi=%f %f %f u1=%f %f %f\n", phi[0], phi[1], phi[2], u1[0], u1[1], u1[2]);
 
 	Eigen::Matrix3<T> dFdt4 = gradu4 * F3;
 	phi = phi + dt / 6.0 * (u1 + 2 * u2 + 2 * u3 + u4);
 	F = F + dt / 6.0 * (dFdt1 + 2 * dFdt2 + 2 * dFdt3 + dFdt4);
+
+	return success;
 }
 
 //__device__ bool RK4ForwardPositionAndFAtGivenLevel(const HATileAccessor<Tile>& acc, const int level, const T dt, const int u_channel, const int node_u_channel, Vec& phi, Eigen::Matrix3<T>& F, const T eps) {
@@ -580,10 +584,12 @@ __device__ void RK4ForwardPositionAndF(const HATileAccessor<Tile>& acc, const in
 //	matT = matT + dt * dTdt2;
 //}
 
-__device__ void RK4ForwardPositionAndT(const HATileAccessor<Tile>& acc, const int fine_level, const int coarse_level, const T dt, const int u_channel, const int node_u_channel, Vec& phi, Eigen::Matrix3<T>& matT) {
+__device__ bool RK4ForwardPositionAndT(const HATileAccessor<Tile>& acc, const int fine_level, const int coarse_level, const T dt, const int u_channel, const int node_u_channel, Vec& phi, Eigen::Matrix3<T>& matT) {
+	bool success = true;
+
 	Vec u1; Eigen::Matrix3<T> gradu1;
 	//VelocityAndJacobian(acc, phi, node_u_channel, u1, gradu1);
-	KernelIntpVelocityAndJacobianMAC2(acc, fine_level, coarse_level, phi, u_channel, u1, gradu1);
+	success = success && KernelIntpVelocityAndJacobianMAC2(acc, fine_level, coarse_level, phi, u_channel, u1, gradu1);
 
 	//printf("rk4 intp phi %f %f %f u1 %f %f %f\n", phi[0], phi[1], phi[2], u1[0], u1[1], u1[2]);
 
@@ -598,7 +604,7 @@ __device__ void RK4ForwardPositionAndT(const HATileAccessor<Tile>& acc, const in
 
 	Vec u2; Eigen::Matrix3<T> gradu2;
 	//VelocityAndJacobian(acc, phi1, node_u_channel, u2, gradu2);
-	KernelIntpVelocityAndJacobianMAC2(acc, fine_level, coarse_level, phi1, u_channel, u2, gradu2);
+	success = success && KernelIntpVelocityAndJacobianMAC2(acc, fine_level, coarse_level, phi1, u_channel, u2, gradu2);
 
 
 	Eigen::Matrix3<T> dTdt2 = -T1 * gradu2;
@@ -610,7 +616,7 @@ __device__ void RK4ForwardPositionAndT(const HATileAccessor<Tile>& acc, const in
 
 	Vec u3; Eigen::Matrix3<T> gradu3;
 	//VelocityAndJacobian(acc, phi2, node_u_channel, u3, gradu3);
-	KernelIntpVelocityAndJacobianMAC2(acc, fine_level, coarse_level, phi2, u_channel, u3, gradu3);
+	success = success && KernelIntpVelocityAndJacobianMAC2(acc, fine_level, coarse_level, phi2, u_channel, u3, gradu3);
 
 
 	Eigen::Matrix3<T> dTdt3 = -T2 * gradu3;
@@ -621,11 +627,13 @@ __device__ void RK4ForwardPositionAndT(const HATileAccessor<Tile>& acc, const in
 
 	Vec u4; Eigen::Matrix3<T> gradu4;
 	//VelocityAndJacobian(acc, phi3, node_u_channel, u4, gradu4);
-	KernelIntpVelocityAndJacobianMAC2(acc, fine_level, coarse_level, phi3, u_channel, u4, gradu4);
+	success = success && KernelIntpVelocityAndJacobianMAC2(acc, fine_level, coarse_level, phi3, u_channel, u4, gradu4);
 
 	Eigen::Matrix3<T> dTdt4 = -T3 * gradu4;
 	phi = phi + dt / 6.0 * (u1 + 2 * u2 + 2 * u3 + u4);
 	matT = matT + dt / 6.0 * (dTdt1 + 2 * dTdt2 + 2 * dTdt3 + dTdt4);
+
+	return success;
 }
 
 
