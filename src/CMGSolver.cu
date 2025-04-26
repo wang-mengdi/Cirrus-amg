@@ -140,6 +140,7 @@ __device__ void LoadCMGLaplacianTileData(const HATileAccessor<Tile>& acc, const 
             // }
             
             {
+                auto& ntile = ninfo.tile();
                 //gmg quick fix
                 T V1 = ntile(x_channel, nl_ijk);
                 T V0 = avg_x;
