@@ -57,80 +57,193 @@ __device__ static Coord FaceNeighborLocalCoord(int axis, int sgn, const int vi) 
 //}
 
 __device__ void LoadCMGLaplacianTileData(const HATileAccessor<Tile>& acc, const HATileInfo<Tile>& info, CMGLaplacianTileData& shared_data, const int subtree_level, const int x_channel, int ti) {
-    auto& tile = info.tile();
+    constexpr int SN = 10;
+    const int shared_offset = 1;
 
-    // Load 4 voxels into the shared memory region from the main tile
+    auto& tile = info.tile();
+	auto h = acc.voxelSize(info);
+
     for (int i = 0; i < 4; i++) {
         // Voxel index
         int vi = i * 128 + ti;
         Coord l_ijk = acc.localOffsetToCoord(vi);
-        
-        shared_data.xValueT(l_ijk) = info.tile()(x_channel, vi);
-        //shared_data.ttypeValue(l_ijk) = info.subtreeType(subtree_level);
-		shared_data.ctypeValue(l_ijk) = tile.type(vi);
+
+        // Load x, off-diagonal and diagonal coefficients
+        shared_data.absttypeT(l_ijk) = info.mType;
+        shared_data.xValueT(l_ijk) = tile.type(l_ijk) == INTERIOR ? tile(x_channel, vi) : 0;
+        shared_data.offDiag0ValueT(l_ijk) = tile(coeff_channel, vi);
+        shared_data.offDiag1ValueT(l_ijk) = tile(coeff_channel + 1, vi);
+        shared_data.offDiag2ValueT(l_ijk) = tile(coeff_channel + 2, vi);
+
+        shared_data.diagValueT(l_ijk) = tile(coeff_channel + 3, vi);  // Load diagonal coefficient
     }
 
     __syncthreads();
 
+
     Coord b_ijk = info.mTileCoord;
 
-	//we use [0, 64) for negative boundaries and [64, 128) for positive boundaries
+    //we use [0, 64) for negative boundaries and [64, 128) for positive boundaries
     int fi, sgn;
     if (ti < 64) {
         fi = ti;
         sgn = -1;
     }
     else {
-		fi = ti - 64;
-		sgn = 1;
+        fi = ti - 64;
+        sgn = 1;
     }
 
     for (int axis : {0, 1, 2}) {
         Coord fl_ijk = FaceNeighborLocalCoord(axis, sgn, fi);
+        //for example, for positive boundary, fl_ijk may be (8,j,k), and the cell inside the center tile is (7,j,k)
+        Coord cl_ijk = fl_ijk; cl_ijk[axis] -= sgn;
+        T avg_x = 0;
+        Coord cl1_ijk = cl_ijk;
+        for (int di : {0, 1}) {
+            cl1_ijk[0] = (cl_ijk[0] ^ di);
+            for (int dj : {0, 1}) {
+				cl1_ijk[1] = (cl_ijk[1] ^ dj);
+                for (int dk : {0, 1}) {
+					cl1_ijk[2] = (cl_ijk[2] ^ dk);
+					avg_x += shared_data.xValueT(cl1_ijk);
+                }
+            }
+        }
+		avg_x /= 8;
 
         Coord nb_ijk = b_ijk; nb_ijk[axis] += sgn;
         //for sgn==-1 (load negative boundaries), the local coord in the neighboring tile is 7
-		//for sgn==1 (load positive boundaries), the local coord in the neighboring tile is 0
-		Coord nl_ijk = fl_ijk; nl_ijk[axis] = (sgn == -1) ? 7 : 0;
+        //for sgn==1 (load positive boundaries), the local coord in the neighboring tile is 0
+        Coord nl_ijk = fl_ijk; nl_ijk[axis] = (sgn == -1) ? 7 : 0;
 
         //HATileInfo<Tile> ninfo = acc.tileInfo(info.mLevel, nb_ijk);
-		HATileInfo<Tile> ninfo = (sgn == -1) ? tile.mNeighbors[axis] : tile.mNeighbors[axis + 3];
-            
+        HATileInfo<Tile> ninfo = (sgn == -1) ? tile.mNeighbors[axis] : tile.mNeighbors[axis + 3];
+
         bool empty = ninfo.empty();
         if (empty) {
-			shared_data.xValueT(fl_ijk) = 0;
-			//shared_data.ttypeValue(fl_ijk) = info.subtreeType(subtree_level);
-			shared_data.ctypeValue(fl_ijk) = CellType::DIRICHLET;
-		}
-        else if (ninfo.subtreeType(subtree_level) == GHOST) {
-            T vH = ninfo.tile()(x_channel, nl_ijk);//larger cell center, which is a corner of the ghost cell
+            shared_data.absttypeT(fl_ijk) = info.mType;
+            shared_data.xValueT(fl_ijk) = 0;
+            if (sgn == 1) shared_data.offDiagValueT(axis, fl_ijk) = h;
+        }
+        else if (ninfo.mType & GHOST) {
+            shared_data.absttypeT(fl_ijk) = ninfo.mType;
+            //dp/dx calculated with coarse grid equals to fine grid
+            auto& ntile = ninfo.tile();
+            {
+                T V1 = ntile(x_channel, nl_ijk);
+                T V0 = avg_x;
 
-            //next we extrapolate the opposite corner of the ghost cell
-            //Afivo: a framework for quadtree/octree AMR with shared-memory parallelization and geometric multigrid methods
+                //Coord clc_ijk = cl_ijk; clc_ijk[0] ^= 1; clc_ijk[1] ^= 1; clc_ijk[2] ^= 1;
+                //T V0 = (shared_data.xValueT(cl_ijk) + shared_data.xValueT(clc_ijk)) / 2;
 
-            //for example, for positive boundary, fl_ijk may be (8,j,k), and the cell inside the center tile is (7,j,k)
-            Coord cl_ijk = fl_ijk; cl_ijk[axis] -= sgn;
-            T vh = shared_data.xValueT(cl_ijk);
-            Coord cl0_ijk = cl_ijk; cl0_ijk[0] ^= 1; T vh0 = shared_data.xValueT(cl0_ijk);
-            Coord cl1_ijk = cl_ijk; cl1_ijk[1] ^= 1; T vh1 = shared_data.xValueT(cl1_ijk);
-            Coord cl2_ijk = cl_ijk; cl2_ijk[2] ^= 1; T vh2 = shared_data.xValueT(cl2_ijk);
-            //vh - 0.5 * (vh0 - vh) - 0.5 * (vh1 - vh) - 0.5 * (vh2 - vh);
-            T v1 = 2.5 * vh - 0.5 * (vh0 + vh1 + vh2);
+                T vg = shared_data.xValueT(cl_ijk) + 0.5 * (V1 - V0);
+                //T vg = shared_data.xValueT(cl_ijk) +  (V1 - V0);
+                shared_data.xValueT(fl_ijk) = vg;
 
-            shared_data.xValueT(fl_ijk) = (vH + v1) / 2;
-            //shared_data.ttypeValue(fl_ijk) = ninfo.subtreeType(subtree_level);
-            shared_data.ctypeValue(fl_ijk) = ninfo.tile().type(nl_ijk);
+                if (sgn == 1) shared_data.offDiagValueT(axis, fl_ijk) = ninfo.tile()(coeff_channel + axis, nl_ijk);
+            }
+
+            //{
+            //    T vH = ninfo.tile()(x_channel, nl_ijk);//larger cell center, which is a corner of the ghost cell
+
+            //    //next we e0xtrapolate the opposite corner of the ghost cell
+            //    //Afivo: a framework for quadtree/octree AMR with shared-memory parallelization and geometric multigrid methods
+
+            //    //for example, for positive boundary, fl_ijk may be (8,j,k), and the cell inside the center tile is (7,j,k)
+            //    Coord cl_ijk = fl_ijk; cl_ijk[axis] -= sgn;
+            //    T vh = shared_data.xValueT(cl_ijk);
+            //    Coord cl0_ijk = cl_ijk; cl0_ijk[0] ^= 1; T vh0 = shared_data.xValueT(cl0_ijk);
+            //    Coord cl1_ijk = cl_ijk; cl1_ijk[1] ^= 1; T vh1 = shared_data.xValueT(cl1_ijk);
+            //    Coord cl2_ijk = cl_ijk; cl2_ijk[2] ^= 1; T vh2 = shared_data.xValueT(cl2_ijk);
+            //    //vh - 0.5 * (vh0 - vh) - 0.5 * (vh1 - vh) - 0.5 * (vh2 - vh);
+            //    T v1 = 2.5 * vh - 0.5 * (vh0 + vh1 + vh2);
+
+            //    shared_data.xValueT(fl_ijk) = (vH + v1) / 2;
+            //    if (sgn == 1) shared_data.offDiagValueT(axis, fl_ijk) = ninfo.tile()(coeff_channel + axis, nl_ijk);
+            //}
         }
         else {
-            shared_data.xValueT(fl_ijk) = ninfo.tile()(x_channel, nl_ijk);
-            //shared_data.ttypeValue(fl_ijk) = ninfo.subtreeType(subtree_level);
-            shared_data.ctypeValue(fl_ijk) = ninfo.tile().type(nl_ijk);
+			shared_data.absttypeT(fl_ijk) = ninfo.mType;
+			auto& ntile = ninfo.tile();
+            shared_data.xValueT(fl_ijk) = (ntile.type(nl_ijk) == INTERIOR ? ntile(x_channel, nl_ijk) : 0);
+            if (sgn == 1) shared_data.offDiagValueT(axis, fl_ijk) = ninfo.tile()(coeff_channel + axis, nl_ijk);
         }
-
-        //shared_data.xValueT(fl_ijk) = empty ? 0 : ninfo.tile()(x_channel, nl_ijk);
-        //shared_data.ttypeValue(fl_ijk) = empty ? info.subtreeType(subtree_level) : ninfo.subtreeType(subtree_level);
-        //shared_data.ctypeValue(fl_ijk) = empty ? CellType::DIRICHLET : ninfo.tile().type(nl_ijk);
     }
+    // auto& tile = info.tile();
+
+    // // Load 4 voxels into the shared memory region from the main tile
+    // for (int i = 0; i < 4; i++) {
+    //     // Voxel index
+    //     int vi = i * 128 + ti;
+    //     Coord l_ijk = acc.localOffsetToCoord(vi);
+        
+    //     shared_data.xValueT(l_ijk) = info.tile()(x_channel, vi);
+    //     //shared_data.ttypeValue(l_ijk) = info.subtreeType(subtree_level);
+	// 	shared_data.ctypeValue(l_ijk) = tile.type(vi);
+    // }
+
+    // __syncthreads();
+
+    // Coord b_ijk = info.mTileCoord;
+
+	// //we use [0, 64) for negative boundaries and [64, 128) for positive boundaries
+    // int fi, sgn;
+    // if (ti < 64) {
+    //     fi = ti;
+    //     sgn = -1;
+    // }
+    // else {
+	// 	fi = ti - 64;
+	// 	sgn = 1;
+    // }
+
+    // for (int axis : {0, 1, 2}) {
+    //     Coord fl_ijk = FaceNeighborLocalCoord(axis, sgn, fi);
+
+    //     Coord nb_ijk = b_ijk; nb_ijk[axis] += sgn;
+    //     //for sgn==-1 (load negative boundaries), the local coord in the neighboring tile is 7
+	// 	//for sgn==1 (load positive boundaries), the local coord in the neighboring tile is 0
+	// 	Coord nl_ijk = fl_ijk; nl_ijk[axis] = (sgn == -1) ? 7 : 0;
+
+    //     //HATileInfo<Tile> ninfo = acc.tileInfo(info.mLevel, nb_ijk);
+	// 	HATileInfo<Tile> ninfo = (sgn == -1) ? tile.mNeighbors[axis] : tile.mNeighbors[axis + 3];
+            
+    //     bool empty = ninfo.empty();
+    //     if (empty) {
+	// 		shared_data.xValueT(fl_ijk) = 0;
+	// 		//shared_data.ttypeValue(fl_ijk) = info.subtreeType(subtree_level);
+	// 		shared_data.ctypeValue(fl_ijk) = CellType::DIRICHLET;
+	// 	}
+    //     else if (ninfo.subtreeType(subtree_level) == GHOST) {
+    //         T vH = ninfo.tile()(x_channel, nl_ijk);//larger cell center, which is a corner of the ghost cell
+
+    //         //next we extrapolate the opposite corner of the ghost cell
+    //         //Afivo: a framework for quadtree/octree AMR with shared-memory parallelization and geometric multigrid methods
+
+    //         //for example, for positive boundary, fl_ijk may be (8,j,k), and the cell inside the center tile is (7,j,k)
+    //         Coord cl_ijk = fl_ijk; cl_ijk[axis] -= sgn;
+    //         T vh = shared_data.xValueT(cl_ijk);
+    //         Coord cl0_ijk = cl_ijk; cl0_ijk[0] ^= 1; T vh0 = shared_data.xValueT(cl0_ijk);
+    //         Coord cl1_ijk = cl_ijk; cl1_ijk[1] ^= 1; T vh1 = shared_data.xValueT(cl1_ijk);
+    //         Coord cl2_ijk = cl_ijk; cl2_ijk[2] ^= 1; T vh2 = shared_data.xValueT(cl2_ijk);
+    //         //vh - 0.5 * (vh0 - vh) - 0.5 * (vh1 - vh) - 0.5 * (vh2 - vh);
+    //         T v1 = 2.5 * vh - 0.5 * (vh0 + vh1 + vh2);
+
+    //         shared_data.xValueT(fl_ijk) = (vH + v1) / 2;
+    //         //shared_data.ttypeValue(fl_ijk) = ninfo.subtreeType(subtree_level);
+    //         shared_data.ctypeValue(fl_ijk) = ninfo.tile().type(nl_ijk);
+    //     }
+    //     else {
+    //         shared_data.xValueT(fl_ijk) = ninfo.tile()(x_channel, nl_ijk);
+    //         //shared_data.ttypeValue(fl_ijk) = ninfo.subtreeType(subtree_level);
+    //         shared_data.ctypeValue(fl_ijk) = ninfo.tile().type(nl_ijk);
+    //     }
+
+    //     //shared_data.xValueT(fl_ijk) = empty ? 0 : ninfo.tile()(x_channel, nl_ijk);
+    //     //shared_data.ttypeValue(fl_ijk) = empty ? info.subtreeType(subtree_level) : ninfo.subtreeType(subtree_level);
+    //     //shared_data.ctypeValue(fl_ijk) = empty ? CellType::DIRICHLET : ninfo.tile().type(nl_ijk);
+    // }
 }
 
 __global__ void ConservativeNegativeLaplacianSameLevel128Kernel(HATileAccessor<Tile> acc, HATileInfo<Tile>* tiles, int subtree_level, uint8_t launch_tile_types, int x_channel, int Ax_channel, bool calc_diag = false) {
