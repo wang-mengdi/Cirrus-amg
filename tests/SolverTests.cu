@@ -1248,11 +1248,13 @@ namespace SolverTests
 		auto weighted_rms_error = NormSync(grid, 2, error_channel, true, INTERIOR | NEUMANN | DIRICHLET);
 		if (weighted_rms_error < 1e-4)
 		{
-			Pass("Test passed with weighted_rms_error of grdt-x: {}\n\n", weighted_rms_error);
+		//	Pass("Test passed with weighted_rms_error of grdt-x: {}\n\n", weighted_rms_error);
+			Info("Test passed with weighted_rms_error of grdt-x: {}\n\n", weighted_rms_error);
 		}
 		else
 		{
-			Warn("Test failed with weighted_rms_error of grdt-x: {}\n\n", weighted_rms_error);
+			//Warn("Test failed with weighted_rms_error of grdt-x: {}\n\n", weighted_rms_error);
+			Info("Test failed with weighted_rms_error of grdt-x: {}\n\n", weighted_rms_error);
 		}
 	}
 
@@ -1341,28 +1343,28 @@ namespace SolverTests
 
 		fmt::print("\n");
 
-		//{
-		//    auto holder = grid.getHostTileHolderForLeafs();
+		{
+		    auto holder = grid.getHostTileHolderForLeafs();
 
+			IOFunc::OutputTilesAsVTU(holder, fmt::format("output/analytical_{}_levels{}_{}_{}_{}_tiles.vtu", grid_name, min_level, max_level, bc_name, algorithm));
+		    //IOFunc::OutputPoissonGridAsStructuredVTI(
+		    //    holder,
+		    //    { {-2,"level"}, { -1, "type" }, {rhs_channel, "rhs"}, {grdt_channel, "grdt"}, {Tile::x_channel, "x"}, {error_channel, "error"} },
+		    //    {  },
+		    //    fmt::format("output/analytical_{}_levels{}_{}_{}_{}.vti", grid_name, min_level, max_level, bc_name, algorithm)
+		    //);
 
-		//    //IOFunc::OutputPoissonGridAsStructuredVTI(
-		//    //    holder,
-		//    //    { {-2,"level"}, { -1, "type" }, {rhs_channel, "rhs"}, {grdt_channel, "grdt"}, {Tile::x_channel, "x"}, {Tile::r_channel, "r"} },
-		//    //    {  },
-		//    //    fmt::format("output/analytical_{}_levels{}_{}_{}_{}.vti", grid_name, min_level, max_level, bc_name, algorithm)
-		//    //);
+			//polyscope::init();
+			//IOFunc::AddPoissonGridCellCentersToPolyscopePointCloud(
+			//	holder,
+			//	{ {-1, "type"}, {rhs_channel, "rhs"}, {grdt_channel, "grdt"}, {Tile::x_channel, "x"}, {error_channel, "error"} },
+			//	{}
+			//);
+			//polyscope::show();
 
-		//	polyscope::init();
-		//	IOFunc::AddPoissonGridCellCentersToPolyscopePointCloud(
-		//		holder,
-		//		{ {-1, "type"}, {rhs_channel, "rhs"}, {grdt_channel, "grdt"}, {Tile::x_channel, "x"}, {error_channel, "error"} },
-		//		{}
-		//	);
-		//	polyscope::show();
+			//Info("test: {}", holder->cellValue(6, Coord(331,371,331), grdt_channel));//0.0670311
 
-		//	Info("test: {}", holder->cellValue(6, Coord(331,371,331), grdt_channel));//0.0670311
-
-		//}
+		}
 
 		// IOFunc::OutputTilesAsVTU(holder, "output/tiles.vtu");
 	}
@@ -1383,18 +1385,18 @@ namespace SolverTests
 
 		Info("Test Iter-Error with analytical solution on algorithm {}", algorithm);
 
-		{
-			std::string output_name = fmt::format("output/posson_iter_{}_{}_{}", grid_name, min_level, max_level);
+		//{
+		//	std::string output_name = fmt::format("output/posson_iter_{}_{}_{}", grid_name, min_level, max_level);
 
-			auto holder_ptr = grid.getHostTileHolderForLeafs();
-			IOFunc::OutputTilesAsVTU(holder_ptr, fmt::format("{}_tiles.vtu", output_name));
-			IOFunc::OutputPoissonGridAsStructuredVTI(
-				holder_ptr,
-				{ {-1, "type"}, {rhs_channel, "rhs"}, {grdt_channel, "f"}, {Tile::x_channel, "x"}, {error_channel, "error"} },
-				{},
-				fmt::format("{}.vti", output_name)
-			);
-		}
+		//	auto holder_ptr = grid.getHostTileHolderForLeafs();
+		//	IOFunc::OutputTilesAsVTU(holder_ptr, fmt::format("{}_tiles.vtu", output_name));
+		//	IOFunc::OutputPoissonGridAsStructuredVTI(
+		//		holder_ptr,
+		//		{ {-1, "type"}, {rhs_channel, "rhs"}, {grdt_channel, "f"}, {Tile::x_channel, "x"}, {error_channel, "error"} },
+		//		{},
+		//		fmt::format("{}.vti", output_name)
+		//	);
+		//}
 
 		grid.launchVoxelFuncOnAllTiles(
 			[=] __device__(HATileAccessor<Tile> &acc, HATileInfo<Tile> &info, const Coord & l_ijk)
@@ -1404,7 +1406,7 @@ namespace SolverTests
 		},
 			LEAF);
 
-		for (int max_iters = 0; max_iters <= 20; max_iters++)
+		for (int max_iters = 0; max_iters <= 30; max_iters++)
 		{
 			CalculateNeighborTiles(grid);
 

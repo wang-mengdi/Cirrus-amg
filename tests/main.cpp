@@ -51,9 +51,22 @@ int main(int argc, char** argv) {
 		//added projection test for SIG revision
 		for (int min_level : {1, 2, 3, 4, 5}) {
 		//for (int min_level : {5}){
+			
+			
+			//SolverTests::TestSolverErrorWithAllNeumannBC("uniform", 1.0, min_level, min_level, "athena_sin", "gmg");
 			//SolverTests::TestSolverErrorWithAllNeumannBC("center_point", 1.0, min_level, min_level + 2, "athena_sin", "gmg");
+			//SolverTests::TestSolverErrorWithAllNeumannBC("sphere_empty", 1.0, min_level, min_level + 2, "athena_sin", "gmg");
 
-			SolverTests::TestSolutionItersErrorWithAllNeumannBC("center_point", 1.0, min_level, min_level + 2, "athena_sin", "cmg");
+			
+			//SolverTests::TestSolverErrorWithAllNeumannBC("center_point", 1.0, min_level, min_level + 2, "athena_sin", "cmg");
+			//SolverTests::TestSolverErrorWithAllNeumannBC("sphere_empty", 1.0, min_level, min_level + 2, "athena_sin", "cmg");
+			//SolverTests::TestSolverErrorWithAllNeumannBC("sphere_solid", 1.0, min_level, min_level + 2, "athena_sin", "cmg");
+			SolverTests::TestSolverErrorWithAllNeumannBC("star_empty", 1.0, min_level, min_level + 2, "athena_sin", "cmg");
+			//SolverTests::TestSolverErrorWithAllNeumannBC("uniform", 1.0, min_level, min_level, "athena_sin", "cmg");
+
+			//SolverTests::TestSolutionItersErrorWithAllNeumannBC("center_point", 1.0, min_level, min_level + 2, "athena_sin", "cmg");
+			//SolverTests::TestSolutionItersErrorWithAllNeumannBC("sphere_empty", 1.0, min_level, min_level + 2, "athena_sin", "cmg");
+			//SolverTests::TestSolutionItersErrorWithAllNeumannBC("uniform", 1.0, min_level, min_level + 2, "athena_sin", "cmg");
 		}
 
 
