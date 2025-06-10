@@ -7,22 +7,22 @@ int main(int argc, char** argv) {
 
 	// Run all tests
 
-	//for (auto grid_name : { 
-	//	////TestGrids::uniform8,
-	//	//TestGrids::uniform32,
-	//	TestGrids::uniform128,
-	//	//TestGrids::uniform512, 
-	//	////TestGrids::staircase12, 
-	//	////TestGrids::staircase21, 
-	//	////TestGrids::staircase34,
-	//	TestGrids::staircase43,
-	//	TestGrids::twosources67,
-	//	}) {
+	for (auto grid_name : { 
+		////TestGrids::uniform8,
+		//TestGrids::uniform32,
+		TestGrids::uniform128,
+		//TestGrids::uniform512, 
+		////TestGrids::staircase12, 
+		////TestGrids::staircase21, 
+		////TestGrids::staircase34,
+		TestGrids::staircase43,
+		TestGrids::twosources67,
+		}) {
 
-	//	//SolverTests::TestAMGLaplacianAndFluxConsistency(grid_name);
-	//	//SolverTests::TestNeumannDirichletRecovery(grid_name, "cmg");
-	//	SolverTests::TestNeumannDirichletRecovery(grid_name, "amg");
-	//}
+		//SolverTests::TestAMGLaplacianAndFluxConsistency(grid_name);
+		//SolverTests::TestNeumannDirichletRecovery(grid_name, "cmg");
+		//SolverTests::TestNeumannDirichletRecovery(grid_name, "amg");
+	}
 
 
 	//{
@@ -47,6 +47,15 @@ int main(int argc, char** argv) {
 	//}
 
 
+	{
+		//JCP test for laplacian operator
+		for (int min_level : {1, 2, 3, 4, 5}) {
+			//SolverTests::TestDiscretizedLaplacian("sphere_empty", min_level, min_level + 2, "exponential");
+			//SolverTests::TestDiscretizedLaplacian("star_empty", min_level, min_level + 2, "exponential");
+			SolverTests::TestDiscretizedLaplacian("uniform", min_level, min_level, "exponential");
+		}
+	}
+
 	//{
 		//added projection test for SIG revision
 		for (int min_level : {1, 2, 3, 4, 5}) {
@@ -56,13 +65,23 @@ int main(int argc, char** argv) {
 			//SolverTests::TestSolverErrorWithAllNeumannBC("uniform", 1.0, min_level, min_level, "athena_sin", "gmg");
 			//SolverTests::TestSolverErrorWithAllNeumannBC("center_point", 1.0, min_level, min_level + 2, "athena_sin", "gmg");
 			//SolverTests::TestSolverErrorWithAllNeumannBC("sphere_empty", 1.0, min_level, min_level + 2, "athena_sin", "gmg");
+			//SolverTests::TestSolverErrorWithAllNeumannBC("star_empty", 1.0, min_level, min_level + 2, "athena_sin", "gmg");
 
 			
 			//SolverTests::TestSolverErrorWithAllNeumannBC("center_point", 1.0, min_level, min_level + 2, "athena_sin", "cmg");
 			//SolverTests::TestSolverErrorWithAllNeumannBC("sphere_empty", 1.0, min_level, min_level + 2, "athena_sin", "cmg");
 			//SolverTests::TestSolverErrorWithAllNeumannBC("sphere_solid", 1.0, min_level, min_level + 2, "athena_sin", "cmg");
-			SolverTests::TestSolverErrorWithAllNeumannBC("star_empty", 1.0, min_level, min_level + 2, "athena_sin", "cmg");
+			//SolverTests::TestSolverErrorWithAllNeumannBC("star_empty", 1.0, min_level, min_level + 2, "athena_sin", "cmg");
 			//SolverTests::TestSolverErrorWithAllNeumannBC("uniform", 1.0, min_level, min_level, "athena_sin", "cmg");
+
+			//JCP analytical solution test
+			//SolverTests::TestSolverErrorWithAllNeumannBC("uniform", 1.0, min_level, min_level, "athena_sin", "amg");
+			//SolverTests::TestSolverErrorWithAllNeumannBC("sphere_empty", 1.0, min_level, min_level + 2, "athena_sin", "amg");
+			//SolverTests::TestSolverErrorWithAllNeumannBC("star_empty", 1.0, min_level, min_level + 2, "athena_sin", "amg");
+
+			//SolverTests::TestSolutionItersErrorWithAllNeumannBC("sphere_empty", 1.0, min_level, min_level + 2, "athena_sin", "gmg");
+			//SolverTests::TestSolutionItersErrorWithAllNeumannBC("sphere_empty", 1.0, min_level, min_level + 2, "athena_sin", "amg");
+			//SolverTests::TestSolutionItersErrorWithAllNeumannBC("star_empty", 1.0, min_level, min_level + 2, "athena_sin", "amg");
 
 			//SolverTests::TestSolutionItersErrorWithAllNeumannBC("center_point", 1.0, min_level, min_level + 2, "athena_sin", "cmg");
 			//SolverTests::TestSolutionItersErrorWithAllNeumannBC("sphere_empty", 1.0, min_level, min_level + 2, "athena_sin", "cmg");
@@ -141,17 +160,7 @@ int main(int argc, char** argv) {
 	//SolverTests::TestRecoveryNew("sphere_solid", 5, 7);
 
 
-	//for (int min_level : {4, 5}) {
-	//for (int min_level : {4}) {
-	//for (int min_level : {1}){
-		//SolverTests::TestDiscretizedLaplacian("sphere_solid", min_level, min_level + 2, "athena_sin");
 
-		//SolverTests::TestSolverErrorWithAllNeumannBC("sphere_empty", min_level, min_level + 2, "athena_sin", "cmg");
-		//SolverTests::TestSolverErrorWithAllNeumannBC("star_empty", min_level, min_level + 2, "athena_sin", "cmg");
-
-		//SolverTests::TestSolverErrorWithAllNeumannBC("star_empty", min_level, min_level + 2, "athena_sin", "amg");
-
-	//}
 	
 
 	////for (int max_level : {3, 4, 5, 6}) {
