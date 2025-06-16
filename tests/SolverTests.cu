@@ -1901,7 +1901,7 @@ namespace SolverTests
 		// amg with coef
 		float R_matrix_coeff = 0.5;
 
-		if (grid_name == "sphere") {
+		if (grid_name == "sphere_solid") {
 			auto func_phi = []__hostdev__(const Vec & pt) {
 				// sphere solid case, phi is defined by SphereSolidGridCase::phi
 				return SphereSolidGridCase::phi(pt);
