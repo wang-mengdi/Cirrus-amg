@@ -1908,6 +1908,14 @@ namespace SolverTests
 			};
 			CreateLaplacianSystemWithSolidCut(grid, func_phi, coeff_channel, R_matrix_coeff);
 		}
+		else if (grid_name == "star_solid")
+		{
+			auto func_phi = []__hostdev__(const Vec & pt) {
+				// sphere solid case, phi is defined by StarSolidGridCase::phi
+				return StarSolidGridCase::phi(pt);
+			};
+			CreateLaplacianSystemWithSolidCut(grid, func_phi, coeff_channel, R_matrix_coeff);
+		}
 		else if (grid_name == "uniform") {
 			//phi is defined as a constant 1 in uniform
 			auto func_phi = []__hostdev__(const Vec& pt) {
@@ -2108,7 +2116,7 @@ namespace SolverTests
 		params.bottom_iters = 10;
 		params.omega = 1.5;
 
-		SolveLinearSystem(grid, coeff_channel, false, 100, 1e-6, 1, params, true);
+		SolveLinearSystem(grid, coeff_channel, false, 100, 1e-5, 1, params, true);
 
 
 
@@ -2132,7 +2140,7 @@ namespace SolverTests
 
 
 		//Info("linf: {}", NormSync(grid, -1, error_channel, false));
-		//Info("volume-weighted RMS: {}", NormSync(grid, 2, error_channel, true));
+		Info("volume-weighted Divergence: {}", NormSync(grid, 2, error_channel, true));
 
 		//Info("u: {}", holder->cellValue(3, Coord(48, 30, 30), u_channel));
 		//Info("p: {} {} {} {} {}", holder->cellValue(3, Coord(48, 30, 30), grdt_channel), holder->cellValue(4, Coord(95, 60, 60), grdt_channel), holder->cellValue(4, Coord(95, 60, 61), grdt_channel), holder->cellValue(4, Coord(95, 61, 60), grdt_channel), holder->cellValue(4, Coord(95, 61, 61), grdt_channel));

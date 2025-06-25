@@ -89,4 +89,11 @@ public:
     __hostdev__ static uint8_t type(const HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const nanovdb::Coord& l_ijk);
 };
 
+class StarSolidGridCase {
+public:
+	__hostdev__ static T phi(const Vec& pos);
+	__hostdev__ static int target(const HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, int min_level, int max_level);
+	__hostdev__ static uint8_t type(const HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const nanovdb::Coord& l_ijk);
+};
+
 std::shared_ptr<HADeviceGrid<Tile>> CreateTestGrid(const std::string grid_name, const int min_level, const int max_level);

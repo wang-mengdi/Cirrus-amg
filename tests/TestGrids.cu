@@ -79,6 +79,30 @@ __hostdev__ uint8_t StarEmptyGridCase::type(const HATileAccessor<Tile>& acc, HAT
     return CellType::INTERIOR;
 }
 
+__hostdev__ T StarSolidGridCase::phi(const Vec& pos) {
+    T x = pos[0] - 0.5;
+    T y = pos[1] - 0.5;
+    T z = pos[2] - 0.5;
+    T r = sqrt(x * x + y * y + z * z);
+    if (r == 0) return T(FLT_MAX);
+    T theta = acos(z / r);
+    T phi = atan2(y, x);
+    T r0 = 0.237 + 0.079 * cos(6 * theta) * cos(6 * phi);
+    return r - r0;
+}
+
+__hostdev__ int StarSolidGridCase::target(const HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, int min_level, int max_level) {
+    auto bbox = acc.tileBBox(info);
+    int inside_cnt0 = CornerInteriorCount(phi, bbox, 0.0);
+    int inside_cnt1 = CornerInteriorCount(phi, bbox, 0.01);
+    return (inside_cnt0 == 8 || inside_cnt1 == 0) ? min_level : max_level;
+}
+
+__hostdev__ uint8_t StarSolidGridCase::type(const HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const nanovdb::Coord& l_ijk) {
+    auto bbox = acc.cellBBox(info, l_ijk);
+    int inside_cnt = CornerInteriorCount(phi, bbox);
+    return (inside_cnt == 8) ? CellType::NEUMANN : CellType::INTERIOR;
+}
 //class SphereAir05GridCase
 //{
 //public:
@@ -251,6 +275,10 @@ std::shared_ptr<HADeviceGrid<Tile>> CreateTestGrid(const std::string grid_name, 
     else if (grid_name == "star_empty")
     {
         return CreateTestGrid<StarEmptyGridCase>(min_level, max_level);
+    }
+    else if (grid_name == "star_solid")
+    {
+		return CreateTestGrid<StarSolidGridCase>(min_level, max_level);
     }
     else
     {
