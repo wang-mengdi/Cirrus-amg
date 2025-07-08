@@ -62,7 +62,7 @@ __hostdev__ T StarEmptyGridCase::phi(const Vec& pos) {
     T y = pos[1] - 0.5;
     T z = pos[2] - 0.5;
     T r = sqrt(x * x + y * y + z * z);
-    if (r == 0) return T(FLT_MAX);
+    if (r == 0) return T(-FLT_MAX);
     T theta = acos(z / r);
     T phi = atan2(y, x);
     T r0 = 0.237 + 0.079 * cos(6 * theta) * cos(6 * phi);
@@ -84,7 +84,7 @@ __hostdev__ T StarSolidGridCase::phi(const Vec& pos) {
     T y = pos[1] - 0.5;
     T z = pos[2] - 0.5;
     T r = sqrt(x * x + y * y + z * z);
-    if (r == 0) return T(FLT_MAX);
+    if (r == 0) return T(-FLT_MAX);
     T theta = acos(z / r);
     T phi = atan2(y, x);
     T r0 = 0.237 + 0.079 * cos(6 * theta) * cos(6 * phi);
