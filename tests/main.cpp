@@ -49,9 +49,9 @@ int main(int argc, char** argv) {
 
 	{
 		//JCP test for laplacian operator
-		//for (int min_level : {1, 2, 3, 4, 5}) {
-		for (int min_level : {1, 2, 3, 4}) {
-			SolverTests::TestDiscretizedLaplacian("sphere_empty", min_level, min_level + 2, "exponential");
+		for (int min_level : {1, 2, 3, 4, 5}) {
+		//for (int min_level : {1, 2, 3, 4}) {
+			//SolverTests::TestDiscretizedLaplacian("sphere_empty", min_level, min_level + 2, "exponential");
 			//SolverTests::TestDiscretizedLaplacian("star_empty", min_level, min_level + 2, "exponential");
 			//SolverTests::TestDiscretizedLaplacian("uniform", min_level, min_level, "exponential");
 		}
