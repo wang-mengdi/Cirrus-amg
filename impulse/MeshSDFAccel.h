@@ -1,7 +1,7 @@
 #pragma once
 #include <Eigen/Core>
 #include <igl/AABB.h>
-
+#include <igl/readOBJ.h>
 
 
 class MeshSDFAccel {
