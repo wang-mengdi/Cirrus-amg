@@ -7,6 +7,8 @@ set_rundir("$(projectdir)")
 
 add_requires("magic_enum >=0.9.7")
 add_requires("tbb")
+add_requires("libigl")
+
 
 -- target("cirrus")
 --     set_kind("binary")
@@ -26,6 +28,7 @@ target("impulse")
     add_cugencodes("native")
     --add_cuflags("-extended-lambda --std=c++17")
     add_cuflags("-std=c++17 --expt-relaxed-constexpr --expt-extended-lambda")
+    add_packages("libigl", "tbb")
     add_deps("src")
 
 target("tests")
