@@ -19,9 +19,7 @@ void MeshSDFAccel::build(const Eigen::Matrix<Scalar, -1, 3>& V_in, const Eigen::
         const Eigen::Matrix<Scalar, 1, 3> a = V_.row(F_(i, 0));
         const Eigen::Matrix<Scalar, 1, 3> b = V_.row(F_(i, 1));
         const Eigen::Matrix<Scalar, 1, 3> c = V_.row(F_(i, 2));
-        Eigen::Matrix<Scalar, 1, 3> n = (b - a).cross(c - a);
-        const Scalar len = static_cast<Scalar>(n.norm());
-        FN_.row(i) = (len > Scalar(0)) ? (n / len) : Eigen::Matrix<Scalar, 1, 3>::Zero();
+        FN_.row(i) = (b - a).cross(c - a).normalized();
     }
 }
 
