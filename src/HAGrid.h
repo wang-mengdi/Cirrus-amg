@@ -229,6 +229,7 @@ __global__ void LaunchVoxelsHelperKernel(HATileAccessor<Tile> acc, FuncABC f, HA
 	if (tile_info.subtreeType(subtree_level) & launch_types) f(acc, tile_info, l_ijk);
 }
 
+//blocksize = Tile::SIZE
 template<class Tile, class FuncABC>
 __global__ void LaunchNodesHelperKernel(HATileAccessor<Tile> acc, FuncABC f, HATileInfo<Tile>* tiles, const int subtree_level, uint8_t launch_types) {
 	using Coord = typename Tile::Coord;
@@ -768,6 +769,23 @@ public:
 	template<class FuncABC>
 	void launchVoxelFuncOnAllTiles(FuncABC f, const uint8_t launch_types, const int num_groups = 1) {
 		launchVoxelFuncOnTiles(f, dAllTiles, dAllTiles.size(), launch_types, num_groups);
+	}
+
+	template<class FuncABC>
+	void launchNodeFuncOnTiles(FuncABC f, thrust::device_vector<HATileInfo<Tile>>& tiles, const int num_launched_tiles, const uint8_t launch_types) {
+		if (num_launched_tiles == 0) return;
+		LaunchNodesHelperKernel << <num_launched_tiles, Tile::SIZE >> > (
+			deviceAccessor(),
+			f,
+			thrust::raw_pointer_cast(tiles.data()),
+			-1,
+			launch_types
+			);
+	}
+
+	template<class FuncABC>
+	void launchNodeFuncOnAllTiles(FuncABC f, const uint8_t launch_types) {
+		launchNodeFuncOnTiles(f, dAllTiles, dAllTiles.size(), launch_types);
 	}
 
 	template<class FuncABC>
