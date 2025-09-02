@@ -7,9 +7,13 @@
 
 class MeshSDFAccel {
 public:
+    MeshSDFAccel(){}
+	MeshSDFAccel(const fs::path& obj_path) { init(obj_path); }
+
+    void init(const fs::path& obj_path);
+
     // Build once: copy V/F, build AABB, precompute per-face normals.
-    void build(const Eigen::Matrix<T, -1, 3>& V_in,
-        const Eigen::Matrix<int, -1, 3>& F_in);
+    void build(const Eigen::Matrix<T, -1, 3>& V_in, const Eigen::Matrix<int, -1, 3>& F_in);
 
     // Batch query signed distance for points P (N x 3).
     // Negative inside, positive outside. Uses pseudonormal sign rule.

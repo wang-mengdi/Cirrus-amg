@@ -5,6 +5,19 @@
 #include <tbb/parallel_for.h>
 #include <tbb/blocked_range.h>
 
+void MeshSDFAccel::init(const fs::path& obj_path)
+{
+    Eigen::MatrixXd Vd;
+    Eigen::MatrixXi Fi;
+    if (!igl::readOBJ(obj_path.string(), Vd, Fi)) {
+        throw std::runtime_error("MeshSDFAccel::init: Failed to read OBJ file " + obj_path.string());
+    }
+    // Convert to T
+    Eigen::Matrix<T, -1, 3> V = Vd.cast<T>();
+    Eigen::Matrix<int, -1, 3> F = Fi;
+    build(V, F);
+}
+
 void MeshSDFAccel::build(const Eigen::Matrix<T, -1, 3>& V_in, const Eigen::Matrix<int, -1, 3>& F_in)
 {
     V_ = V_in;

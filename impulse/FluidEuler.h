@@ -30,7 +30,7 @@
 __device__ Vec NFMErodedAdvectionPoint(const int axis, const HATileAccessor<Tile>& acc, const HATileInfo<Tile>& info, const Coord& l_ijk);
 
 //set all face velocities that has a neumann neighbor to 0
-void ClearAllNeumannNeighborFaces(HADeviceGrid<Tile>& grid, const int u_channel);
+//void ClearAllNeumannNeighborFaces(HADeviceGrid<Tile>& grid, const int u_channel);
 
 void MarkOldParticlesAsInvalid(thrust::device_vector<Particle>& particles, const T current_time, const T particle_life);
 
@@ -64,8 +64,7 @@ public:
 	//thrust::device_vector<int> tile_prefix_sum_d;
 
 	FluidParams mParams;
-	std::shared_ptr<MaskGrid> mMaskGrid = nullptr;
-	std::shared_ptr<SDFGrid> mSDFGrid = nullptr;
+	std::shared_ptr<MeshSDFAccel> mMeshSDFAccel = nullptr;
 
 	//std::shared_ptr<SDFGrid> mAnimationSDFGrid0 = nullptr;
 	//std::shared_ptr<SDFGrid> mAnimationSDFGrid1 = nullptr;
@@ -84,16 +83,16 @@ public:
 	double nfm_advection_time = 0;
 	double projection_time = 0;
 
-	void applyVelocityBC(HADeviceGrid<Tile>& grid, const double time) {
+	void applyVelocityBC(HADeviceGrid<Tile>& grid, const double current_time) {
 		//if (mParams.mTestCase == TVORTEX || mParams.mTestCase==FORCE_) 
 		{
-			ClearAllNeumannNeighborFaces(grid, AdvChnls::u);
+			//ClearAllNeumannNeighborFaces(grid, AdvChnls::u);
 			auto params = mParams;
 			grid.launchVoxelFuncOnAllTiles(
-				[params, time] __device__(HATileAccessor<Tile>&acc, HATileInfo<Tile>&info, const Coord & l_ijk) {
-				auto& tile = info.tile();
+				[params, current_time] __device__(HATileAccessor<Tile>&acc, HATileInfo<Tile>&info, const Coord & l_ijk) {
+				params.setVelocityBoundaryCondition(current_time, acc, info, l_ijk);
 				//if (!tile.isInterior(l_ijk)) {
-					params.setBoundaryCondition(acc, info, l_ijk, time);
+					//params.setBoundaryCondition(acc, info, l_ijk, time);
 				//}
 			}, LEAF
 			);
@@ -102,30 +101,15 @@ public:
 
 
 	void init(json &j) {
-		//Info("before init"); PrintMemoryInfo();
-
-		std::string sdf_grid_file = Json::Value<std::string>(j, "sdf_grid_file", "");
-		if (sdf_grid_file != "") {
-			float solid_isovalue = Json::Value<float>(j, "solid_isovalue", 0);
-			float sdf_isovalue = Json::Value<float>(j, "sdf_isovalue", 0.025);
-			mMaskGrid = std::make_shared<MaskGrid>(sdf_grid_file, solid_isovalue, sdf_isovalue);
+		std::string mesh_file = Json::Value<std::string>(j, "mesh_file", "mesh.obj");
+		if (mesh_file != "") {
+			mMeshSDFAccel = std::make_shared<MeshSDFAccel>(mesh_file);
 		}
 		else {
-			mMaskGrid = nullptr;
-		}
-		std::string sdf_float_grid_file = Json::Value<std::string>(j, "sdf_float_grid_file", "");
-		if (sdf_float_grid_file != "") {
-			float solid_ext_isovalue = Json::Value<float>(j, "solid_ext_isovalue", 0);
-			float sdf_ext_isovalue = Json::Value<float>(j, "sdf_ext_isovalue", 0.025);
-			mSDFGrid = std::make_shared<SDFGrid>(sdf_float_grid_file, solid_ext_isovalue, sdf_ext_isovalue);
-		}
-		else {
-			mSDFGrid = nullptr;
+			mMeshSDFAccel = nullptr;
 		}
 
-		float reserve_particles_m = Json::Value<float>(j, "reserve_particles_m", 1.0);
-		marker_particles_d.reserve((size_t)(reserve_particles_m * 1024 * 1024));
-		mParams = FluidParams(j, mMaskGrid, mSDFGrid);
+		mParams = FluidParams(j);
 
 		//level-resolution:
 		//0:8, 1:16, 2:32, 3:64, 4:128, 5:256, 6:512, 7:1024
