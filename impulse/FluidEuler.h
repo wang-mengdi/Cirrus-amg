@@ -40,6 +40,7 @@ __device__ Vec SemiLagrangianBackwardPosition(const HATileAccessor<Tile>& acc, c
 int LockedRefineWithNonBoundaryNeumannCellsOneStep(const T current_time, HADeviceGrid<Tile>& grid, const FluidParams params, const int tmp_channel, bool verbose);
 //void ReseedParticles(HADeviceGrid<Tile>& grid, const FluidParams& params, const int tmp_channel, const double current_time, const int num_particles_per_cell, thrust::device_vector<Particle>& particles);
 
+thrust::device_vector<MarkerParticle> VerticesToMarkerParticles(const Eigen::Matrix<T, -1, 3>& V, const T birth_time);
 
 class FluidEuler : public Simulator {
 public:
@@ -91,14 +92,30 @@ public:
 			grid.launchVoxelFuncOnAllTiles(
 				[params, current_time] __device__(HATileAccessor<Tile>&acc, HATileInfo<Tile>&info, const Coord & l_ijk) {
 				params.setVelocityBoundaryCondition(current_time, acc, info, l_ijk);
-				//if (!tile.isInterior(l_ijk)) {
-					//params.setBoundaryCondition(acc, info, l_ijk, time);
-				//}
 			}, LEAF
 			);
 		}
 	}
 
+	void buildTypesAndAMGCoeffs(HADeviceGrid<Tile>& grid, const T current_time) {
+		//prepare the Poisson system along with cell types
+		if (mMeshSDFAccel != nullptr) {
+			auto params = mParams;
+			auto xform = params.meshToWorldTransform(current_time);
+			CalculateSDFOnNodes(grid, BufChnls::sdf, *mMeshSDFAccel, LEAF | GHOST, xform);
+			//set wall types
+			grid.launchVoxelFuncOnAllTiles(
+				[=] __device__(HATileAccessor<Tile>&acc, HATileInfo<Tile>&info, const Coord & l_ijk) {
+				params.setWallCellType(current_time, acc, info, l_ijk);
+			}, -1, LEAF
+			);
+			//set other solid cells and build the whole system
+			CreateAMGLaplacianSystemWithSolidCutOnNodeSDF(grid, BufChnls::sdf, coeff_channel, 0.5);
+		}
+		else {
+			Assert(false, "need a mesh");
+		}
+	}
 
 	void init(json &j) {
 		std::string mesh_file = Json::Value<std::string>(j, "mesh_file", "mesh.obj");
@@ -128,26 +145,24 @@ public:
 		grid.spawnGhostTiles();
 
 		{
-
+			//refine to initial level target defined by params
 			auto params = mParams;
-			auto levelTarget = [=]__device__(const HATileAccessor<Tile> &acc, HATileInfo<Tile> &info) ->int {
+			grid.iterativeRefine([=]__device__(const HATileAccessor<Tile> &acc, HATileInfo<Tile> &info) ->int {
 				return params.initialLevelTarget(acc, info);
-			};
-			grid.iterativeRefine(levelTarget);
-
-			while (true) {
-				grid.launchVoxelFuncOnAllTiles(
-					[params] __device__(HATileAccessor<Tile>&acc, HATileInfo<Tile>&info, const Coord & l_ijk) {
-					params.setInitialCondition(acc, info, l_ijk);
-				}, -1, LEAF
-				);
-				int cnt1 = LockedRefineWithNonBoundaryNeumannCellsOneStep(0.0, grid, params, 0, false);
-				if (cnt1 == 0) break;
-			}
-
-			applyVelocityBC(grid, 0.0);
-			CalcCellTypesFromLeafs(grid);
+			});
 		}
+
+		if(mMeshSDFAccel != nullptr)
+		{
+			//refine using mesh vertices
+			auto temp_particles_d = VerticesToMarkerParticles(mMeshSDFAccel->V_, 0);
+			RefineWithMarkerParticles(grid, temp_particles_d, mParams.mCoarseLevel, mParams.mFineLevel, AdvChnls::counter, false);
+		}
+
+		buildTypesAndAMGCoeffs(grid, 0);
+
+		applyVelocityBC(grid, 0.0);
+
 		CalculateVorticityMagnitudeOnLeafs(*grid_ptr, mParams.mFineLevel, mParams.mCoarseLevel, AdvChnls::u, OutputChnls::u_node, OutputChnls::vor);
 
 	}
@@ -237,7 +252,7 @@ public:
 
 
 			AMGSolver solver(c0_channel, 0.5, 1, 1);
-			solver.prepareTypesAndCoeffs(grid);
+			//solver.prepareTypesAndCoeffs(grid);
 
 			CPUTimer timer;
 			timer.start();

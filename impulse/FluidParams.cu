@@ -54,7 +54,7 @@ FluidParams::FluidParams(json& j)
 	//mRefineThreshold = Json::Value<T>(j, "refine_threshold", 200);
 	//mGravity = Vec(0, 0, 0);
 	//mGravity[2] = Json::Value<double>(j, "gravity", -9.8);
-	//mParticleLife = Json::Value<T>(j, "particle_life", FLT_MAX);
+	mParticleLife = Json::Value<T>(j, "particle_life", FLT_MAX);
 }
 
 
@@ -62,7 +62,24 @@ __hostdev__ int FluidParams::initialLevelTarget(const HATileAccessor<Tile>& acc,
 	return mCoarseLevel;
 }
 
-__device__ uint8_t FluidParams::wallCellType(const T current_time, const HATileAccessor<Tile>& acc, const HATileInfo<Tile>& info, const nanovdb::Coord& l_ijk) const {
+__hostdev__ void FluidParams::setInitialVelocity(HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const Coord& l_ijk) const {
+	double current_time = 0.0;
+
+	if (mTestCase == MESHMOTION) {
+		Vec initial_vel = Vec(mesh_motion_inflow, 0, 0);
+
+		Tile& tile = info.tile();
+		for (int axis : {0, 1, 2}) {
+			tile(AdvChnls::u + axis, l_ijk) = initial_vel[axis];
+		}
+		//int boundary_axis, boundary_off;
+		//tile.type(l_ijk) = cellType(current_time, acc, info, l_ijk, boundary_axis, boundary_off);
+	}
+}
+
+
+
+__hostdev__ uint8_t FluidParams::wallCellType(const T current_time, const HATileAccessor<Tile>& acc, const HATileInfo<Tile>& info, const nanovdb::Coord& l_ijk) const {
 	if (mTestCase == MESHMOTION) {
 		//z+ air
 		//other walls
@@ -84,7 +101,7 @@ __device__ uint8_t FluidParams::wallCellType(const T current_time, const HATileA
 	}
 }
 
-__device__ void FluidParams::setWallCellType(const T current_time, const HATileAccessor<Tile>& acc, const HATileInfo<Tile>& info, const nanovdb::Coord& l_ijk) const
+__hostdev__ void FluidParams::setWallCellType(const T current_time, const HATileAccessor<Tile>& acc, const HATileInfo<Tile>& info, const nanovdb::Coord& l_ijk) const
 {
 	auto& tile = info.tile();
 	tile.type(l_ijk) = wallCellType(current_time, acc, info, l_ijk);
@@ -130,7 +147,7 @@ __hostdev__ void IterateFaceNeighborCellTypes(const HATileAccessor<Tile>& acc, c
 	}
 }
 
-__device__ void FluidParams::setVelocityBoundaryCondition(const T current_time, const HATileAccessor<Tile>& acc, const HATileInfo<Tile>& info, const nanovdb::Coord& l_ijk) const
+__hostdev__ void FluidParams::setVelocityBoundaryCondition(const T current_time, const HATileAccessor<Tile>& acc, const HATileInfo<Tile>& info, const nanovdb::Coord& l_ijk) const
 {
 	auto& tile = info.tile();
 	if (mTestCase == MESHMOTION) {
@@ -163,18 +180,11 @@ __device__ void FluidParams::setVelocityBoundaryCondition(const T current_time, 
 	}
 }
 
-__device__ void FluidParams::setInitialVelocity(HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const Coord& l_ijk) const {
-	double current_time = 0.0;
-
+Eigen::Transform<T, 3, Eigen::Affine> FluidParams::meshToWorldTransform(const T current_time) const
+{
 	if (mTestCase == MESHMOTION) {
-		Vec initial_vel = Vec(mesh_motion_inflow, 0, 0);
-
-		Tile& tile = info.tile();
-		for (int axis : {0, 1, 2}) {
-			tile(AdvChnls::u + axis, l_ijk) = initial_vel[axis];
-		}
-		//int boundary_axis, boundary_off;
-		//tile.type(l_ijk) = cellType(current_time, acc, info, l_ijk, boundary_axis, boundary_off);
+		return Eigen::Transform<T, 3, Eigen::Affine>();
 	}
+	
 }
 

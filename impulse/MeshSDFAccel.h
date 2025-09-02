@@ -20,7 +20,7 @@ public:
 	// xform is the affine transform from mesh-local to world coordinates.
     std::vector<T> querySDF(const std::vector<Vec>& points, const Eigen::Transform<T, 3, Eigen::Affine>& xform) const;
 
-private:
+public:
     // Stored mesh
     Eigen::Matrix<T, -1, 3> V_;   // (nV x 3)
     Eigen::Matrix<int, -1, 3> F_; // (nF x 3)

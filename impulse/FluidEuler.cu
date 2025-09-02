@@ -4,6 +4,7 @@
 #include <cub/cub.cuh>
 #include <cub/block/block_reduce.cuh>
 #include <thrust/execution_policy.h>
+#include <tbb/parallel_for.h>
 
 __device__ Vec NFMErodedAdvectionPoint(const int axis, const HATileAccessor<Tile>& acc, const HATileInfo<Tile>& info, const Coord& l_ijk) {
 	auto g_ijk = acc.localToGlobalCoord(info, l_ijk);
@@ -154,6 +155,8 @@ int LockedRefineWithNonBoundaryNeumannCellsOneStep(const T current_time, HADevic
 		if (tile.mIsInterestArea > 0) return fine_level;
 		return coarse_level;
 	};
+
+	
 	//mark non-boundary neumann cells
 	grid.launchVoxelFuncOnAllTiles(
 		[=] __device__(HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const Coord& l_ijk) {
@@ -211,4 +214,18 @@ int LockedRefineWithNonBoundaryNeumannCellsOneStep(const T current_time, HADevic
 	//Info("locked refine with non-boundary neumann cells one step: {}", cnt);
 
 	return cnt;
+}
+
+thrust::device_vector<MarkerParticle> VerticesToMarkerParticles(const Eigen::Matrix<T, -1, 3>& V, const T birth_time)
+{
+	std::vector<MarkerParticle> h_particles(V.rows());
+	//use tbb to parallely fill
+	tbb::parallel_for(tbb::blocked_range<size_t>(0, V.rows()), [&](const tbb::blocked_range<size_t>& r) {
+		for (size_t i = r.begin(); i != r.end(); ++i) {
+			h_particles[i].pos = Vec(V(i, 0), V(i, 1), V(i, 2));
+			h_particles[i].birth_time = birth_time;
+		}
+		});
+
+	return thrust::device_vector<MarkerParticle>(h_particles);
 }

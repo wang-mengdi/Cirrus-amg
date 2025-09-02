@@ -65,7 +65,7 @@ public:
 	int mCoarseLevel;
 	int mFineLevel;
 	//T mRefineThreshold;
-	//T mParticleLife;
+	T mParticleLife;
 	//nanovdb::Vec3R mGravity;
 	T mesh_motion_inflow = 1.0;
 
@@ -99,13 +99,14 @@ public:
 	FluidParams(json& j);
 
 	__hostdev__ int initialLevelTarget(const HATileAccessor<Tile>& acc, HATileInfo<Tile>& info) const;
-	//includes the outer walls of the computational field, but not including the movable mesh inside
-	__device__ uint8_t wallCellType(const T current_time, const HATileAccessor<Tile>& acc, const HATileInfo<Tile>& info, const nanovdb::Coord& l_ijk) const;
-	__device__ void setWallCellType(const T current_time, const HATileAccessor<Tile>& acc, const HATileInfo<Tile>& info, const nanovdb::Coord& l_ijk) const;
-
-	__device__ void setVelocityBoundaryCondition(const T current_time, const HATileAccessor<Tile>& acc, const HATileInfo<Tile>& info, const nanovdb::Coord& l_ijk) const;
-
-
 	//set type, velocity, smoke
-	__device__ void setInitialVelocity(HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const Coord& l_ijk)const;
+	__hostdev__ void setInitialVelocity(HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const Coord& l_ijk)const;
+	//includes the outer walls of the computational field, but not including the movable mesh inside
+	__hostdev__ uint8_t wallCellType(const T current_time, const HATileAccessor<Tile>& acc, const HATileInfo<Tile>& info, const nanovdb::Coord& l_ijk) const;
+	__hostdev__ void setWallCellType(const T current_time, const HATileAccessor<Tile>& acc, const HATileInfo<Tile>& info, const nanovdb::Coord& l_ijk) const;
+
+	__hostdev__ void setVelocityBoundaryCondition(const T current_time, const HATileAccessor<Tile>& acc, const HATileInfo<Tile>& info, const nanovdb::Coord& l_ijk) const;
+
+
+	Eigen::Transform<T, 3, Eigen::Affine> meshToWorldTransform(const T current_time) const;
 };
