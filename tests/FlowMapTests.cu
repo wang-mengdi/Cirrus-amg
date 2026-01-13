@@ -314,7 +314,7 @@ namespace FlowMapTests {
             }
         }
 
-        Info("Max error at index {} with value {}, pc1 {} pc2 {}", max_idx, max_error, pc1[max_idx], pc2[max_idx]);
+        //Info("Max error at index {} with value {}, pc1 {} pc2 {}", max_idx, max_error, pc1[max_idx], pc2[max_idx]);
 
         return max_error;
     }
