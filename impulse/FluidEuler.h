@@ -14,6 +14,7 @@
 #include "PoissonIOFunc.h"
 #include "FMParticles.h"
 #include "MarkerParticles.h"
+#include "PoissonGrid.h"
 
 
 #include <polyscope/polyscope.h>

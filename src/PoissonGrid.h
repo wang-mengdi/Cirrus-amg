@@ -78,6 +78,8 @@ void CalcLeafNodeValuesFromCellCenters(HADeviceGrid<Tile>& grid, const int cell_
 __device__ Tile::T InterpolateCellValue(const HATileAccessor<Tile>& acc, const Vec& pos, const int cell_channel, const int node_channel);
 __device__ Vec InterpolateFaceValue(const HATileAccessor<Tile>& acc, const Vec& pos, const int u_channel, const int node_u_channel);
 
+template<class FuncII> __hostdev__ void IterateFaceNeighborCellTypes(const HATileAccessor<Tile>& acc, const HATileInfo<Tile>& info, const Coord& l_ijk, const int axis, FuncII f);
+
 void ReCenterLeafCells(HADeviceGrid<Tile>& grid, const int channel, DeviceReducer<double>& cnt_reducer, double* d_mean, double* d_count);
 
 //THIS FUNCTION IS TO BE DEPRECATED

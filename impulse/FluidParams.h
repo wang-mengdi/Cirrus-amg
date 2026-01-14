@@ -61,12 +61,12 @@ class FluidParams {
 public:
 	//parameters read from json
 	TestCase mTestCase;
-	//int mFlowMapStride;
+	int mFlowMapStride;
 	int mCoarseLevel;
 	int mFineLevel;
 	//T mRefineThreshold;
 	T mParticleLife;
-	//nanovdb::Vec3R mGravity;
+	nanovdb::Vec3R mGravity;
 	T mesh_motion_inflow = 1.0;
 
 	//MaskGridAccessor mMaskGridAccessor;
@@ -98,15 +98,24 @@ public:
 	FluidParams() {}
 	FluidParams(json& j);
 
+	//initialization
 	__hostdev__ int initialLevelTarget(const HATileAccessor<Tile>& acc, HATileInfo<Tile>& info) const;
 	//set type, velocity, smoke
 	__hostdev__ void setInitialVelocity(HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const Coord& l_ijk)const;
 	//includes the outer walls of the computational field, but not including the movable mesh inside
 	__hostdev__ uint8_t wallCellType(const T current_time, const HATileAccessor<Tile>& acc, const HATileInfo<Tile>& info, const nanovdb::Coord& l_ijk) const;
 	__hostdev__ void setWallCellType(const T current_time, const HATileAccessor<Tile>& acc, const HATileInfo<Tile>& info, const nanovdb::Coord& l_ijk) const;
-
 	__hostdev__ void setVelocityBoundaryCondition(const T current_time, const HATileAccessor<Tile>& acc, const HATileInfo<Tile>& info, const nanovdb::Coord& l_ijk) const;
 
+	//runtime functions
+	__hostdev__ bool isInParticleGenerationRegion(const T current_time, const HATileAccessor<Tile>& acc, const HATileInfo<Tile>& info, const Coord& l_ijk)const {
+		return false;
+	}
+	__device__ uint8_t cellType(const T current_time, const HATileAccessor<Tile>& acc, const HATileInfo<Tile>& info, const nanovdb::Coord& l_ijk, int& boundary_axis, int& boundary_off) const {
+		return DIRICHLET;
+	}
 
 	Eigen::Transform<T, 3, Eigen::Affine> meshToWorldTransform(const T current_time) const;
+
+
 };
