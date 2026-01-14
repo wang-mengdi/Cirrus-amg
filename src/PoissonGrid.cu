@@ -713,46 +713,6 @@ __device__ Vec InterpolateFaceValue(const HATileAccessor<Tile>& acc, const Vec& 
     return vec;
 }
 
-template<class FuncII>
-__hostdev__ void IterateFaceNeighborCellTypes(const HATileAccessor<Tile>& acc, const HATileInfo<Tile>& info, const Coord& l_ijk, const int axis, FuncII f) {
-    auto& tile = info.tile();
-    uint8_t type0 = tile.type(l_ijk);
-
-    auto g_ijk = acc.localToGlobalCoord(info, l_ijk);
-    auto ng_ijk = g_ijk; ng_ijk[axis]--;
-    HATileInfo<Tile> ninfo; Coord nl_ijk;
-    acc.findVoxel(info.mLevel, ng_ijk, ninfo, nl_ijk);
-
-    if (!ninfo.empty()) {
-        if (!ninfo.isLeaf()) {
-            for (int offj : {0, 1}) {
-                for (int offk : {0, 1}) {
-                    Coord child_offset = acc.rotateCoord(axis, Coord(1, offj, offk));
-                    Coord nc_ijk = acc.childCoord(ng_ijk, child_offset);
-                    HATileInfo<Tile> nc_info; Coord ncl_ijk;
-                    acc.findVoxel(info.mLevel + 1, nc_ijk, nc_info, ncl_ijk);
-                    if (!nc_info.empty()) {
-                        auto& nctile = nc_info.tile();
-                        uint8_t type1 = nctile.type(ncl_ijk);
-                        f(type0, type1);
-                    }
-                }
-            }
-        }
-        else {
-            if (ninfo.isGhost()) {
-                //it's coarser
-                Coord np_ijk = acc.parentCoord(ng_ijk);
-                acc.findVoxel(info.mLevel - 1, np_ijk, ninfo, nl_ijk);
-
-            }
-            auto& ntile = ninfo.tile();
-            uint8_t type1 = ntile.type(nl_ijk);
-            f(type0, type1);
-        }
-    }
-}
-
 void ReCenterLeafCells(HADeviceGrid<Tile>& grid, const int channel, DeviceReducer<double>& cnt_reducer, double* d_mean, double* d_count) {
     int num_tiles = grid.dAllTiles.size();
     cnt_reducer.resize(num_tiles);
