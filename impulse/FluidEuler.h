@@ -119,6 +119,8 @@ public:
 	}
 
 	void init(json &j) {
+		//fmt::print("current path: {}\n", fs::current_path().string());
+
 		std::string mesh_file = Json::Value<std::string>(j, "mesh_file", "mesh.obj");
 		if (mesh_file != "") {
 			mMeshSDFAccel = std::make_shared<MeshSDFAccel>(mesh_file);

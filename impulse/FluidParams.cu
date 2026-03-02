@@ -48,7 +48,7 @@ FluidParams::FluidParams(json& j)
 		mesh_motion_inflow = Json::Value<T>(j, "inflow_velocity", 1.0);
 	}
 
-	//mFlowMapStride = Json::Value<int>(j, "flowmap_stride", 5);
+	mFlowMapStride = Json::Value<int>(j, "flowmap_stride", 5);
 	mCoarseLevel = Json::Value<int>(j, "coarse_level", 0);
 	mFineLevel = Json::Value<int>(j, "fine_level", 6);
 	//mRefineThreshold = Json::Value<T>(j, "refine_threshold", 200);
@@ -143,8 +143,28 @@ __hostdev__ void FluidParams::setVelocityBoundaryCondition(const T current_time,
 Eigen::Transform<T, 3, Eigen::Affine> FluidParams::meshToWorldTransform(const T current_time) const
 {
 	if (mTestCase == MESHMOTION) {
-		return Eigen::Transform<T, 3, Eigen::Affine>();
+		// Clamp time parameter to [0, 1]
+		T t = current_time;
+
+		// Linear interpolation of center position over time:
+		// t = 0 -> (0.5, 0.5, 0.8)
+		// t = 1 -> (0.5, 0.5, 0.3)
+		const T x = 0.5;
+		const T y = 0.5;
+		const T z0 = 0.8;
+		const T z1 = 0.3;
+		const T z = (1 - t) * z0 + t * z1;
+
+		Eigen::Transform<T, 3, Eigen::Affine> transform =
+			Eigen::Transform<T, 3, Eigen::Affine>::Identity();
+
+		// Set translation so that the mesh center moves along the z-axis
+		transform.translation() = Eigen::Matrix<T, 3, 1>(x, y, z);
+
+		return transform;
 	}
-	
+	else {
+		Error("meshToWorldTransform not implemented for test case {}", int(mTestCase));
+	}
 }
 

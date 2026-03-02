@@ -7,6 +7,14 @@
 
 void MeshSDFAccel::init(const fs::path& obj_path)
 {
+	//fmt::print("current working directory: {}\n", fs::current_path().string());
+	//fmt::print("MeshSDFAccel::init: Checking if file exists at {}\n", obj_path.string());
+	// Check if file exists
+    if (!fs::exists(obj_path)) {
+        throw std::runtime_error("MeshSDFAccel::init: File does not exist: " + obj_path.string());
+	}
+	//fmt::print("MeshSDFAccel::init: Reading mesh from {}\n", obj_path.string());
+
     Eigen::MatrixXd Vd;
     Eigen::MatrixXi Fi;
     if (!igl::readOBJ(obj_path.string(), Vd, Fi)) {
