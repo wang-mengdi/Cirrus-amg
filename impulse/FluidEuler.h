@@ -121,13 +121,13 @@ public:
 			CalculateSDFOnNodes(grid, BufChnls::sdf, *mMeshSDFAccel, LEAF | GHOST, xform);
 
 
-			{
-				//show sdf values on nodes
-				polyscope::init();
-				auto holder = grid.getHostTileHolderForLeafs();
-				IOFunc::AddPoissonGridNodesToPolyscope(holder, { {BufChnls::sdf, "sdf"} }, {});
-				polyscope::show();
-			}
+			//{
+			//	//show sdf values on nodes
+			//	polyscope::init();
+			//	auto holder = grid.getHostTileHolderForLeafs();
+			//	IOFunc::AddPoissonGridNodesToPolyscope(holder, { {BufChnls::sdf, "sdf"} }, {});
+			//	polyscope::show();
+			//}
 
 			//set wall types
 			grid.launchVoxelFuncOnAllTiles(

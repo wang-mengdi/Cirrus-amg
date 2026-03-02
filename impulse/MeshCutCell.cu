@@ -18,12 +18,12 @@ void CalculateSDFOnNodes(HADeviceGrid<Tile>& grid, int node_sdf_channel, const M
 					auto pos = h_acc.cellCorner(info, l_ijk);
 					corners[tile_idx * Tile::NODESIZE + node_idx] = pos;
 
-					if (info.mTileCoord == Coord(2, 4, 7) && l_ijk == Coord(8, 7, 0)) {
-						auto actual_sdf = (Vec(0.5, 0.5, 0.8) - pos).length() - 0.1;
-						std::vector<Vec> test_pos = { pos };
-						auto query_sdf = mesh_sdf.querySDF(test_pos, xform)[0];
-						printf("corner: %f, %f, %f tile idx %d, seq idx: %d actual sdf: %f query sdf: %f\n", pos[0], pos[1], pos[2], tile_idx, tile_idx * Tile::NODESIZE + node_idx, actual_sdf, query_sdf);
-					}
+					//if (info.mTileCoord == Coord(2, 4, 7) && l_ijk == Coord(8, 7, 0)) {
+					//	auto actual_sdf = (Vec(0.5, 0.5, 0.8) - pos).length() - 0.1;
+					//	std::vector<Vec> test_pos = { pos };
+					//	auto query_sdf = mesh_sdf.querySDF(test_pos, xform)[0];
+					//	printf("corner: %f, %f, %f tile idx %d, seq idx: %d actual sdf: %f query sdf: %f\n", pos[0], pos[1], pos[2], tile_idx, tile_idx * Tile::NODESIZE + node_idx, actual_sdf, query_sdf);
+					//}
 
 				}
 			}
@@ -44,37 +44,12 @@ void CalculateSDFOnNodes(HADeviceGrid<Tile>& grid, int node_sdf_channel, const M
 		auto sdf_value = d_sdf_ptr[seq_idx];
 		tile.node(node_sdf_channel, r_ijk) = sdf_value;
 
-		if (info.mTileCoord == Coord(2, 4, 7) && r_ijk == Coord(8, 7, 0)) {
-			printf("write sdf: %f, tile idx: %d, seq idx: %d\n", d_sdf_ptr[seq_idx], tile_idx, seq_idx);
-		}
-
-		//for (int i = 0; i < Tile::NODESIZE; ++i) {
-		//	int seq_idx = tile_idx * Tile::NODESIZE + i;
-		//	auto r_ijk = acc.localNodeOffsetToCoord(i);
-		//	tile.node(node_sdf_channel, r_ijk) = d_sdf_ptr[seq_idx];
-		//	if (info.mTileCoord == Coord(2, 4, 7) &&r_ijk == Coord(8, 7, 0)) {
-		//		printf("write sdf: %f, tile idx: %d, seq idx: %d\n", d_sdf_ptr[seq_idx], tile_idx, seq_idx);
-		//	}
+		//if (info.mTileCoord == Coord(2, 4, 7) && r_ijk == Coord(8, 7, 0)) {
+		//	printf("write sdf: %f, tile idx: %d, seq idx: %d\n", d_sdf_ptr[seq_idx], tile_idx, seq_idx);
 		//}
 	},
 		launch_types
 	);
-
-	//grid.launchTileFunc(
-	//	[=] __device__(HATileAccessor<Tile> acc, const int tile_idx, HATileInfo<Tile>&info) {
-	//	auto& tile = info.tile();
-	//	for (int i = 0; i < Tile::NODESIZE; ++i) {
-	//		int seq_idx = tile_idx * Tile::NODESIZE + i;
-	//		auto r_ijk = acc.localNodeOffsetToCoord(i);
-	//		tile.node(node_sdf_channel, r_ijk) = d_sdf_ptr[seq_idx];
-
-	//		if (info.mTileCoord == Coord(2, 4, 7) &&r_ijk == Coord(8, 7, 0)) {
-	//			printf("write sdf: %f, tile idx: %d, seq idx: %d\n", d_sdf_ptr[seq_idx], tile_idx, seq_idx);
-	//		}
-	//	}
-	//},
-	//	-1, launch_types, LAUNCH_SUBTREE
-	//);
 }
 
 __hostdev__ int CornerInteriorCount(const Tile& tile, const int node_sdf_channel, const Coord& l_ijk, T isovalue = 0) {
