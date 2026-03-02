@@ -243,6 +243,20 @@ __global__ void LaunchNodesHelperKernel(HATileAccessor<Tile> acc, FuncABC f, HAT
 	}
 }
 
+//blocksize = Tile::SIZE
+template<class Tile, class FuncAIBC>
+__global__ void LaunchNodesWithTileIdxHelperKernel(HATileAccessor<Tile> acc, FuncAIBC f, HATileInfo<Tile>* tiles, const int subtree_level, uint8_t launch_types) {
+	using Coord = typename Tile::Coord;
+	//auto idx = threadIdx.x;
+	for (auto idx : { threadIdx.x * 2, threadIdx.x * 2 + 1 }) {
+		if (idx < (Tile::DIM + 1) * (Tile::DIM + 1) * (Tile::DIM + 1)) {
+			Coord r_ijk = acc.localNodeOffsetToCoord(idx);
+			HATileInfo<Tile> tile_info = tiles[blockIdx.x];
+			if (tile_info.subtreeType(subtree_level) & launch_types) f(acc, blockIdx.x, tile_info, r_ijk);
+		}
+	}
+}
+
 template<class Tile, class FuncAIB>
 __global__ void LaunchTilesHelperKernel(HATileAccessor<Tile> acc, FuncAIB f, HATileInfo<Tile>* tiles, int num_tiles, const int subtree_level, uint8_t launch_types) {
 	auto idx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -771,21 +785,22 @@ public:
 		launchVoxelFuncOnTiles(f, dAllTiles, dAllTiles.size(), launch_types, num_groups);
 	}
 
-	template<class FuncABC>
-	void launchNodeFuncOnTiles(FuncABC f, thrust::device_vector<HATileInfo<Tile>>& tiles, const int num_launched_tiles, const uint8_t launch_types) {
-		if (num_launched_tiles == 0) return;
-		LaunchNodesHelperKernel << <num_launched_tiles, Tile::SIZE >> > (
-			deviceAccessor(),
-			f,
-			thrust::raw_pointer_cast(tiles.data()),
-			-1,
-			launch_types
-			);
-	}
+	//template<class FuncABC>
+	//void launchNodeFuncOnTiles(FuncABC f, thrust::device_vector<HATileInfo<Tile>>& tiles, const int num_launched_tiles, const uint8_t launch_types) {
+	//	if (num_launched_tiles == 0) return;
+	//	LaunchNodesHelperKernel << <num_launched_tiles, Tile::SIZE >> > (
+	//		deviceAccessor(),
+	//		f,
+	//		thrust::raw_pointer_cast(tiles.data()),
+	//		-1,
+	//		launch_types
+	//		);
+	//}
 
-	template<class FuncABC>
-	void launchNodeFuncOnAllTiles(FuncABC f, const uint8_t launch_types) {
-		launchNodeFuncOnTiles(f, dAllTiles, dAllTiles.size(), launch_types);
+	template<class FuncAIBC>
+	void launchNodeFuncWithTileIdxOnAllTiles(FuncAIBC f, const uint8_t launch_types) {
+		LaunchNodesWithTileIdxHelperKernel << <dAllTiles.size(), Tile::SIZE >> > (deviceAccessor(), f, thrust::raw_pointer_cast(dAllTiles.data()), -1, launch_types);
+		//launchNodeFuncOnTiles(f, dAllTiles, dAllTiles.size(), launch_types);
 	}
 
 	template<class FuncABC>

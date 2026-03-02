@@ -103,7 +103,32 @@ public:
 		if (mMeshSDFAccel != nullptr) {
 			auto params = mParams;
 			auto xform = params.meshToWorldTransform(current_time);
+
+			//{
+			//	std::vector<Vec> corners;
+			//	//sample 0.0,0.1,...,1.0 on z axis at (0.5,0.5)
+			//	for(int i=0; i<=10; i++) {
+			//		corners.push_back(Vec(0.5, 0.5, 0.1 * i));
+			//	}
+
+			//	std::vector<T> h_sdfs = mMeshSDFAccel->querySDF(corners, xform);
+			//	for(int i=0; i<corners.size(); i++) {
+			//		fmt::print("corner {}: {}, sdf: {}\n", i, corners[i], h_sdfs[i]);
+			//	}
+			//	system("pause");
+			//}
+
 			CalculateSDFOnNodes(grid, BufChnls::sdf, *mMeshSDFAccel, LEAF | GHOST, xform);
+
+
+			{
+				//show sdf values on nodes
+				polyscope::init();
+				auto holder = grid.getHostTileHolderForLeafs();
+				IOFunc::AddPoissonGridNodesToPolyscope(holder, { {BufChnls::sdf, "sdf"} }, {});
+				polyscope::show();
+			}
+
 			//set wall types
 			grid.launchVoxelFuncOnAllTiles(
 				[=] __device__(HATileAccessor<Tile>&acc, HATileInfo<Tile>&info, const Coord & l_ijk) {
@@ -112,6 +137,8 @@ public:
 			);
 			//set other solid cells and build the whole system
 			CreateAMGLaplacianSystemWithSolidCutOnNodeSDF(grid, BufChnls::sdf, coeff_channel, 0.5);
+
+
 		}
 		else {
 			Assert(false, "need a mesh");
