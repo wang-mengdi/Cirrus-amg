@@ -41,7 +41,7 @@ __device__ Vec SemiLagrangianBackwardPosition(const HATileAccessor<Tile>& acc, c
 int LockedRefineWithNonBoundaryNeumannCellsOneStep(const T current_time, HADeviceGrid<Tile>& grid, const FluidParams params, const int tmp_channel, bool verbose);
 //void ReseedParticles(HADeviceGrid<Tile>& grid, const FluidParams& params, const int tmp_channel, const double current_time, const int num_particles_per_cell, thrust::device_vector<Particle>& particles);
 
-thrust::device_vector<MarkerParticle> VerticesToMarkerParticles(const Eigen::Matrix<T, -1, 3>& V, const T birth_time);
+thrust::device_vector<MarkerParticle> VerticesToMarkerParticles(const Eigen::Matrix<T, -1, 3>& V, const Eigen::Transform<T, 3, Eigen::Affine>& mesh_to_world, const T birth_time);
 
 class FluidEuler : public Simulator {
 public:
@@ -158,7 +158,7 @@ public:
 		if(mMeshSDFAccel != nullptr)
 		{
 			//refine using mesh vertices
-			auto temp_particles_d = VerticesToMarkerParticles(mMeshSDFAccel->V_, 0);
+			auto temp_particles_d = VerticesToMarkerParticles(mMeshSDFAccel->V_, mParams.meshToWorldTransform(0.), 0.);
 			RefineWithMarkerParticles(grid, temp_particles_d, mParams.mCoarseLevel, mParams.mFineLevel, AdvChnls::counter, false);
 		}
 

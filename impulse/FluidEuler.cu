@@ -216,16 +216,33 @@ int LockedRefineWithNonBoundaryNeumannCellsOneStep(const T current_time, HADevic
 	return cnt;
 }
 
-thrust::device_vector<MarkerParticle> VerticesToMarkerParticles(const Eigen::Matrix<T, -1, 3>& V, const T birth_time)
+thrust::device_vector<MarkerParticle> VerticesToMarkerParticles(const Eigen::Matrix<T, -1, 3>& V, const Eigen::Transform<T, 3, Eigen::Affine>& mesh_to_world, const T birth_time)
 {
+	// Host-side particle buffer
 	std::vector<MarkerParticle> h_particles(V.rows());
-	//use tbb to parallely fill
-	tbb::parallel_for(tbb::blocked_range<size_t>(0, V.rows()), [&](const tbb::blocked_range<size_t>& r) {
-		for (size_t i = r.begin(); i != r.end(); ++i) {
-			h_particles[i].pos = Vec(V(i, 0), V(i, 1), V(i, 2));
-			h_particles[i].birth_time = birth_time;
-		}
+
+	// Fill particles in parallel on CPU
+	tbb::parallel_for(
+		tbb::blocked_range<size_t>(0, static_cast<size_t>(V.rows())),
+		[&](const tbb::blocked_range<size_t>& r)
+		{
+			for (size_t i = r.begin(); i != r.end(); ++i)
+			{
+				// Position in mesh space
+				Eigen::Matrix<T, 3, 1> p_mesh(
+					V(static_cast<Eigen::Index>(i), 0),
+					V(static_cast<Eigen::Index>(i), 1),
+					V(static_cast<Eigen::Index>(i), 2));
+
+				// Transform to world space
+				Eigen::Matrix<T, 3, 1> p_world = mesh_to_world * p_mesh;
+
+				// Store world-space position and birth time
+				h_particles[i].pos = Vec(p_world(0), p_world(1), p_world(2));
+				h_particles[i].birth_time = birth_time;
+			}
 		});
 
-	return thrust::device_vector<MarkerParticle>(h_particles);
+	// Upload to device
+	return thrust::device_vector<MarkerParticle>(h_particles.begin(), h_particles.end());
 }
