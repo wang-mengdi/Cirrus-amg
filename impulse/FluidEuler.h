@@ -121,14 +121,6 @@ public:
 			CalculateSDFOnNodes(grid, BufChnls::sdf, *mMeshSDFAccel, LEAF | GHOST, xform);
 
 
-			//{
-			//	//show sdf values on nodes
-			//	polyscope::init();
-			//	auto holder = grid.getHostTileHolderForLeafs();
-			//	IOFunc::AddPoissonGridNodesToPolyscope(holder, { {BufChnls::sdf, "sdf"} }, {});
-			//	polyscope::show();
-			//}
-
 			//set wall types
 			grid.launchVoxelFuncOnAllTiles(
 				[=] __device__(HATileAccessor<Tile>&acc, HATileInfo<Tile>&info, const Coord & l_ijk) {
@@ -169,10 +161,10 @@ public:
 		{
 			//1*1*1
 			grid.setTileHost(0, nanovdb::Coord(0, 0, 0), Tile(), LEAF);
+			grid.compressHost();
+			grid.syncHostAndDevice();
+			grid.spawnGhostTiles();
 		}
-		grid.compressHost();
-		grid.syncHostAndDevice();
-		grid.spawnGhostTiles();
 
 		{
 			//refine to initial level target defined by params
@@ -191,7 +183,25 @@ public:
 
 		buildTypesAndAMGCoeffs(grid, 0);
 
+		{
+			//set initial velocity
+			auto params = mParams;
+			grid.launchVoxelFuncOnAllTiles(
+				[params] __device__(HATileAccessor<Tile>&acc, HATileInfo<Tile>&info, const Coord & l_ijk) {
+				params.setInitialVelocity(acc, info, l_ijk);
+			}, LEAF
+			);
+		}
+
 		applyVelocityBC(grid, 0.0);
+
+		//{
+		//	//show sdf values on nodes
+		//	polyscope::init();
+		//	auto holder = grid.getHostTileHolderForLeafs();
+		//	IOFunc::AddPoissonGridNodesToPolyscope(holder, { {BufChnls::sdf, "sdf"} }, {});
+		//	polyscope::show();
+		//}
 
 		CalculateVorticityMagnitudeOnLeafs(*grid_ptr, mParams.mFineLevel, mParams.mCoarseLevel, AdvChnls::u, OutputChnls::u_node, OutputChnls::vor);
 
