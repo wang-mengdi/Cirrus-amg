@@ -94,6 +94,10 @@ __hostdev__ void IterateFaceNeighborCellTypes(const HATileAccessor<Tile>& acc, c
     HATileInfo<Tile> ninfo; Coord nl_ijk;
     acc.findVoxel(info.mLevel, ng_ijk, ninfo, nl_ijk);
 
+    if (info.mLevel == 5 && g_ijk == Coord(122, 142, 208)) {
+        printf("IterateFaceNeighborCellTypes: tile %d,%d,%d type %d, neighbor %d,%d,%d type %d tile type %d\n", g_ijk[0], g_ijk[1], g_ijk[2], type0, ng_ijk[0], ng_ijk[1], ng_ijk[2], ninfo.empty() ? -1 : ninfo.tile().type(nl_ijk), ninfo.mType);
+    }
+
     if (!ninfo.empty()) {
         if (!ninfo.isLeaf()) {
             for (int offj : {0, 1}) {

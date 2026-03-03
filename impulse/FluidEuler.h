@@ -210,7 +210,8 @@ public:
 			//show velocity on polyscope before proj
 			polyscope::init();
 			auto holder = grid.getHostTileHolderForLeafs();
-			IOFunc::AddPoissonGridCellCentersToPolyscopePointCloud(holder, { { -1,"type" }, { BufChnls::vor, "vorticity" } }, { { BufChnls::u, "velocity" } });
+			//IOFunc::AddPoissonGridCellCentersToPolyscopePointCloud(holder, { { -1,"type" }, { BufChnls::vor, "vorticity" } }, { { BufChnls::u, "velocity" } });
+			IOFunc::AddLeveledPoissonGridCellCentersToPolyscopePointCloud(holder, { { -1,"type" }, { BufChnls::vor, "vorticity" } }, { { BufChnls::u, "velocity" } });
 			polyscope::show();
 		}
 	}
@@ -556,13 +557,7 @@ public:
 
 		adaptAndAdvect(metadata, grid_ptrs);
 
-		//{
-		//	//show velocity on polyscope before proj
-		//	polyscope::init();
-		//	auto holder = grid.getHostTileHolderForLeafs();
-		//	IOFunc::AddPoissonGridCellCentersToPolyscopePointCloud(holder, { { -1,"type" }, { OutputChnls::vor, "vorticity" } }, { { OutputChnls::u_cell, "velocity" } });
-		//	polyscope::show();
-		//}
+
 
 
 		applyExternalForce(grid, dt);
@@ -570,13 +565,22 @@ public:
 
 		applyVelocityBC(grid, metadata.current_time);
 
-
+		{
+			//show velocity on polyscope before proj
+			polyscope::init();
+			auto holder = grid.getHostTileHolderForLeafs();
+			//IOFunc::AddPoissonGridCellCentersToPolyscopePointCloud(holder, { { -1,"type" }, { BufChnls::vor, "vorticity" } }, { { BufChnls::u, "velocity" } });
+			IOFunc::AddLeveledPoissonGridCellCentersToPolyscopePointCloud(holder, { { -1,"type" }, { BufChnls::vor, "vorticity" } }, { { BufChnls::u, "velocity" } });
+			polyscope::show();
+		}
 
 
 		//projection
 		project(grid, BufChnls::u, metadata.current_time);
 
 		CalculateVelocityAndVorticityMagnitudeOnLeafCellCenters(grid, mParams.mFineLevel, mParams.mCoarseLevel, BufChnls::u, BufChnls::u_node, BufChnls::u_cell, BufChnls::vor);
+
+
 
 
 		CheckCudaError("Advance");

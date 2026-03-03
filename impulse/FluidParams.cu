@@ -123,6 +123,20 @@ __hostdev__ void FluidParams::setVelocityBoundaryCondition(const T current_time,
 						to_set = true;
 					}
 					});
+
+				{
+					//global coord (122, 142, 208) at level 5
+					auto g_ijk = acc.localToGlobalCoord(info, l_ijk);
+					if(info.mLevel == 5 && g_ijk == Coord(122, 142, 208)) {
+						printf("g_ijk %d %d %d\n", g_ijk[0], g_ijk[1], g_ijk[2]);
+						printf("type center %d\n", tile.type(l_ijk));
+						printf("to_set: %d\n", to_set);
+						IterateFaceNeighborCellTypes(acc, info, l_ijk, axis, [&](const uint8_t type0, const uint8_t type1) {
+							printf("type neighbor %d %d\n", type0, type1);
+							});
+					}
+				}
+
 				if (to_set) {
 					info.tile()(BufChnls::u + axis, l_ijk) = 0;
 				}
