@@ -94,12 +94,20 @@ __hostdev__ void IterateFaceNeighborCellTypes(const HATileAccessor<Tile>& acc, c
     HATileInfo<Tile> ninfo; Coord nl_ijk;
     acc.findVoxel(info.mLevel, ng_ijk, ninfo, nl_ijk);
 
-    if (info.mLevel == 5 && g_ijk == Coord(122, 142, 208)) {
-        printf("IterateFaceNeighborCellTypes: tile %d,%d,%d type %d, neighbor %d,%d,%d type %d tile type %d\n", g_ijk[0], g_ijk[1], g_ijk[2], type0, ng_ijk[0], ng_ijk[1], ng_ijk[2], ninfo.empty() ? -1 : ninfo.tile().type(nl_ijk), ninfo.mType);
-    }
+    //if (info.mLevel == 5 && g_ijk == Coord(122, 142, 208)) {
+    //    printf("IterateFaceNeighborCellTypes: tile %d,%d,%d type %d, neighbor %d,%d,%d type %d tile type %d\n", g_ijk[0], g_ijk[1], g_ijk[2], type0, ng_ijk[0], ng_ijk[1], ng_ijk[2], ninfo.empty() ? -1 : ninfo.tile().type(nl_ijk), ninfo.mType);
+    //}
 
     if (!ninfo.empty()) {
-        if (!ninfo.isLeaf()) {
+        if (ninfo.isLeaf()) {
+            f(type0, ninfo.tile().type(nl_ijk));
+        }
+        else if (ninfo.isGhost()) {//actual leaf is coarser
+            Coord np_ijk = acc.parentCoord(ng_ijk);
+            acc.findVoxel(info.mLevel - 1, np_ijk, ninfo, nl_ijk);
+            f(type0, ninfo.tile().type(nl_ijk));
+        }
+        else {//it's INTERIOR, so there are 4 leafs
             for (int offj : {0, 1}) {
                 for (int offk : {0, 1}) {
                     Coord child_offset = acc.rotateCoord(axis, Coord(1, offj, offk));
@@ -114,17 +122,34 @@ __hostdev__ void IterateFaceNeighborCellTypes(const HATileAccessor<Tile>& acc, c
                 }
             }
         }
-        else {
-            if (ninfo.isGhost()) {
-                //it's coarser
-                Coord np_ijk = acc.parentCoord(ng_ijk);
-                acc.findVoxel(info.mLevel - 1, np_ijk, ninfo, nl_ijk);
 
-            }
-            auto& ntile = ninfo.tile();
-            uint8_t type1 = ntile.type(nl_ijk);
-            f(type0, type1);
-        }
+
+        //if (!ninfo.isLeaf()) {
+        //    for (int offj : {0, 1}) {
+        //        for (int offk : {0, 1}) {
+        //            Coord child_offset = acc.rotateCoord(axis, Coord(1, offj, offk));
+        //            Coord nc_ijk = acc.childCoord(ng_ijk, child_offset);
+        //            HATileInfo<Tile> nc_info; Coord ncl_ijk;
+        //            acc.findVoxel(info.mLevel + 1, nc_ijk, nc_info, ncl_ijk);
+        //            if (!nc_info.empty()) {
+        //                auto& nctile = nc_info.tile();
+        //                uint8_t type1 = nctile.type(ncl_ijk);
+        //                f(type0, type1);
+        //            }
+        //        }
+        //    }
+        //}
+        //else {
+        //    if (ninfo.isGhost()) {
+        //        //it's coarser
+        //        Coord np_ijk = acc.parentCoord(ng_ijk);
+        //        acc.findVoxel(info.mLevel - 1, np_ijk, ninfo, nl_ijk);
+
+        //    }
+        //    auto& ntile = ninfo.tile();
+        //    uint8_t type1 = ntile.type(nl_ijk);
+        //    f(type0, type1);
+        //}
     }
 }
 
