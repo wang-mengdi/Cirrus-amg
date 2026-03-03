@@ -66,11 +66,11 @@ __hostdev__ void FluidParams::setInitialVelocity(HATileAccessor<Tile>& acc, HATi
 	double current_time = 0.0;
 
 	if (mTestCase == MESHMOTION) {
-		Vec initial_vel = Vec(mesh_motion_inflow, 0, 0);
+		Vec initial_vel = Vec(0, 0, mesh_motion_inflow);
 
 		Tile& tile = info.tile();
 		for (int axis : {0, 1, 2}) {
-			tile(AdvChnls::u + axis, l_ijk) = initial_vel[axis];
+			tile(BufChnls::u + axis, l_ijk) = initial_vel[axis];
 		}
 		//int boundary_axis, boundary_off;
 		//tile.type(l_ijk) = cellType(current_time, acc, info, l_ijk, boundary_axis, boundary_off);
@@ -111,7 +111,7 @@ __hostdev__ void FluidParams::setVelocityBoundaryCondition(const T current_time,
 {
 	auto& tile = info.tile();
 	if (mTestCase == MESHMOTION) {
-		Vec vel(mesh_motion_inflow, 0, 0);
+		Vec vel(0, 0, mesh_motion_inflow);
 
 		for (int axis : {0, 1, 2}) {
 			//first set all faces around NEUMANN to 0
@@ -124,7 +124,7 @@ __hostdev__ void FluidParams::setVelocityBoundaryCondition(const T current_time,
 					}
 					});
 				if (to_set) {
-					info.tile()(AdvChnls::u + axis, l_ijk) = 0;
+					info.tile()(BufChnls::u + axis, l_ijk) = 0;
 				}
 			}
 
@@ -132,7 +132,7 @@ __hostdev__ void FluidParams::setVelocityBoundaryCondition(const T current_time,
 			{
 				auto nl_ijk = l_ijk; nl_ijk[axis] -= 1;
 				if ((wallCellType(current_time, acc, info, l_ijk) & NEUMANN) || (wallCellType(current_time, acc, info, nl_ijk) & NEUMANN)) {
-					tile(AdvChnls::u + axis, l_ijk) = vel[axis];
+					tile(BufChnls::u + axis, l_ijk) = vel[axis];
 				}
 			}
 		}

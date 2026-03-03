@@ -12,14 +12,17 @@
 namespace BufChnls {
 	constexpr int u = 6;
 	constexpr int u_node = 0;
+	constexpr int u_cell = 3;
 	constexpr int tmp = 3;
+	constexpr int counter = 4;
+	constexpr int vor = 9;
 	constexpr int sdf = 10;
 }
 
-namespace AdvChnls {
-	constexpr int u = 6;
-	constexpr int counter = 4;
-}
+//namespace AdvChnls {
+//	constexpr int u = 6;
+//	constexpr int counter = 4;
+//}
 
 
 namespace ProjChnls {
@@ -28,24 +31,25 @@ namespace ProjChnls {
 	constexpr int c0 = 11;
 }
 
-namespace OutputChnls {
-	constexpr int u_node = 0;
-	constexpr int u_cell = 3;
-	constexpr int vor = 9;
-}
+//namespace OutputChnls {
+//	//constexpr int u_node = 0;
+//	//constexpr int u_cell = 3;
+//	constexpr int u = 6;
+//	constexpr int vor = 9;
+//}
 
 ////Channel allocations
-//      Buffer		Advection		Projection		Output
-// 0    node u						x				node u
-// 1    node v						b/r				node v
-// 2	node w						p				node w
-// 3	tmp							Ap				cell u
-// 4				counter			z				cell v
-// 5												cell w
-// 6	u			u				u				u
-// 7	v			v				v				v
-// 8	w			w				w				w
-// 9												vor
+//      Buffer						Projection		
+// 0    node u						x				
+// 1    node v						b/r				
+// 2	node w						p				
+// 3	tmp/cell u					Ap				
+// 4	counter/cell v				z				
+// 5	cell w											
+// 6	u							u				
+// 7	v							v				
+// 8	w							w				
+// 9	vor											
 //10    sdf
 //11								c0
 //12								c1

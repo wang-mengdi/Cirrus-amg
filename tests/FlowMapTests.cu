@@ -286,9 +286,9 @@ namespace FlowMapTests {
 
             }, particles_d.size());
 
-            //IOFunc::Output
-            auto particles_h_ptr = std::make_shared<thrust::host_vector<Particle>>(particles_d);
-            IOFunc::OutputParticleSystemAsVTU(particles_h_ptr, base_dir / fmt::format("particles_{:04d}.vtu", i));
+            ////IOFunc::Output
+            //auto particles_h_ptr = std::make_shared<thrust::host_vector<Particle>>(particles_d);
+            //IOFunc::OutputParticleSystemAsVTU(particles_h_ptr, base_dir / fmt::format("particles_{:04d}.vtu", i));
 
 
             t += dt;

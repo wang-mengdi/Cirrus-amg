@@ -730,7 +730,7 @@ void CalculateVorticityMagnitudeOnLeafs(HADeviceGrid<Tile>& grid, const int fine
 	);
 }
 
-void CalculateVelocityAndVorticityMagnitudeOnLeafFaceCenters(HADeviceGrid<Tile>& grid, const int fine_level, const int coarse_level, const int u_channel, const int tmp_u_node_channel, const int cv_channel, const int vor_channel) {
+void CalculateVelocityAndVorticityMagnitudeOnLeafCellCenters(HADeviceGrid<Tile>& grid, const int fine_level, const int coarse_level, const int u_channel, const int tmp_u_node_channel, const int cv_channel, const int vor_channel) {
 	////prepare u node
 	//for (int axis : {0, 1, 2}) {
 	//    PropagateToChildren(grid, Tile::u_channel + axis, Tile::u_channel + axis, -1, GHOST, LAUNCH_SUBTREE, INTERIOR | DIRICHLET | NEUMANN);

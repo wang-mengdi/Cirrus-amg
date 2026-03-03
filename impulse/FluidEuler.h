@@ -177,11 +177,11 @@ public:
 		if(mMeshSDFAccel != nullptr)
 		{
 			//refine using mesh vertices
-			auto temp_particles_d = VerticesToMarkerParticles(mMeshSDFAccel->V_, mParams.meshToWorldTransform(0.), 0.);
-			RefineWithMarkerParticles(grid, temp_particles_d, mParams.mCoarseLevel, mParams.mFineLevel, AdvChnls::counter, false);
+			marker_particles_d = VerticesToMarkerParticles(mMeshSDFAccel->V_, mParams.meshToWorldTransform(0.), 0.);
+			RefineWithMarkerParticles(grid, marker_particles_d, mParams.mCoarseLevel, mParams.mFineLevel, BufChnls::counter, false);
 		}
 
-		buildTypesAndAMGCoeffs(grid, 0);
+		buildTypesAndAMGCoeffs(grid, 0.);
 
 		{
 			//set initial velocity
@@ -203,8 +203,16 @@ public:
 		//	polyscope::show();
 		//}
 
-		CalculateVorticityMagnitudeOnLeafs(*grid_ptr, mParams.mFineLevel, mParams.mCoarseLevel, AdvChnls::u, OutputChnls::u_node, OutputChnls::vor);
+		CalculateVorticityMagnitudeOnLeafs(*grid_ptr, mParams.mFineLevel, mParams.mCoarseLevel, BufChnls::u, BufChnls::u_node, BufChnls::vor);
 
+
+		{
+			//show velocity on polyscope before proj
+			polyscope::init();
+			auto holder = grid.getHostTileHolderForLeafs();
+			IOFunc::AddPoissonGridCellCentersToPolyscopePointCloud(holder, { { -1,"type" }, { BufChnls::vor, "vorticity" } }, { { BufChnls::u, "velocity" } });
+			polyscope::show();
+		}
 	}
 
 	virtual double CFL_Time(const double cfl) {
@@ -213,9 +221,9 @@ public:
 		HATileAccessor<Tile> acc = grid.deviceAccessor();
 		double dx = acc.voxelSize(acc.mMaxLevel);
 		
-		double umax = NormSync(grid, -1, AdvChnls::u, false);
-		double vmax = NormSync(grid, -1, AdvChnls::u + 1, false);
-		double wmax = NormSync(grid, -1, AdvChnls::u + 2, false);
+		double umax = NormSync(grid, -1, BufChnls::u, false);
+		double vmax = NormSync(grid, -1, BufChnls::u + 1, false);
+		double wmax = NormSync(grid, -1, BufChnls::u + 2, false);
 		double max_vel = std::max(umax, std::max(vmax, wmax));
 		return dx * cfl / max_vel;
 	}
@@ -245,9 +253,9 @@ public:
 			//IOFunc::OutputTilesAsVTU(holder, metadata.base_path / fmt::format("tiles{:04d}.vtu", metadata.current_frame));
 
 			metadata.Append_Output_Thread(std::make_shared<std::thread>(IOFunc::OutputPoissonGridAsStructuredVTI, holder,
-				std::vector<std::pair<int, std::string>>{ {-1, "type"}, { -2, "level" }, { OutputChnls::vor, "vorticity" }},
+				std::vector<std::pair<int, std::string>>{ {-1, "type"}, { -2, "level" }, { BufChnls::vor, "vorticity" }},
 				//std::vector<std::pair<int, std::string>>{ },
-				std::vector<std::pair<int, std::string>>{ {OutputChnls::u_cell, "velocity"} },
+				std::vector<std::pair<int, std::string>>{ {BufChnls::u, "velocity"} },
 				//std::vector<std::pair<int, std::string>>{ { -1, "type" }, { Tile::vor_channel, "vorticity" }, { Tile::dye_channel, "dye_density" } },
 				//std::vector<std::pair<int, std::string>>{ {Tile::u_channel, "velocity"} },
 				metadata.base_path / fmt::format("fluid{:04d}.vti", metadata.current_frame)));
@@ -272,10 +280,10 @@ public:
 		//	//make directory
 		//	fs::create_directories(base_path_d);
 
-		//	auto particles_h_ptr = std::make_shared<thrust::host_vector<Particle>>(particles);
-		//	metadata.Append_Output_Thread(std::make_shared<std::thread>(IOFunc::OutputParticleSystemAsVTU,
-		//		particles_h_ptr, base_path_d / fmt::format("particles{:04d}.vtu", metadata.current_frame)
-		//	));
+			auto particles_h_ptr = std::make_shared<thrust::host_vector<MarkerParticle>>(marker_particles_d);
+			metadata.Append_Output_Thread(std::make_shared<std::thread>(IOFunc::OutputMarkerParticleSystemAsVTU,
+				particles_h_ptr, metadata.base_path / fmt::format("particles{:04d}.vtu", metadata.current_frame)
+			));
 		//}
 	}
 
@@ -306,7 +314,7 @@ public:
 
 			Info("pressure pt l2: {}", NormSync(grid, 2, ProjChnls::x, false));
 
-			AMGAddGradientToFace(grid, -1, LEAF, ProjChnls::x, c0_channel, AdvChnls::u);
+			AMGAddGradientToFace(grid, -1, LEAF, ProjChnls::x, c0_channel, BufChnls::u);
 			applyVelocityBC(grid, current_time);
 
 			AMGVolumeWeightedDivergenceOnLeafs(grid, u_channel, ProjChnls::b);
@@ -360,6 +368,14 @@ public:
 		InterpolateVelocitiesAtAllTiles(last_grid, BufChnls::u, BufChnls::u_node);
 		CheckCudaError("prepare last grid");
 
+		//{
+		//	//show velocity on polyscope before proj
+		//	polyscope::init();
+		//	auto holder = last_grid.getHostTileHolderForLeafs();
+		//	IOFunc::AddPoissonGridCellCentersToPolyscopePointCloud(holder, { { -1,"type" }, { OutputChnls::vor, "vorticity" } }, { { OutputChnls::u_cell, "velocity" } });
+		//	polyscope::show();
+		//}
+
 		AdvectMarkerParticlesRK4ForwardAndMarkInvalid(
 			last_grid, mParams.mFineLevel, mParams.mCoarseLevel,
 			BufChnls::u, dt, current_time - mParams.mParticleLife,
@@ -369,22 +385,34 @@ public:
 		cudaDeviceSynchronize(); particle_advection_time = timer.stop("Advect particles"); timer.start();
 		CheckCudaError("adv particle");
 
-		auto params = mParams;
-		ReseedMarkerParticles(last_grid, BufChnls::tmp,
-			[=]__device__(const HATileAccessor<Tile>&acc, const HATileInfo<Tile>&info, const Coord & l_ijk) {
-			return params.isInParticleGenerationRegion(current_time, acc, info, l_ijk);
-		},
-			current_time,
-			0, 8,//threshold 0 seed 8
-			number_of_seeding_particles_in_cell_d, marker_particles_d
-		);
+
+		auto new_particles_d = VerticesToMarkerParticles(mMeshSDFAccel->V_, mParams.meshToWorldTransform(current_time), current_time);
+		marker_particles_d.insert(marker_particles_d.end(), new_particles_d.begin(), new_particles_d.end());
+
+		//{
+		//	polyscope::init();
+		//	IOFunc::AddMarkerParticlesToPolyscope(marker_particles_d, "marker particles");
+		//	polyscope::show();
+		//}
+
+		//auto params = mParams;
+		//ReseedMarkerParticles(last_grid, BufChnls::tmp,
+		//	[=]__device__(const HATileAccessor<Tile>&acc, const HATileInfo<Tile>&info, const Coord & l_ijk) {
+		//	return params.isInParticleGenerationRegion(current_time, acc, info, l_ijk);
+		//},
+		//	current_time,
+		//	0, 8,//threshold 0 seed 8
+		//	number_of_seeding_particles_in_cell_d, marker_particles_d
+		//);
 		cudaDeviceSynchronize(); reseeding_time = timer.stop("reseeding and remove particles in solid"); timer.start();
 		Info("total {:.5f}M particles, time step counter {}", marker_particles_d.size() / (1024 * 1024 + 0.f), time_step_counter);
 		CheckCudaError("reseeding particles");
 
+
+
 		auto& grid = *grid_ptrs[n];
-		RefineWithMarkerParticles(grid, marker_particles_d, mParams.mCoarseLevel, mParams.mFineLevel, AdvChnls::counter, false);
-		CoarsenWithMarkerParticles(grid, marker_particles_d, mParams.mCoarseLevel, mParams.mFineLevel, AdvChnls::counter, false);
+		RefineWithMarkerParticles(grid, marker_particles_d, mParams.mCoarseLevel, mParams.mFineLevel, BufChnls::counter, false);
+		CoarsenWithMarkerParticles(grid, marker_particles_d, mParams.mCoarseLevel, mParams.mFineLevel, BufChnls::counter, false);
 		cudaDeviceSynchronize(); adaptive_time = timer.stop("adapt with particles"); timer.start();
 		CheckCudaError("adapt with particles");
 		
@@ -442,7 +470,7 @@ public:
 
 							Vec m1 = MatrixTimesVec(matT.transpose(), m0);
 
-							tile(AdvChnls::u + axis, l_ijk) = m1[axis];
+							tile(BufChnls::u + axis, l_ijk) = m1[axis];
 
 							//if (m1[axis] > 1e5) {
 							//	auto g_ijk = acc.localToGlobalCoord(info, l_ijk);
@@ -489,7 +517,7 @@ public:
 
 				nanovdb::Vec3R a = gravity;
 				//a[1] += buoyancy;
-				tile(AdvChnls::u + axis, l_ijk) += a[axis] * dt;
+				tile(BufChnls::u + axis, l_ijk) += a[axis] * dt;
 			}
 		}, -1, LEAF, LAUNCH_SUBTREE
 		);
@@ -528,6 +556,14 @@ public:
 
 		adaptAndAdvect(metadata, grid_ptrs);
 
+		//{
+		//	//show velocity on polyscope before proj
+		//	polyscope::init();
+		//	auto holder = grid.getHostTileHolderForLeafs();
+		//	IOFunc::AddPoissonGridCellCentersToPolyscopePointCloud(holder, { { -1,"type" }, { OutputChnls::vor, "vorticity" } }, { { OutputChnls::u_cell, "velocity" } });
+		//	polyscope::show();
+		//}
+
 
 		applyExternalForce(grid, dt);
 
@@ -535,10 +571,12 @@ public:
 		applyVelocityBC(grid, metadata.current_time);
 
 
-		//projection
-		project(grid, AdvChnls::u, metadata.current_time);
 
-		CalculateVelocityAndVorticityMagnitudeOnLeafFaceCenters(grid, mParams.mFineLevel, mParams.mCoarseLevel, AdvChnls::u, OutputChnls::u_node, OutputChnls::u_cell, OutputChnls::vor);
+
+		//projection
+		project(grid, BufChnls::u, metadata.current_time);
+
+		CalculateVelocityAndVorticityMagnitudeOnLeafCellCenters(grid, mParams.mFineLevel, mParams.mCoarseLevel, BufChnls::u, BufChnls::u_node, BufChnls::u_cell, BufChnls::vor);
 
 
 		CheckCudaError("Advance");

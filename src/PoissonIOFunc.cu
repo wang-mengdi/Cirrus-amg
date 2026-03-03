@@ -139,7 +139,7 @@ namespace IOFunc {
         return holder;
     }
 
-    void OutputParticleSystemAsVTU(std::shared_ptr<thrust::host_vector<Particle>> particles_ptr, fs::path path) {
+    void OutputMarkerParticleSystemAsVTU(std::shared_ptr<thrust::host_vector<MarkerParticle>> particles_ptr, fs::path path) {
         fmt::print("Output Particle System to vtu file: {}\n", path.string());
         auto& particles = *particles_ptr;
 
@@ -153,18 +153,18 @@ namespace IOFunc {
         positions->SetNumberOfTuples(particles.size());
         positions->SetName("Positions");
 
-        // Use vtkTypeInt64Array for global_idx
-        vtkNew<vtkTypeInt64Array> global_idx_array;
-        global_idx_array->SetName("global_idx");
-        global_idx_array->SetNumberOfComponents(1);  // Scalar data
-        global_idx_array->SetNumberOfTuples(particles.size());
+        //// Use vtkTypeInt64Array for global_idx
+        //vtkNew<vtkTypeInt64Array> global_idx_array;
+        //global_idx_array->SetName("global_idx");
+        //global_idx_array->SetNumberOfComponents(1);  // Scalar data
+        //global_idx_array->SetNumberOfTuples(particles.size());
 
         for (int i = 0; i < particles.size(); i++) {
             auto p = particles[i].pos;  // Assume pos is a float array or convertible to float
-            auto global_idx = particles[i].global_idx;
+            //auto global_idx = particles[i].global_idx;
 
             positions->SetTuple3(i, p[0], p[1], p[2]);  // Add float position data
-            global_idx_array->SetTuple1(i, global_idx); // Add global_idx data
+            //global_idx_array->SetTuple1(i, global_idx); // Add global_idx data
         }
 
         // Set points for the grid
@@ -173,7 +173,7 @@ namespace IOFunc {
         unstructured_grid->SetPoints(nodes);
 
         // Add global_idx array as point data
-        unstructured_grid->GetPointData()->AddArray(global_idx_array);
+        //unstructured_grid->GetPointData()->AddArray(global_idx_array);
 
         // Write the output file
         writer->SetFileName(path.string().c_str());
@@ -183,30 +183,30 @@ namespace IOFunc {
     }
 
 
-    void OutputParticleSystemAsVTU(const thrust::device_vector<Particle>& particles_d, const fs::path& path) {
-        fmt::print("Output Particle System to vtu file: {}\n", path.string());
-		auto particles_ptr = std::make_shared<thrust::host_vector<Particle>>(particles_d);
-		OutputParticleSystemAsVTU(particles_ptr, path);
-    }
+  //  void OutputMarkerParticleSystemAsVTU(const thrust::device_vector<MarkerParticle>& particles_d, const fs::path& path) {
+  //      fmt::print("Output Particle System to vtu file: {}\n", path.string());
+		//auto particles_ptr = std::make_shared<thrust::host_vector<MarkerParticle>>(particles_d);
+  //      OutputMarkerParticleSystemAsVTU(particles_ptr, path);
+  //  }
 
-    void AddParticleSystemToPolyscope(thrust::device_vector<Particle> particles_d, std::string name) {
-		thrust::host_vector<Particle> particles = particles_d;
+    void AddMarkerParticlesToPolyscope(thrust::device_vector<MarkerParticle> particles_d, std::string name) {
+		thrust::host_vector<MarkerParticle> particles = particles_d;
 
         std::vector<Vec> positions;
-        std::vector<Vec> impulses;
+        //std::vector<Vec> impulses;
 
         positions.reserve(particles.size());
-		impulses.reserve(particles.size());
+		//impulses.reserve(particles.size());
 
         for (int i = 0; i < particles.size(); i++) {
             auto p = particles[i].pos;
-            auto v = particles[i].impulse;
+            //auto v = particles[i].impulse;
             positions.emplace_back(p[0], p[1], p[2]);
-            impulses.emplace_back(v[0], v[1], v[2]);
+            //impulses.emplace_back(v[0], v[1], v[2]);
         }
 
         polyscope::PointCloud* psCloud = polyscope::registerPointCloud(name, positions);
-        psCloud->addVectorQuantity("impulse", impulses);
+        //psCloud->addVectorQuantity("impulse", impulses);
     }
 
     void OutputTilesAsVTU(std::shared_ptr<HAHostTileHolder<Tile>> holder_ptr, const fs::path& path) {

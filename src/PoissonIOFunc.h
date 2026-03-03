@@ -3,6 +3,7 @@
 #include "PoissonGrid.h"
 #include "FMParticles.h"
 #include "CPUTimer.h"
+#include "MarkerParticles.h"
 
 #include <fmt/ostream.h>
 
@@ -57,8 +58,8 @@ namespace IOFunc {
     }
 
     //particle system
-    void OutputParticleSystemAsVTU(std::shared_ptr<thrust::host_vector<Particle>> particles_ptr, fs::path path);
-    void AddParticleSystemToPolyscope(thrust::device_vector<Particle> particles_d, std::string name);
+    void OutputMarkerParticleSystemAsVTU(std::shared_ptr<thrust::host_vector<MarkerParticle>> particles_ptr, fs::path path);
+    void AddMarkerParticlesToPolyscope(thrust::device_vector<MarkerParticle> particles_d, std::string name);
 
     //tiles
     void OutputTilesAsVTU(std::shared_ptr<HAHostTileHolder<Tile>> holder_ptr, const fs::path& path);
