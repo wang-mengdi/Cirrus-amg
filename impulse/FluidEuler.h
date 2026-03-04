@@ -84,35 +84,16 @@ public:
 	//using Tile = PoissonTile<T>;
 	using Coord = nanovdb::Coord;
 
-	//projection:
-	//0
-	static constexpr int coeff_channel = 11;
-
 	int time_step_counter = 0;
 
-	std::shared_ptr<HADeviceGrid<Tile>> nfm_query_grid_ptr;
 	std::vector<std::shared_ptr<HADeviceGrid<Tile>>> grid_ptrs;
 	std::vector<double> time_steps;
 
 	thrust::device_vector<MarkerParticle> marker_particles_d;
-	thrust::device_vector<int> number_of_seeding_particles_in_cell_d;
-
-	//thrust::device_vector<Particle> particles;
-	//thrust::device_vector<ParticleRecord> records_d;
-	//thrust::device_vector<int> tile_prefix_sum_d;
 
 	FluidParams mParams;
 	std::shared_ptr<MeshSDFAccel> mMeshSDFAccel = nullptr;
 
-	//std::shared_ptr<SDFGrid> mAnimationSDFGrid0 = nullptr;
-	//std::shared_ptr<SDFGrid> mAnimationSDFGrid1 = nullptr;
-	//std::shared_ptr<SDFGrid> mAnimationVelocityGrids[3];
-
-	//std::string animation_sdf_path = "";
-	//fs::path flamingo_data_file = fs::path("data") / "flamingo-sdf.bin";
-	//int loaded_animated_frame = -1;
-
-	//int cell_center_vel_channel = 3;
 
 	double advance_time = 0;
 	double particle_advection_time = 0;
@@ -166,7 +147,7 @@ public:
 			}, -1, LEAF
 			);
 			//set other solid cells and build the whole system
-			CreateAMGLaplacianSystemWithSolidCutOnNodeSDF(grid, BufChnls::sdf, coeff_channel, 0.5);
+			CreateAMGLaplacianSystemWithSolidCutOnNodeSDF(grid, BufChnls::sdf, ProjChnls::c0, 0.5);
 
 
 		}
@@ -254,6 +235,7 @@ public:
 		//	IOFunc::AddLeveledPoissonGridCellCentersToPolyscopePointCloud(holder, { { -1,"type" }, { BufChnls::vor, "vorticity" } }, { { BufChnls::u, "velocity" } });
 		//	polyscope::show();
 		//}
+
 	}
 
 	virtual double CFL_Time(const double cfl) {
@@ -267,11 +249,18 @@ public:
 		double wmax = NormSync(grid, -1, BufChnls::u + 2, false);
 		double max_vel = std::max(umax, std::max(vmax, wmax));
 
-		Info("Calc CFL umax = {}, vmax = {}, wmax = {}, max_vel = {} calc dx {} cfl {} max_vel {} dt {}", umax, vmax, wmax, max_vel, dx, cfl, max_vel, dx * cfl / max_vel);
+		//Info("Calc CFL umax = {}, vmax = {}, wmax = {}, max_vel = {} calc dx {} cfl {} max_vel {} dt {}", umax, vmax, wmax, max_vel, dx, cfl, max_vel, dx * cfl / max_vel);
 
 		return dx * cfl / max_vel;
 	}
 	virtual void Output(DriverMetaData& metadata) {
+		{
+			//snapshot  thing
+			if (metadata.Should_Snapshot()) {
+				Save_Frame(metadata);
+			}
+		}
+
 		//return;
 		auto& grid = *grid_ptrs.back();
 		//if (metadata.current_frame == 0) {
@@ -352,53 +341,57 @@ public:
 			CalculateNeighborTiles(grid);
 
 			AMGVolumeWeightedDivergenceOnLeafs(grid, u_channel, c0_channel, ProjChnls::b);
-			Info("div pt l2: {}", NormSync(grid, 2, ProjChnls::b, false));
-			Info("cpu div pt l2: {}", CellPointRMSNormOnHostTiles(grid.getHostTileHolderForLeafs(), ProjChnls::b, -1, LEAF, 2));
-			Info("div pt linf: {}", NormSync(grid, -1, ProjChnls::b, false));
-			Info("cpu div pt linf: {}", CellPointRMSNormOnHostTiles(grid.getHostTileHolderForLeafs(), ProjChnls::b, -1, LEAF, -1));
 
 
-			{
-				grid.launchVoxelFuncOnAllTiles(
-					[=] __device__(HATileAccessor<Tile>&acc, HATileInfo<Tile>&info, const Coord & l_ijk) {
-					auto& tile = info.tile();
-					if (tile(ProjChnls::b, l_ijk) == NODATA) {
-						auto g_ijk = acc.composeGlobalCoord(info.mTileCoord, l_ijk);
-						printf("global coord: (%d, %d, %d), b: %f\n", g_ijk[0], g_ijk[1], g_ijk[2], tile(ProjChnls::b, l_ijk));
-					}
-					T u = tile(u_channel, l_ijk);
-					T v = tile(u_channel + 1, l_ijk);
-					T w = tile(u_channel + 2, l_ijk);
-					tile(BufChnls::tmp, l_ijk) = sqrt(u * u + v * v + w * w);
 
-					T c0 = tile(coeff_channel, l_ijk);
-					T c1 = tile(coeff_channel + 1, l_ijk);
-					T c2 = tile(coeff_channel + 2, l_ijk);
-					T c3 = tile(coeff_channel + 3, l_ijk);
-					tile(BufChnls::counter, l_ijk) = sqrt(c0 * c0 + c1 * c1 + c2 * c2 + c3 * c3);
-						
-					//printf("velocity: (%f, %f, %f), len: %f\n", u, v, w, tile(BufChnls::tmp, l_ijk));
 
-				}, LEAF, 4
-				);
+			Info("before proj div pt l2: {}", NormSync(grid, 2, ProjChnls::b, false));
+			//Info("cpu div pt l2: {}", CellPointRMSNormOnHostTiles(grid.getHostTileHolderForLeafs(), ProjChnls::b, -1, LEAF, 2));
+			//Info("div pt linf: {}", NormSync(grid, -1, ProjChnls::b, false));
+			//Info("cpu div pt linf: {}", CellPointRMSNormOnHostTiles(grid.getHostTileHolderForLeafs(), ProjChnls::b, -1, LEAF, -1));
 
-				CUDA_CHECK(cudaGetLastError());
-				CUDA_CHECK(cudaDeviceSynchronize());
 
-				Info("velocity len linf: {}", NormSync(grid, -1, BufChnls::tmp, false));
-				Info("cpu velocity len linf: {}", CellPointRMSNormOnHostTiles(grid.getHostTileHolderForLeafs(), BufChnls::tmp, -1, LEAF, -1));
-				Info("coeff len linf: {}", NormSync(grid, -1, BufChnls::counter, false));
-				Info("cpu coeff len linf: {}", CellPointRMSNormOnHostTiles(grid.getHostTileHolderForLeafs(), BufChnls::counter, -1, LEAF, -1));
+			//{
+			//	grid.launchVoxelFuncOnAllTiles(
+			//		[=] __device__(HATileAccessor<Tile>&acc, HATileInfo<Tile>&info, const Coord & l_ijk) {
+			//		auto& tile = info.tile();
+			//		if (tile(ProjChnls::b, l_ijk) == NODATA) {
+			//			auto g_ijk = acc.composeGlobalCoord(info.mTileCoord, l_ijk);
+			//			printf("global coord: (%d, %d, %d), b: %f\n", g_ijk[0], g_ijk[1], g_ijk[2], tile(ProjChnls::b, l_ijk));
+			//		}
+			//		T u = tile(u_channel, l_ijk);
+			//		T v = tile(u_channel + 1, l_ijk);
+			//		T w = tile(u_channel + 2, l_ijk);
+			//		tile(BufChnls::tmp, l_ijk) = sqrt(u * u + v * v + w * w);
 
-				//show velocity on polyscope before proj
-				polyscope::init();
-				auto holder = grid.getHostTileHolderForLeafs();
-				IOFunc::AddPoissonGridCellCentersToPolyscopePointCloud(holder, { { -1,"type" },
-					{ BufChnls::vor, "vorticity" }, {ProjChnls::x, "pressure"},{ProjChnls::b, "div"},{BufChnls::tmp, "vel_len"}, {BufChnls::counter, "coeff len"} },
-					{ {BufChnls::u, "velocity"} });
-				//IOFunc::AddLeveledPoissonGridCellCentersToPolyscopePointCloud(holder, { { -1,"type" }, { BufChnls::vor, "vorticity" } }, { { BufChnls::u, "velocity" } });
-				polyscope::show();
-			}
+			//		T c0 = tile(ProjChnls::c0, l_ijk);
+			//		T c1 = tile(ProjChnls::c0 + 1, l_ijk);
+			//		T c2 = tile(ProjChnls::c0 + 2, l_ijk);
+			//		T c3 = tile(ProjChnls::c0 + 3, l_ijk);
+			//		tile(BufChnls::counter, l_ijk) = sqrt(c0 * c0 + c1 * c1 + c2 * c2 + c3 * c3);
+			//			
+			//		//printf("velocity: (%f, %f, %f), len: %f\n", u, v, w, tile(BufChnls::tmp, l_ijk));
+
+			//	}, LEAF, 4
+			//	);
+
+			//	CUDA_CHECK(cudaGetLastError());
+			//	CUDA_CHECK(cudaDeviceSynchronize());
+
+			//	Info("velocity len linf: {}", NormSync(grid, -1, BufChnls::tmp, false));
+			//	Info("cpu velocity len linf: {}", CellPointRMSNormOnHostTiles(grid.getHostTileHolderForLeafs(), BufChnls::tmp, -1, LEAF, -1));
+			//	Info("coeff len linf: {}", NormSync(grid, -1, BufChnls::counter, false));
+			//	Info("cpu coeff len linf: {}", CellPointRMSNormOnHostTiles(grid.getHostTileHolderForLeafs(), BufChnls::counter, -1, LEAF, -1));
+
+			//	//show velocity on polyscope before proj
+			//	polyscope::init();
+			//	auto holder = grid.getHostTileHolderForLeafs();
+			//	IOFunc::AddPoissonGridCellCentersToPolyscopePointCloud(holder, { { -1,"type" },
+			//		{ BufChnls::vor, "vorticity" }, {ProjChnls::x, "pressure"},{ProjChnls::b, "div"},{BufChnls::tmp, "vel_len"}, {BufChnls::counter, "coeff len"} },
+			//		{ {BufChnls::u, "velocity"} });
+			//	//IOFunc::AddLeveledPoissonGridCellCentersToPolyscopePointCloud(holder, { { -1,"type" }, { BufChnls::vor, "vorticity" } }, { { BufChnls::u, "velocity" } });
+			//	polyscope::show();
+			//}
 
 
 			AMGSolver solver(c0_channel, 0.5, 1, 1);
@@ -406,7 +399,7 @@ public:
 
 			CPUTimer timer;
 			timer.start();
-			auto [iters, err] = solver.solve(grid, true, 1000, 1e-6, 2, 10, 1, mParams.mIsPureNeumann);
+			auto [iters, err] = solver.solve(grid, true, 100, 1e-6, 2, 10, 1, mParams.mIsPureNeumann);
 			cudaDeviceSynchronize();
 			double elapsed = timer.stop("AMGPCG");
 			double total_cells = grid.numTotalTiles() * Tile::SIZE;
@@ -481,18 +474,18 @@ public:
 		//	polyscope::show();
 		//}
 
-		{
-			for (int i = 0; i < n; i++) {
-				printf("grid %d pointer %p\n", i, grid_ptrs[i].get());
-				auto holder = grid_ptrs[i]->getHostTileHolder(LEAF | GHOST, -1);
-				for (int axis : {0, 1, 2}) {
-					Info("vel axis {} gpu l2 {} gpu node l2 {} cpu l2 {} cpu node l2 {}", axis, 
-						NormSync(*grid_ptrs[i], 2, BufChnls::u + axis, false), NormSync(*grid_ptrs[i], 2, BufChnls::u_node + axis, false),
-						CellPointRMSNormOnHostTiles(holder, BufChnls::u + axis, -1, LEAF | GHOST, 2), NodePointRMSNormOnHostTiles(holder, BufChnls::u_node + axis, -1, LEAF | GHOST, 2));
-				}
-				
-			}
-		}
+		//{
+		//	for (int i = 0; i < n; i++) {
+		//		printf("grid %d pointer %p\n", i, grid_ptrs[i].get());
+		//		auto holder = grid_ptrs[i]->getHostTileHolder(LEAF | GHOST, -1);
+		//		for (int axis : {0, 1, 2}) {
+		//			Info("vel axis {} gpu l2 {} gpu node l2 {} cpu l2 {} cpu node l2 {}", axis, 
+		//				NormSync(*grid_ptrs[i], 2, BufChnls::u + axis, false), NormSync(*grid_ptrs[i], 2, BufChnls::u_node + axis, false),
+		//				CellPointRMSNormOnHostTiles(holder, BufChnls::u + axis, -1, LEAF | GHOST, 2), NodePointRMSNormOnHostTiles(holder, BufChnls::u_node + axis, -1, LEAF | GHOST, 2));
+		//		}
+		//		
+		//	}
+		//}
 
 		AdvectMarkerParticlesRK4ForwardAndMarkInvalid(
 			last_grid, mParams.mFineLevel, mParams.mCoarseLevel,
@@ -540,10 +533,11 @@ public:
 
 
 		Info("time step counter: {}", time_step_counter);
-		if (time_step_counter % mParams.mFlowMapStride == 0) {
-			nfm_query_grid_ptr = grid_ptrs[n - 1];
-			Info("reset nfm query ptr");
-		}
+		auto nfm_query_grid_ptr = grid_ptrs[n - 1 - (time_step_counter % mParams.mFlowMapStride)];
+		//if (time_step_counter % mParams.mFlowMapStride == 0) {
+		//	nfm_query_grid_ptr = grid_ptrs[n - 1];
+		//	Info("reset nfm query ptr");
+		//}
 
 		//prepare pointers for previous grids
 		thrust::host_vector<HATileAccessor<Tile>> accs_h;
@@ -595,15 +589,15 @@ public:
 
 							tile(BufChnls::u + axis, l_ijk) = m1[axis];
 
-							{//dbg
-								float v = m1[axis];
+							//{//dbg
+							//	float v = m1[axis];
 
-								if (!isfinite(v) || fabsf(v) > 1e5f) {
-									auto g_ijk = acc.localToGlobalCoord(info, l_ijk);
-									printf("g_ijk %d %d %d axis %d m1 %f\n",
-										g_ijk[0], g_ijk[1], g_ijk[2], axis, v);
-								}
-							}
+							//	if (!isfinite(v) || fabsf(v) > 1e5f) {
+							//		auto g_ijk = acc.localToGlobalCoord(info, l_ijk);
+							//		printf("g_ijk %d %d %d axis %d m1 %f\n",
+							//			g_ijk[0], g_ijk[1], g_ijk[2], axis, v);
+							//	}
+							//}
 						}
 					}
 				}
@@ -615,7 +609,7 @@ public:
 		}
 
 
-		Info("launch done");
+		//Info("launch done");
 
 		//CalcCellTypesFromLeafs(grid);
 
@@ -629,7 +623,7 @@ public:
 
 		//int tmp_ta_node = 0;
 		//CalcLeafNodeValuesFromCellCenters(grid, Tile::Ta_channel, tmp_ta_node);
-		Info("gravity: {}, dt: {}", mParams.mGravity, dt);
+		//Info("gravity: {}, dt: {}", mParams.mGravity, dt);
 
 		const nanovdb::Vec3R gravity = mParams.mGravity;
 		auto params = mParams;
@@ -656,6 +650,12 @@ public:
 
 
 	virtual void Advance(DriverMetaData& metadata) {
+		//{
+		//	DriverMetaData m1 = metadata;
+		//	m1.current_frame = 0;
+		//	Load_Frame(m1);
+		//}
+
 		CPUTimer timer;
 		timer.start();
 
@@ -682,15 +682,15 @@ public:
 
 		Info("frame {} dt {}", metadata.current_frame, dt);
 
-		for (int i = 0; i < grid_ptrs.size(); i++) {
-			printf("grid %d ptr %p\n", i, grid_ptrs[i].get());
-		}
+		//for (int i = 0; i < grid_ptrs.size(); i++) {
+		//	printf("grid %d ptr %p\n", i, grid_ptrs[i].get());
+		//}
 
 		adaptAndAdvect(metadata, grid_ptrs);
 
-		{
-			Info("after advection u l2 {} v l2 {} w l2 {}", NormSync(grid, 2, BufChnls::u, false), NormSync(grid, 2, BufChnls::u + 1, false), NormSync(grid, 2, BufChnls::u + 2, false));
-		}
+		//{
+		//	Info("after advection u l2 {} v l2 {} w l2 {}", NormSync(grid, 2, BufChnls::u, false), NormSync(grid, 2, BufChnls::u + 1, false), NormSync(grid, 2, BufChnls::u + 2, false));
+		//}
 
 
 		applyExternalForce(grid, dt);
@@ -698,9 +698,9 @@ public:
 
 		applyVelocityBC(grid, metadata.current_time);
 
-		{
-			Info("before projection u l2 {} v l2 {} w l2 {}", NormSync(grid, 2, BufChnls::u, false), NormSync(grid, 2, BufChnls::u + 1, false), NormSync(grid, 2, BufChnls::u + 2, false));
-		}
+		//{
+		//	Info("before projection u l2 {} v l2 {} w l2 {}", NormSync(grid, 2, BufChnls::u, false), NormSync(grid, 2, BufChnls::u + 1, false), NormSync(grid, 2, BufChnls::u + 2, false));
+		//}
 
 
 
@@ -719,9 +719,9 @@ public:
 
 		CalculateVelocityAndVorticityMagnitudeOnLeafCellCenters(grid, mParams.mFineLevel, mParams.mCoarseLevel, BufChnls::u, BufChnls::u_node, BufChnls::u_cell, BufChnls::vor);
 
-		{
-			Info("end of advance u l2 {} v l2 {} w l2 {}", NormSync(grid, 2, BufChnls::u, false), NormSync(grid, 2, BufChnls::u + 1, false), NormSync(grid, 2, BufChnls::u + 2, false));
-		}
+		//{
+		//	Info("end of advance u l2 {} v l2 {} w l2 {}", NormSync(grid, 2, BufChnls::u, false), NormSync(grid, 2, BufChnls::u + 1, false), NormSync(grid, 2, BufChnls::u + 2, false));
+		//}
 
 		FillChannelsInGridWithValue(grid, NODATA, { 0,1,2,3,4,5,9,10,11,12,13,14 });
 
@@ -818,5 +818,127 @@ public:
 			std::cerr << "Failed to get CPU memory info on Linux." << std::endl;
 		}
 #endif
+	}
+
+	void Save_Frame(DriverMetaData& metadata) {
+		namespace fs = std::filesystem;
+
+		fs::path folder = metadata.Snapshot_Base_Path();
+		fs::create_directories(folder);
+
+		fs::path file = folder / fmt::format("{:04d}.bin", metadata.current_frame);
+
+		std::ofstream os(file, std::ios::binary);
+		Assert(os.good(), "Save_Frame: failed to open {}", file.string());
+
+		// Header
+		uint32_t magic = 0x31464546u; // 'FEF1' (any magic you like)
+		uint32_t version = 1;
+		IOFunc::WritePod(os, magic);
+		IOFunc::WritePod(os, version);
+
+		// 1) time_step_counter
+		IOFunc::WritePod(os, time_step_counter);
+
+		// 2) time_steps
+		IOFunc::WriteVector(os, time_steps);
+
+		// 3) grids
+		uint64_t num_grids = (uint64_t)grid_ptrs.size();
+		IOFunc::WritePod(os, num_grids);
+
+		for (uint64_t i = 0; i < num_grids; ++i) {
+			auto& g = *grid_ptrs[i];
+
+			// Ensure compressed before dumping (your dumpBinaryBlob requires this)
+			g.compressHost(false);
+
+			// Dump to blob
+			std::vector<uint8_t> blob = g.dumpBinaryBlob(LEAF | GHOST | NONLEAF);
+
+			uint64_t blob_size = (uint64_t)blob.size();
+			IOFunc::WritePod(os, blob_size);
+			if (blob_size) os.write(reinterpret_cast<const char*>(blob.data()), (std::streamsize)blob_size);
+		}
+
+		// 4) marker particles
+		static_assert(std::is_trivially_copyable_v<MarkerParticle>,
+			"MarkerParticle must be trivially copyable for raw checkpoint");
+
+		uint64_t n_particles = (uint64_t)marker_particles_d.size();
+		IOFunc::WritePod(os, n_particles);
+
+		if (n_particles) {
+			thrust::host_vector<MarkerParticle> h(marker_particles_d);
+			os.write(reinterpret_cast<const char*>(h.data()),
+				(std::streamsize)(sizeof(MarkerParticle) * (size_t)n_particles));
+		}
+
+		Assert(os.good(), "Save_Frame: write failed {}", file.string());
+		Info("Saved snapshot: {}", file.string());
+	}
+
+	void Load_Frame(DriverMetaData& metadata) {
+		namespace fs = std::filesystem;
+
+		fs::path folder = metadata.Snapshot_Base_Path();
+		fs::path file = folder / fmt::format("{:04d}.bin", metadata.current_frame);
+
+		std::ifstream is(file, std::ios::binary);
+		Assert(is.good(), "Load_Frame: failed to open {}", file.string());
+
+		uint32_t magic = 0, version = 0;
+		IOFunc::ReadPod(is, magic);
+		IOFunc::ReadPod(is, version);
+
+		Assert(magic == 0x31464546u, "Load_Frame: bad magic in {}", file.string());
+		Assert(version == 1, "Load_Frame: unsupported version {} in {}", version, file.string());
+
+		// 1) time_step_counter
+		IOFunc::ReadPod(is, time_step_counter);
+
+		// 2) time_steps
+		IOFunc::ReadVector(is, time_steps);
+
+		// 3) grids
+		uint64_t num_grids = 0;
+		IOFunc::ReadPod(is, num_grids);
+
+		grid_ptrs.clear();
+		grid_ptrs.reserve((size_t)num_grids);
+
+		for (uint64_t i = 0; i < num_grids; ++i) {
+			uint64_t blob_size = 0;
+			IOFunc::ReadPod(is, blob_size);
+			Assert(blob_size > 0, "Load_Frame: grid blob size is 0 (i={})", (size_t)i);
+
+			std::vector<uint8_t> blob((size_t)blob_size);
+			is.read(reinterpret_cast<char*>(blob.data()), (std::streamsize)blob_size);
+			Assert(is.good(), "Load_Frame: truncated blob (i={})", (size_t)i);
+
+			auto grid_ptr = HADeviceGrid<Tile>::loadBinaryBlob(blob);
+			grid_ptrs.push_back(std::move(grid_ptr));
+		}
+
+		// 4) marker particles
+		static_assert(std::is_trivially_copyable_v<MarkerParticle>,
+			"MarkerParticle must be trivially copyable for raw checkpoint");
+
+		uint64_t n_particles = 0;
+		IOFunc::ReadPod(is, n_particles);
+
+		thrust::host_vector<MarkerParticle> h_particles;
+		h_particles.resize((size_t)n_particles);
+
+		if (n_particles) {
+			is.read(reinterpret_cast<char*>(h_particles.data()),
+				(std::streamsize)(sizeof(MarkerParticle) * (size_t)n_particles));
+			Assert(is.good(), "Load_Frame: truncated particle data");
+		}
+
+		marker_particles_d = thrust::device_vector<MarkerParticle>(h_particles.begin(), h_particles.end());
+
+		Assert(is.good(), "Load_Frame: read failed {}", file.string());
+		Info("Loaded snapshot: {}", file.string());
 	}
 };

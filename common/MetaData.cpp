@@ -75,25 +75,46 @@ fs::path DriverMetaData::Current_Snapshot_Path(void)
 
 int DriverMetaData::Last_Snapshot_Frame(int start_frame)
 {
-	fs::path snap_base = Snapshot_Base_Path();
-	if (!fs::is_directory(snap_base)) return 0;//no snapshots are there
+    fs::path snap_base = Snapshot_Base_Path();
+    if (!fs::is_directory(snap_base)) return 0;
 
-	std::vector<int> snapshots;
-	for (fs::directory_iterator itr(snap_base); itr != fs::directory_iterator(); ++itr) {
-		if (fs::is_directory(itr->status())) {
-			std::string filename = itr->path().filename().stem().string();
-			snapshots.push_back(std::stoi(filename));
-		}
-	}
+    std::vector<int> snapshots;
 
-	std::sort(snapshots.begin(), snapshots.end());
-	//find the first element >= start_frame
-	auto it = std::lower_bound(snapshots.begin(), snapshots.end(), start_frame);
-	if (it != snapshots.begin()) {
-		it--;
-		return *it;
-	}
-	else {
-		return 0;//no snapshot is read
-	}
+    for (const auto& entry : fs::directory_iterator(snap_base)) {
+
+        std::string name;
+
+        if (fs::is_directory(entry.status())) {
+            // old style: folder snapshot
+            name = entry.path().filename().string();
+        }
+        else if (entry.path().extension() == ".bin") {
+            // new style: %04d.bin
+            name = entry.path().stem().string();
+        }
+        else {
+            continue;
+        }
+
+        try {
+            int frame = std::stoi(name);
+            snapshots.push_back(frame);
+        }
+        catch (...) {
+            // ignore non-numeric names
+        }
+    }
+
+    if (snapshots.empty()) return 0;
+
+    std::sort(snapshots.begin(), snapshots.end());
+
+    auto it = std::lower_bound(snapshots.begin(), snapshots.end(), start_frame);
+
+    if (it != snapshots.begin()) {
+        --it;
+        return *it;
+    }
+
+    return 0;
 }

@@ -9,6 +9,9 @@
 #include <thrust/device_vector.h>
 #include <thrust/host_vector.h>
 #include <thrust/copy.h>
+#include <cstdint>
+#include <cstring>
+#include <type_traits>
 
 void CheckCudaError(const std::string& message);
 
@@ -676,6 +679,175 @@ public:
 		mDeviceSyncFlag = true;
 	}
 
+	std::vector<uint8_t> dumpBinaryBlob(uint8_t tile_types = (LEAF | GHOST | NONLEAF),
+		int max_level = -1) const
+	{
+		Assert(mCompressedFlag, "dumpBinaryBlob requires compressed grid (call compressHost first).");
+		if (max_level < 0) max_level = mMaxLevel;
+
+		using CoordT = Coord;
+
+		static_assert(std::is_trivially_copyable_v<T>, "T must be trivially copyable");
+		static_assert(std::is_trivially_copyable_v<CoordT>, "Coord must be trivially copyable");
+		static_assert(std::is_trivially_copyable_v<Tile>, "Tile must be trivially copyable for raw dump");
+
+		struct Header {
+			uint32_t magic;      // 'HAGR'
+			uint32_t version;    // 1
+			uint32_t num_levels; // mNumLevels
+			int32_t  max_level;  // stored max level
+			uint32_t tile_size;  // sizeof(Tile)
+			uint32_t coord_size; // sizeof(Coord)
+			T        h0;         // mH0
+			uint64_t tile_count; // #records
+		};
+
+		// Count tiles
+		uint64_t tile_count = 0;
+		for (int lv = 0; lv <= max_level; ++lv) {
+			for (uint32_t j = 0; j < hNumTiles[lv]; ++j) {
+				const auto& info = hTileArrays[lv][j];
+				if (info.mType & tile_types) tile_count++;
+			}
+		}
+
+		Header hdr{};
+		hdr.magic = 0x52474148u; // 'HAGR' little-endian
+		hdr.version = 1;
+		hdr.num_levels = mNumLevels;
+		hdr.max_level = max_level;
+		hdr.tile_size = (uint32_t)sizeof(Tile);
+		hdr.coord_size = (uint32_t)sizeof(CoordT);
+		hdr.h0 = mH0;
+		hdr.tile_count = tile_count;
+
+		const size_t bytes_header = sizeof(Header);
+		const size_t bytes_hashes = sizeof(uint32_t) * hdr.num_levels;
+		const size_t bytes_record =
+			sizeof(uint32_t) +  // level
+			sizeof(uint8_t) +  // type
+			sizeof(CoordT) +  // tileCoord
+			sizeof(Tile);       // tile bytes
+
+		const size_t total = bytes_header + bytes_hashes + (size_t)tile_count * bytes_record;
+
+		std::vector<uint8_t> blob(total);
+		uint8_t* p = blob.data();
+
+		auto write_raw = [&](const void* src, size_t n) {
+			std::memcpy(p, src, n);
+			p += n;
+			};
+
+		write_raw(&hdr, sizeof(Header));
+
+		// write hLog2Hashes
+		for (uint32_t lv = 0; lv < hdr.num_levels; ++lv) {
+			uint32_t v = hLog2Hashes[lv];
+			write_raw(&v, sizeof(uint32_t));
+		}
+
+		// write tile records (from compressed tile arrays)
+		for (int lv = 0; lv <= max_level; ++lv) {
+			for (uint32_t j = 0; j < hNumTiles[lv]; ++j) {
+				const auto& info = hTileArrays[lv][j];
+				if (!(info.mType & tile_types)) continue;
+
+				uint32_t level_u32 = (uint32_t)info.mLevel;
+				uint8_t  type_u8 = info.mType;
+				CoordT   coord = info.mTileCoord;
+
+				// Copy device tile bytes to host
+				Tile tile_host = info.getTile(DEVICE);
+
+				write_raw(&level_u32, sizeof(uint32_t));
+				write_raw(&type_u8, sizeof(uint8_t));
+				write_raw(&coord, sizeof(CoordT));
+				write_raw(&tile_host, sizeof(Tile));
+			}
+		}
+
+		Assert((size_t)(p - blob.data()) == total, "dumpBinaryBlob size mismatch");
+		return blob;
+	}
+
+	static std::shared_ptr<HADeviceGrid<Tile>> loadBinaryBlob(const uint8_t* data, size_t size)
+	{
+		using CoordT = Coord;
+
+		static_assert(std::is_trivially_copyable_v<T>, "T must be trivially copyable");
+		static_assert(std::is_trivially_copyable_v<CoordT>, "Coord must be trivially copyable");
+		static_assert(std::is_trivially_copyable_v<Tile>, "Tile must be trivially copyable for raw load");
+
+		struct Header {
+			uint32_t magic;
+			uint32_t version;
+			uint32_t num_levels;
+			int32_t  max_level;
+			uint32_t tile_size;
+			uint32_t coord_size;
+			T        h0;
+			uint64_t tile_count;
+		};
+
+		auto require = [&](bool cond, const char* msg) {
+			Assert(cond, "loadBinaryBlob: {}", msg);
+			};
+
+		require(size >= sizeof(Header), "buffer too small");
+		const uint8_t* p = data;
+
+		auto read_raw = [&](void* dst, size_t n) {
+			require((size_t)(p - data) + n <= size, "buffer truncated");
+			std::memcpy(dst, p, n);
+			p += n;
+			};
+
+		Header hdr{};
+		read_raw(&hdr, sizeof(Header));
+
+		require(hdr.magic == 0x52474148u, "bad magic");
+		require(hdr.version == 1, "unsupported version");
+		require(hdr.tile_size == sizeof(Tile), "Tile size mismatch");
+		require(hdr.coord_size == sizeof(CoordT), "Coord size mismatch");
+		require(hdr.num_levels > 0, "num_levels invalid");
+
+		thrust::host_vector<uint32_t> log2_hashes;
+		log2_hashes.resize(hdr.num_levels);
+		for (uint32_t lv = 0; lv < hdr.num_levels; ++lv) {
+			uint32_t v = 0;
+			read_raw(&v, sizeof(uint32_t));
+			log2_hashes[lv] = v;
+		}
+
+		auto grid_ptr = std::make_shared<HADeviceGrid<Tile>>(hdr.h0, log2_hashes);
+
+		for (uint64_t t = 0; t < hdr.tile_count; ++t) {
+			uint32_t level_u32 = 0;
+			uint8_t  type_u8 = 0;
+			CoordT   coord{};
+			Tile     tile_host{};
+
+			read_raw(&level_u32, sizeof(uint32_t));
+			read_raw(&type_u8, sizeof(uint8_t));
+			read_raw(&coord, sizeof(CoordT));
+			read_raw(&tile_host, sizeof(Tile));
+
+			grid_ptr->setTileHost((int)level_u32, coord, tile_host, type_u8);
+		}
+
+		// rebuild compressed arrays and sync device structures
+		grid_ptr->compressHost(false);
+		grid_ptr->syncHostAndDevice();
+
+		return grid_ptr;
+	}
+
+	static std::shared_ptr<HADeviceGrid<Tile>> loadBinaryBlob(const std::vector<uint8_t>& blob) {
+		return loadBinaryBlob(blob.data(), blob.size());
+	}
+
+
 	void spawnGhostTiles(bool verbose = false) {
 		using Acc = HACoordAccessor<Tile>;
 		//note that we will NOT spawn ghost tiles on level 0
@@ -1137,6 +1309,9 @@ public:
 		syncHostAndDevice();
 		return deleted_tiles;
 	}
+
+
+
 };
 
 

@@ -1,7 +1,7 @@
 {
     "driver": {
         "cfl": 0.5,
-        "first_frame": 0,
+        "first_frame": 6,
         "fps": 200,
         "last_frame": 10,
         "min_step_frame_fraction": 0.0,

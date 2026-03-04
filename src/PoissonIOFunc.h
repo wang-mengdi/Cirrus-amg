@@ -21,6 +21,38 @@
 #include <vtkXMLStructuredGridWriter.h>
 
 namespace IOFunc {
+    template <class T>
+    static void WritePod(std::ostream& os, const T& v) {
+        static_assert(std::is_trivially_copyable_v<T>);
+        os.write(reinterpret_cast<const char*>(&v), sizeof(T));
+    }
+
+    template <class T>
+    static void ReadPod(std::istream& is, T& v) {
+        static_assert(std::is_trivially_copyable_v<T>);
+        is.read(reinterpret_cast<char*>(&v), sizeof(T));
+    }
+
+    template <class T>
+    static void WriteVector(std::ostream& os, const std::vector<T>& v) {
+        static_assert(std::is_trivially_copyable_v<T>);
+        uint64_t n = (uint64_t)v.size();
+        WritePod(os, n);
+        if (n) os.write(reinterpret_cast<const char*>(v.data()), sizeof(T) * (size_t)n);
+    }
+
+    template <class T>
+    static void ReadVector(std::istream& is, std::vector<T>& v) {
+        static_assert(std::is_trivially_copyable_v<T>);
+        uint64_t n = 0;
+        ReadPod(is, n);
+        v.resize((size_t)n);
+        if (n) is.read(reinterpret_cast<char*>(v.data()), sizeof(T) * (size_t)n);
+    }
+
+
+
+
     //plain binary I/O
     void WriteHAHostTileHolderToFile(const HAHostTileHolder<Tile>& holder, const fs::path& filepath);
 
