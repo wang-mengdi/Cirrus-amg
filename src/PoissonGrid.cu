@@ -714,8 +714,10 @@ __device__ Vec InterpolateFaceValue(const HATileAccessor<Tile>& acc, const Vec& 
         if (!info.empty()) {
             auto& tile = info.tile();
             v0 = tile.faceInterp(u_channel, node_u_channel, axis, l_ijk, frac);
+            CUDA_ASSERT(isfinite(v0), "v0=%f", v0);
         }
         else v0 = 0;
+		
 
 		auto cell_ctr = acc.cellCenter(info, l_ijk);
 		auto n_pos = pos; n_pos[axis] += (1 - frac[axis]) * acc.voxelSize(info);
@@ -726,8 +728,10 @@ __device__ Vec InterpolateFaceValue(const HATileAccessor<Tile>& acc, const Vec& 
             auto& n_tile = n_info.tile();
 
             v1 = n_tile.faceInterp(u_channel, node_u_channel, axis, n_l_ijk, n_frac);
+            CUDA_ASSERT(isfinite(v1), "v1=%f", v1);
         }
         else v1 = 0;
+		
 
         //printf("calc: %lf\n", (1 - w) * 10300 + w * 10350);
         vec[axis] = (1 - w) * v0 + w * v1;

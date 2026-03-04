@@ -43,6 +43,7 @@
 } while (0)
 
 void SanitizeChannelCellValues(HADeviceGrid<Tile>&grid, const int channel);
+void SanityCheckChannelNodeValues(HADeviceGrid<Tile>&grid, const int channel);
 
 void FillChannelsInGridWithValue(HADeviceGrid<Tile>&grid, T value, std::initializer_list<int> channels = {});
 
@@ -468,7 +469,11 @@ public:
 		InterpolateVelocitiesAtAllTiles(last_grid, BufChnls::u, BufChnls::u_node);
 		CheckCudaError("prepare last grid");
 
-
+		{
+			SanityCheckChannelNodeValues(last_grid, BufChnls::u_node);
+			SanityCheckChannelNodeValues(last_grid, BufChnls::u_node + 1);
+			SanityCheckChannelNodeValues(last_grid, BufChnls::u_node + 2);
+		}
 
 		//{
 		//	for (int i = 0; i < n; i++) {

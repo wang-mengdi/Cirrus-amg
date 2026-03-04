@@ -124,8 +124,15 @@ public:
 				node_intp += weight * val;
                 node_sum += val;
 
+                {
+                    Coord ol_ijk = l_ijk + off_ijk;
+                    CUDA_ASSERT(isfinite(val), "val=%f at ol_ijk %d %d %d", val, ol_ijk[0], ol_ijk[1], ol_ijk[2]);
+                    CUDA_ASSERT(isfinite(weight), "weight=%f at ol_ijk %d %d %d", weight, ol_ijk[0], ol_ijk[1], ol_ijk[2]);
+                }
             }
         }
+
+        CUDA_ASSERT(isfinite(node_intp), "node_intp=%f", node_intp);
 
 		T frac_min = 1.0;
         for (int ax : {axj, axk}) {
@@ -134,6 +141,10 @@ public:
         }
 
         T delta = value(u_channel + axis, l_ijk) - node_sum / 4.0;
+
+        CUDA_ASSERT(isfinite(delta), "delta=%f", delta);
+
+
 		return node_intp + 2 * delta * frac_min;
 	}
 

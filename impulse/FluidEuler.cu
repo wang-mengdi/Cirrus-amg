@@ -24,6 +24,17 @@ void SanitizeChannelCellValues(HADeviceGrid<Tile>& grid, const int channel) {
 	}, LEAF
 	);
 }
+void SanityCheckChannelNodeValues(HADeviceGrid<Tile>& grid, const int channel) {
+	grid.launchNodeFuncWithTileIdxOnAllTiles(
+		[=] __device__(HATileAccessor<Tile> acc, const int tile_idx, HATileInfo<Tile>&info, const Coord & r_ijk) {
+		auto val = info.tile().node(channel, r_ijk);
+		CUDA_ASSERT(isfinite(val), "bad value %f at level %d tile coord %d %d %d r_ijk %d %d %d", val, info.mLevel, info.mTileCoord[0], info.mTileCoord[1], info.mTileCoord[2], r_ijk[0], r_ijk[1], r_ijk[2]);
+		
+	},
+		LEAF
+	);
+}
+
 
 void FillChannelsInGridWithValue(
 	HADeviceGrid<Tile>& grid,
