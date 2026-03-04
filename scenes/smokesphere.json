@@ -14,13 +14,13 @@
         "fine_level": 3,
         "flowmap_stride": 5,
         "refine_threshold": 0.1,
-        "gravity": 2000.0,
+        "gravity": 0.0,
         "particle_life": 2.5,
         "test": "meshmotion",
         "mesh_file": "./scenes/sphere.obj",
         "sdf_isovalue": 0.010,
         "reserve_particles_m": 40,
-        "inflow_velocity": 0.0
+        "inflow_velocity": 1.0
     },
     "simulator": "euler"
 }

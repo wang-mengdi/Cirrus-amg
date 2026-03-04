@@ -703,42 +703,54 @@ __device__ Vec InterpolateFaceValue(const HATileAccessor<Tile>& acc, const Vec& 
     Vec vec;
 
     HATileInfo<Tile> info; Coord l_ijk; Vec frac;
-    acc.findLeafVoxelAndFrac(pos, info, l_ijk, frac);
-    for (int axis = 0; axis < 3; axis++) {
-        //printf("=============================interpolate face value at axis=%d\n", axis);
-        //printf("pos: %f %f %f\n", pos[0], pos[1], pos[2]);
-        //printf("pos0*12800: %lf\n", pos[0] * 12800);
+    if (acc.findLeafVoxelAndFrac(pos, info, l_ijk, frac)) {
+        for (int axis = 0; axis < 3; axis++) {
+            //printf("=============================interpolate face value at axis=%d\n", axis);
+            //printf("pos: %f %f %f\n", pos[0], pos[1], pos[2]);
+            //printf("pos0*12800: %lf\n", pos[0] * 12800);
 
-        Tile::T v0, v1, w;
-        w = frac[axis];
-        if (!info.empty()) {
-            auto& tile = info.tile();
-            v0 = tile.faceInterp(u_channel, node_u_channel, axis, l_ijk, frac);
-            CUDA_ASSERT(isfinite(v0), "v0=%f", v0);
+            Tile::T v0, v1, w;
+            w = frac[axis];
+            if (!info.empty()) {
+                for (int i = 0; i < 3; i++) {
+                    CUDA_ASSERT(frac[i] >= 0 && frac[i] <= 1, "invalid frac %f at axis %d", frac[i], axis);
+                }
+
+                auto& tile = info.tile();
+                v0 = tile.faceInterp(u_channel, node_u_channel, axis, l_ijk, frac);
+                CUDA_ASSERT(isfinite(v0), "v0=%f", v0);
+            }
+            else v0 = 0;
+
+
+            auto cell_ctr = acc.cellCenter(info, l_ijk);
+            auto n_pos = pos; n_pos[axis] += (1 - frac[axis]) * acc.voxelSize(info);
+
+            HATileInfo<Tile> n_info; Coord n_l_ijk; Vec n_frac;
+            acc.findPlusFaceIntpVoxel(pos, axis, info, l_ijk, n_info, n_l_ijk, n_frac);
+            if (!n_info.empty()) {
+                for (int i = 0; i < 3; i++) {
+					CUDA_ASSERT(n_frac[i] >= 0 && n_frac[i] <= 1, "invalid n_frac %f at axis %d", n_frac[i], axis);
+                }
+
+                auto& n_tile = n_info.tile();
+
+                v1 = n_tile.faceInterp(u_channel, node_u_channel, axis, n_l_ijk, n_frac);
+                CUDA_ASSERT(isfinite(v1), "v1=%f", v1);
+            }
+            else v1 = 0;
+
+
+            //printf("calc: %lf\n", (1 - w) * 10300 + w * 10350);
+            vec[axis] = (1 - w) * v0 + w * v1;
+
+            CUDA_ASSERT(isfinite(vec[axis]), "vec[%d]=%f", axis, vec[axis]);
         }
-        else v0 = 0;
-		
-
-		auto cell_ctr = acc.cellCenter(info, l_ijk);
-		auto n_pos = pos; n_pos[axis] += (1 - frac[axis]) * acc.voxelSize(info);
-
-        HATileInfo<Tile> n_info; Coord n_l_ijk; Vec n_frac;
-        acc.findPlusFaceIntpVoxel(pos, axis, info, l_ijk, n_info, n_l_ijk, n_frac);
-        if (!n_info.empty()) {
-            auto& n_tile = n_info.tile();
-
-            v1 = n_tile.faceInterp(u_channel, node_u_channel, axis, n_l_ijk, n_frac);
-            CUDA_ASSERT(isfinite(v1), "v1=%f", v1);
-        }
-        else v1 = 0;
-		
-
-        //printf("calc: %lf\n", (1 - w) * 10300 + w * 10350);
-        vec[axis] = (1 - w) * v0 + w * v1;
-
-        CUDA_ASSERT(isfinite(vec[axis]), "vec[%d]=%f", axis, vec[axis]);
+        return vec;
     }
-    return vec;
+    else {
+        return Vec(0, 0, 0);
+    }
 }
 
 void ReCenterLeafCells(HADeviceGrid<Tile>& grid, const int channel, DeviceReducer<double>& cnt_reducer, double* d_mean, double* d_count) {

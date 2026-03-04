@@ -396,6 +396,17 @@ public:
 			//	polyscope::show();
 			//}
 
+			{
+				//show velocity on polyscope before proj
+				polyscope::init();
+				auto holder = grid.getHostTileHolderForLeafs();
+				IOFunc::AddPoissonGridCellCentersToPolyscopePointCloud(holder, { { -1,"type" },
+					{ BufChnls::vor, "vorticity" }, {ProjChnls::x, "pressure"},{ProjChnls::b, "div"},{ProjChnls::c0 + 3, "c3"} },
+					{ {BufChnls::u, "velocity"} });
+				//IOFunc::AddLeveledPoissonGridCellCentersToPolyscopePointCloud(holder, { { -1,"type" }, { BufChnls::vor, "vorticity" } }, { { BufChnls::u, "velocity" } });
+				polyscope::show();
+			}
+
 
 			AMGSolver solver(c0_channel, 0.5, 1, 1);
 			//solver.prepareTypesAndCoeffs(grid);
@@ -426,7 +437,16 @@ public:
 		}
 
 
-
+		{
+			//show velocity on polyscope before proj
+			polyscope::init();
+			auto holder = grid.getHostTileHolderForLeafs();
+			IOFunc::AddPoissonGridCellCentersToPolyscopePointCloud(holder, { { -1,"type" },
+				{ BufChnls::vor, "vorticity" }, {ProjChnls::x, "pressure"},{ProjChnls::b, "div"},{ProjChnls::c0 + 3, "c3"} },
+				{ {BufChnls::u, "velocity"} });
+			//IOFunc::AddLeveledPoissonGridCellCentersToPolyscopePointCloud(holder, { { -1,"type" }, { BufChnls::vor, "vorticity" } }, { { BufChnls::u, "velocity" } });
+			polyscope::show();
+		}
 	}
 
 	void adaptAndAdvect(DriverMetaData& metadata, std::vector<std::shared_ptr<HADeviceGrid<Tile>>> grid_ptrs) {
@@ -759,6 +779,11 @@ public:
 			SanitizeChannelCellValues(grid, BufChnls::u + 2);
 		}
 
+
+
+
+		CalculateVelocityAndVorticityMagnitudeOnLeafCellCenters(grid, mParams.mFineLevel, mParams.mCoarseLevel, BufChnls::u, BufChnls::u_node, BufChnls::u_cell, BufChnls::vor);
+
 		//{
 		//	//show velocity on polyscope before proj
 		//	polyscope::init();
@@ -768,14 +793,11 @@ public:
 		//	polyscope::show();
 		//}
 
-
-		CalculateVelocityAndVorticityMagnitudeOnLeafCellCenters(grid, mParams.mFineLevel, mParams.mCoarseLevel, BufChnls::u, BufChnls::u_node, BufChnls::u_cell, BufChnls::vor);
-
 		//{
 		//	Info("end of advance u l2 {} v l2 {} w l2 {}", NormSync(grid, 2, BufChnls::u, false), NormSync(grid, 2, BufChnls::u + 1, false), NormSync(grid, 2, BufChnls::u + 2, false));
 		//}
 
-		FillChannelsInGridWithValue(grid, NODATA, { 0,1,2,3,4,5,9,10,11,12,13,14 });
+		//FillChannelsInGridWithValue(grid, NODATA, { 0,1,2,3,4,5,9,10,11,12,13,14 });
 
 		{
 			Warn("sanitizing at end of advance");

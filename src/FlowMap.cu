@@ -245,7 +245,9 @@ __device__ bool KernelIntpVelocityAndJacobianMAC2(const HATileAccessor<Tile>& ac
 	}
 
 	vel = Vec(0, 0, 0);
-	jacobian.setZero();
+	#pragma unroll
+	for (int k = 0; k < 9; k++) // 3 by 3
+		jacobian.data()[k] = T(0);
 	return false;
 }
 
@@ -507,7 +509,8 @@ __device__ bool RK4ForwardPositionAndF(const HATileAccessor<Tile>& acc, const in
 
 	Vec u1; Eigen::Matrix3<T> gradu1;
 	//VelocityAndJacobian(acc, phi, node_u_channel, u1, gradu1);
-	success = success && KernelIntpVelocityAndJacobianMAC2(acc, fine_level, coarse_level, phi, u_channel, u1, gradu1);
+	bool ok1 = KernelIntpVelocityAndJacobianMAC2(acc, fine_level, coarse_level, phi, u_channel, u1, gradu1);
+	success = success && ok1;
 
 	//printf("advect rk4 forward phi and F with phi=%f %f %f u1=%f %f %f\n", phi[0], phi[1], phi[2], u1[0], u1[1], u1[2]);
 
@@ -519,15 +522,19 @@ __device__ bool RK4ForwardPositionAndF(const HATileAccessor<Tile>& acc, const in
 	
 	{
 		for (int ii = 0; ii < 3; ii++) {
+			CUDA_ASSERT(isfinite(u1[ii]), "u1[%d]=%f", ii, (double)u1[ii]);
 			for (int jj = 0; jj < 3; jj++) {
+				CUDA_ASSERT(isfinite(gradu1(ii, jj)), "gradu1(%d,%d)=%f", ii, jj, (double)gradu1(ii, jj));
 				CUDA_ASSERT(isfinite(dFdt1(ii, jj)), "dFdt1(%d,%d)=%f", ii, jj, (double)dFdt1(ii, jj));
+				CUDA_ASSERT(isfinite(F1(ii, jj)), "F1(%d,%d)=%f", ii, jj, (double)F1(ii, jj));
 			}
 		}
 	}
 
 	Vec u2; Eigen::Matrix3<T> gradu2;
 	//VelocityAndJacobian(acc, phi1, node_u_channel, u2, gradu2);
-	success = success && KernelIntpVelocityAndJacobianMAC2(acc, fine_level, coarse_level, phi1, u_channel, u2, gradu2);
+	bool ok2 = KernelIntpVelocityAndJacobianMAC2(acc, fine_level, coarse_level, phi1, u_channel, u2, gradu2);
+	success = success && ok2;
 
 	//printf("advect rk4 forward phi and F with phi=%f %f %f u1=%f %f %f\n", phi[0], phi[1], phi[2], u1[0], u1[1], u1[2]);
 
@@ -537,15 +544,19 @@ __device__ bool RK4ForwardPositionAndF(const HATileAccessor<Tile>& acc, const in
 
 	{
 		for (int ii = 0; ii < 3; ii++) {
+			CUDA_ASSERT(isfinite(u2[ii]), "u2[%d]=%f", ii, (double)u2[ii]);
 			for (int jj = 0; jj < 3; jj++) {
+				CUDA_ASSERT(isfinite(gradu2(ii, jj)), "gradu2(%d,%d)=%f", ii, jj, (double)gradu2(ii, jj));
 				CUDA_ASSERT(isfinite(dFdt2(ii, jj)), "dFdt2(%d,%d)=%f", ii, jj, (double)dFdt2(ii, jj));
+				CUDA_ASSERT(isfinite(F2(ii, jj)), "F2(%d,%d)=%f", ii, jj, (double)F2(ii, jj));
 			}
 		}
 	}
 
 	Vec u3; Eigen::Matrix3<T> gradu3;
 	//VelocityAndJacobian(acc, phi2, node_u_channel, u3, gradu3);
-	success = success && KernelIntpVelocityAndJacobianMAC2(acc, fine_level, coarse_level, phi2, u_channel, u3, gradu3);
+	bool ok3 = KernelIntpVelocityAndJacobianMAC2(acc, fine_level, coarse_level, phi2, u_channel, u3, gradu3);
+	success = success && ok3;
 
 	//printf("advect rk4 forward phi and F with phi=%f %f %f u1=%f %f %f\n", phi[0], phi[1], phi[2], u1[0], u1[1], u1[2]);
 
@@ -555,15 +566,19 @@ __device__ bool RK4ForwardPositionAndF(const HATileAccessor<Tile>& acc, const in
 
 	{
 		for (int ii = 0; ii < 3; ii++) {
+			CUDA_ASSERT(isfinite(u3[ii]), "u3[%d]=%f", ii, (double)u3[ii]);
 			for (int jj = 0; jj < 3; jj++) {
+				CUDA_ASSERT(isfinite(gradu3(ii, jj)), "gradu3(%d,%d)=%f", ii, jj, (double)gradu3(ii, jj));
 				CUDA_ASSERT(isfinite(dFdt3(ii, jj)), "dFdt3(%d,%d)=%f", ii, jj, (double)dFdt3(ii, jj));
+				CUDA_ASSERT(isfinite(F3(ii, jj)), "F3(%d,%d)=%f", ii, jj, (double)F3(ii, jj));
 			}
 		}
 	}
 
 	Vec u4; Eigen::Matrix3<T> gradu4;
 	//VelocityAndJacobian(acc, phi3, node_u_channel, u4, gradu4);
-	success = success && KernelIntpVelocityAndJacobianMAC2(acc, fine_level, coarse_level, phi3, u_channel, u4, gradu4);
+	bool ok4 = KernelIntpVelocityAndJacobianMAC2(acc, fine_level, coarse_level, phi3, u_channel, u4, gradu4);
+	success = success && ok4;
 
 	//printf("advect rk4 forward phi and F with phi=%f %f %f u1=%f %f %f\n", phi[0], phi[1], phi[2], u1[0], u1[1], u1[2]);
 
@@ -573,8 +588,11 @@ __device__ bool RK4ForwardPositionAndF(const HATileAccessor<Tile>& acc, const in
 
 	{
 		for (int ii = 0; ii < 3; ii++) {
+			CUDA_ASSERT(isfinite(u4[ii]), "u4[%d]=%f", ii, (double)u4[ii]);
 			for (int jj = 0; jj < 3; jj++) {
+				CUDA_ASSERT(isfinite(gradu4(ii, jj)), "gradu4(%d,%d)=%f", ii, jj, (double)gradu4(ii, jj));
 				CUDA_ASSERT(isfinite(dFdt4(ii, jj)), "dFdt4(%d,%d)=%f", ii, jj, (double)dFdt4(ii, jj));
+				CUDA_ASSERT(isfinite(F(ii, jj)), "F(%d,%d)=%f", ii, jj, (double)F(ii, jj));
 			}
 		}
 	}
