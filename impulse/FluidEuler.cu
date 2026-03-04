@@ -12,18 +12,45 @@
 #include <memory>
 #include <cstdint>
 
-void FillWholeGridWithValue(HADeviceGrid<Tile>& grid, T value) {
-	Warn("Filling whole grid with value {}", value);
+void FillChannelsInGridWithValue(
+	HADeviceGrid<Tile>& grid,
+	T value,
+	std::initializer_list<int> channels)
+{
+	static_assert(Tile::num_channels <= 32, "channel mask only supports <=32 channels");
+	Warn("Filling grid with value {} on channels \{{}\}", value, fmt::join(channels, ", "));
 
-	//fill all cell and node value to 0
+	uint32_t mask = 0;
+
+	if (channels.size() == 0) {
+		mask = (Tile::num_channels == 32)
+			? 0xffffffffu
+			: ((1u << Tile::num_channels) - 1u);
+	}
+	else {
+		for (int c : channels) {
+			Assert(c >= 0 && c < Tile::num_channels, "channel index out of range");
+			mask |= (1u << c);
+		}
+	}
+
+	Warn("Filling grid with value {} mask {}", value, mask);
+
 	grid.launchTileFunc(
-		[=] __device__(HATileAccessor<Tile> acc, const int _, HATileInfo<Tile>&info) {
+		[=] __device__(HATileAccessor<Tile> acc, const int _, HATileInfo<Tile>&info)
+	{
 		auto& tile = info.tile();
+
 		for (int c = 0; c < Tile::num_channels; c++) {
+
+			if (!(mask & (1u << c)))
+				continue;
+
 			for (int i = 0; i < Tile::CHNLSIZE; i++) {
 				tile.mData[c][i] = value;
 			}
 		}
+
 	}, -1, LEAF | GHOST | NONLEAF, LAUNCH_SUBTREE);
 }
 

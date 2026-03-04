@@ -42,7 +42,7 @@
     CUDA_CHECK(cudaDeviceSynchronize());                          \
 } while (0)
 
-void FillWholeGridWithValue(HADeviceGrid<Tile>&grid, T value);
+void FillChannelsInGridWithValue(HADeviceGrid<Tile>&grid, T value, std::initializer_list<int> channels = {});
 
 double CellPointRMSNormOnHostTiles(
 	const std::shared_ptr<HAHostTileHolder<Tile>>&holder_ptr,
@@ -219,7 +219,7 @@ public:
 			RefineWithMarkerParticles(grid, marker_particles_d, mParams.mCoarseLevel, mParams.mFineLevel, BufChnls::counter, false);
 		}
 
-		FillWholeGridWithValue(grid, NODATA);
+		FillChannelsInGridWithValue(grid, NODATA, {});
 
 		buildTypesAndAMGCoeffs(grid, 0.);
 
@@ -595,9 +595,14 @@ public:
 
 							tile(BufChnls::u + axis, l_ijk) = m1[axis];
 
-							if (m1[axis] > 1e5) {
-								auto g_ijk = acc.localToGlobalCoord(info, l_ijk);
-								printf("g_ijk %d %d %d axis %d m1 %f\n", g_ijk[0], g_ijk[1], g_ijk[2], axis, m1[axis]);
+							{//dbg
+								float v = m1[axis];
+
+								if (!isfinite(v) || fabsf(v) > 1e5f) {
+									auto g_ijk = acc.localToGlobalCoord(info, l_ijk);
+									printf("g_ijk %d %d %d axis %d m1 %f\n",
+										g_ijk[0], g_ijk[1], g_ijk[2], axis, v);
+								}
 							}
 						}
 					}
@@ -714,11 +719,11 @@ public:
 
 		CalculateVelocityAndVorticityMagnitudeOnLeafCellCenters(grid, mParams.mFineLevel, mParams.mCoarseLevel, BufChnls::u, BufChnls::u_node, BufChnls::u_cell, BufChnls::vor);
 
-
-
 		{
 			Info("end of advance u l2 {} v l2 {} w l2 {}", NormSync(grid, 2, BufChnls::u, false), NormSync(grid, 2, BufChnls::u + 1, false), NormSync(grid, 2, BufChnls::u + 2, false));
 		}
+
+		FillChannelsInGridWithValue(grid, NODATA, { 0,1,2,3,4,5,9,10,11,12,13,14 });
 
 		CheckCudaError("Advance");
 		time_step_counter++;

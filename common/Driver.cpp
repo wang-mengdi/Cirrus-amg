@@ -85,8 +85,10 @@ namespace DriverFunc {
 			while (true) {
 				//can return an inf
 				auto math_dt = simulator.CFL_Time(meta_data.cfl);
-				meta_data.dt = std::clamp(math_dt, meta_data.min_step_frame_fraction * meta_data.time_per_frame, meta_data.time_per_frame);
-				meta_data.running_cfl = meta_data.cfl * meta_data.dt / math_dt;
+				meta_data.dt = std::max(math_dt,
+					meta_data.min_step_frame_fraction * meta_data.time_per_frame);
+				
+
 				bool last_iter = false;
 				if (meta_data.current_time + meta_data.dt >= next_time) {
 					meta_data.dt = next_time - meta_data.current_time;
@@ -95,6 +97,8 @@ namespace DriverFunc {
 				else if (meta_data.current_time + 2 * meta_data.dt >= next_time) {
 					meta_data.dt = .5 * (next_time - meta_data.current_time);
 				}
+
+				meta_data.running_cfl = meta_data.cfl * meta_data.dt / math_dt;
 
 				simulator.Advance(meta_data);
 				num_steps++;
