@@ -192,6 +192,37 @@ __hostdev__ float FaceFluidRatio(float phi0, float phi1, float phi2, float phi3)
 	return ret;
 }
 
+__device__ cuda_vec4_t<T> FaceCornerSDFs(const int node_sdf_channel, HATileAccessor<Tile>& acc, const HATileInfo<Tile>& info, const Coord& l_ijk, const int axis) {
+	auto& tile = info.tile();
+	cuda_vec4_t<T> face_corner_sdf;
+	//negative face of the cell
+	if (axis == 0)
+	{
+		face_corner_sdf.x = tile.node(node_sdf_channel, l_ijk + Coord(0, 0, 0));
+		face_corner_sdf.y = tile.node(node_sdf_channel, l_ijk + Coord(0, 0, 1));
+		face_corner_sdf.z = tile.node(node_sdf_channel, l_ijk + Coord(0, 1, 1));
+		face_corner_sdf.w = tile.node(node_sdf_channel, l_ijk + Coord(0, 1, 0));
+	}
+	else if (axis == 1)
+	{
+		face_corner_sdf.x = tile.node(node_sdf_channel, l_ijk + Coord(0, 0, 0));
+		face_corner_sdf.y = tile.node(node_sdf_channel, l_ijk + Coord(0, 0, 1));
+		face_corner_sdf.z = tile.node(node_sdf_channel, l_ijk + Coord(1, 0, 1));
+		face_corner_sdf.w = tile.node(node_sdf_channel, l_ijk + Coord(1, 0, 0));
+	}
+	else if (axis == 2)
+	{
+		face_corner_sdf.x = tile.node(node_sdf_channel, l_ijk + Coord(0, 0, 0));
+		face_corner_sdf.y = tile.node(node_sdf_channel, l_ijk + Coord(0, 1, 0));
+		face_corner_sdf.z = tile.node(node_sdf_channel, l_ijk + Coord(1, 1, 0));
+		face_corner_sdf.w = tile.node(node_sdf_channel, l_ijk + Coord(1, 0, 0));
+	}
+	else {
+		CUDA_ASSERT(false, "axis=%d", axis);
+	}
+	return face_corner_sdf;
+}
+
 void CreateAMGLaplacianSystemWithSolidCutOnNodeSDF(HADeviceGrid<Tile>& grid, const int node_sdf_channel, const int coeff_channel, const T R_matrix_coeff) {
 	//1. make sure pure NEUMANN cells defined by phi are set to NEUMANN
 	//2. calculate face/diag coeffs for all LEAF/GHOST/NONLEAF cells
@@ -272,29 +303,31 @@ void CreateAMGLaplacianSystemWithSolidCutOnNodeSDF(HADeviceGrid<Tile>& grid, con
 				bool has_interior = (ctype0 & INTERIOR || ctype1 & INTERIOR);
 				if ((both_leafs || one_leaf_one_ghost) && !has_neumann && has_interior)
 				{
-					T face_corner_sdf[4];
-					if (axis == 0)
-					{
-						face_corner_sdf[0] = tile.node(node_sdf_channel, l_ijk + Coord(0, 0, 0));
-						face_corner_sdf[1] = tile.node(node_sdf_channel, l_ijk + Coord(0, 0, 1));
-						face_corner_sdf[2] = tile.node(node_sdf_channel, l_ijk + Coord(0, 1, 1));
-						face_corner_sdf[3] = tile.node(node_sdf_channel, l_ijk + Coord(0, 1, 0));
-					}
-					else if (axis == 1)
-					{
-						face_corner_sdf[0] = tile.node(node_sdf_channel, l_ijk + Coord(0, 0, 0));
-						face_corner_sdf[1] = tile.node(node_sdf_channel, l_ijk + Coord(0, 0, 1));
-						face_corner_sdf[2] = tile.node(node_sdf_channel, l_ijk + Coord(1, 0, 1));
-						face_corner_sdf[3] = tile.node(node_sdf_channel, l_ijk + Coord(1, 0, 0));
-					}
-					else if (axis == 2)
-					{
-						face_corner_sdf[0] = tile.node(node_sdf_channel, l_ijk + Coord(0, 0, 0));
-						face_corner_sdf[1] = tile.node(node_sdf_channel, l_ijk + Coord(0, 1, 0));
-						face_corner_sdf[2] = tile.node(node_sdf_channel, l_ijk + Coord(1, 1, 0));
-						face_corner_sdf[3] = tile.node(node_sdf_channel, l_ijk + Coord(1, 0, 0));
-					}
-					coeff = h * FaceFluidRatio(face_corner_sdf[0], face_corner_sdf[1], face_corner_sdf[2], face_corner_sdf[3]);
+					cuda_vec4_t<T> face_corner_sdf = FaceCornerSDFs(node_sdf_channel, acc, info, l_ijk, axis);
+
+					//T face_corner_sdf[4];
+					//if (axis == 0)
+					//{
+					//	face_corner_sdf[0] = tile.node(node_sdf_channel, l_ijk + Coord(0, 0, 0));
+					//	face_corner_sdf[1] = tile.node(node_sdf_channel, l_ijk + Coord(0, 0, 1));
+					//	face_corner_sdf[2] = tile.node(node_sdf_channel, l_ijk + Coord(0, 1, 1));
+					//	face_corner_sdf[3] = tile.node(node_sdf_channel, l_ijk + Coord(0, 1, 0));
+					//}
+					//else if (axis == 1)
+					//{
+					//	face_corner_sdf[0] = tile.node(node_sdf_channel, l_ijk + Coord(0, 0, 0));
+					//	face_corner_sdf[1] = tile.node(node_sdf_channel, l_ijk + Coord(0, 0, 1));
+					//	face_corner_sdf[2] = tile.node(node_sdf_channel, l_ijk + Coord(1, 0, 1));
+					//	face_corner_sdf[3] = tile.node(node_sdf_channel, l_ijk + Coord(1, 0, 0));
+					//}
+					//else if (axis == 2)
+					//{
+					//	face_corner_sdf[0] = tile.node(node_sdf_channel, l_ijk + Coord(0, 0, 0));
+					//	face_corner_sdf[1] = tile.node(node_sdf_channel, l_ijk + Coord(0, 1, 0));
+					//	face_corner_sdf[2] = tile.node(node_sdf_channel, l_ijk + Coord(1, 1, 0));
+					//	face_corner_sdf[3] = tile.node(node_sdf_channel, l_ijk + Coord(1, 0, 0));
+					//}
+					coeff = h * FaceFluidRatio(face_corner_sdf.x, face_corner_sdf.y, face_corner_sdf.z, face_corner_sdf.w);
 				}
 				tile(coeff_channel + axis, l_ijk) = -coeff;
 			});
