@@ -109,7 +109,10 @@ public:
 	//includes the outer walls of the computational field, but not including the movable mesh inside
 	__hostdev__ uint8_t wallCellType(const T current_time, const HATileAccessor<Tile>& acc, const HATileInfo<Tile>& info, const nanovdb::Coord& l_ijk) const;
 	__hostdev__ void setWallCellType(const T current_time, const HATileAccessor<Tile>& acc, const HATileInfo<Tile>& info, const nanovdb::Coord& l_ijk) const;
+	//require coeffs(fluid ratios) are precomputed
 	__hostdev__ void setVelocityBoundaryCondition(const T current_time, const HATileAccessor<Tile>& acc, const HATileInfo<Tile>& info, const nanovdb::Coord& l_ijk) const;
+	__hostdev__ Vec solidVelocityAtFaceCenter(const T current_time, const HATileAccessor<Tile>& acc, const HATileInfo<Tile>& info, const Coord& l_ijk)const;
+
 
 	//runtime functions
 	__hostdev__ bool isInParticleGenerationRegion(const T current_time, const HATileAccessor<Tile>& acc, const HATileInfo<Tile>& info, const Coord& l_ijk)const {

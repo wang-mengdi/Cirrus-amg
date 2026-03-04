@@ -99,15 +99,15 @@ __hostdev__ void IterateFaceNeighborCellTypes(const HATileAccessor<Tile>& acc, c
     //}
 
     if (!ninfo.empty()) {
-        if (ninfo.isLeaf()) {
+        if (ninfo.isLeaf()) {//the leaf neighbor is at the same level
             f(type0, ninfo.tile().type(nl_ijk));
         }
-        else if (ninfo.isGhost()) {//actual leaf is coarser
+        else if (ninfo.isGhost()) {//there is a coarser leaf neighbor
             Coord np_ijk = acc.parentCoord(ng_ijk);
             acc.findVoxel(info.mLevel - 1, np_ijk, ninfo, nl_ijk);
             f(type0, ninfo.tile().type(nl_ijk));
         }
-        else {//it's INTERIOR, so there are 4 leafs
+        else {//it's INTERIOR, so there are 4 finer leaf neighbors
             for (int offj : {0, 1}) {
                 for (int offk : {0, 1}) {
                     Coord child_offset = acc.rotateCoord(axis, Coord(1, offj, offk));

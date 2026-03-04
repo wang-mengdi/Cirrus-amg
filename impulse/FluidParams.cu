@@ -154,6 +154,17 @@ __hostdev__ void FluidParams::setVelocityBoundaryCondition(const T current_time,
 	}
 }
 
+__hostdev__ Vec FluidParams::solidVelocityAtFaceCenter(const T current_time, const HATileAccessor<Tile>& acc, const HATileInfo<Tile>& info, const Coord& l_ijk) const
+{
+	if (mTestCase == MESHMOTION) {
+
+	}
+	else {
+		CUDA_ASSERT(false, "solidVelocityAtFaceCenter not implemented for test case {}", int(mTestCase));
+		return Vec(0, 0, 0);
+	}
+}
+
 Eigen::Transform<T, 3, Eigen::Affine> FluidParams::meshToWorldTransform(const T current_time) const
 {
 	if (mTestCase == MESHMOTION) {

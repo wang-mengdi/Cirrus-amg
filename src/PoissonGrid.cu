@@ -90,19 +90,6 @@ void CalculateNeighborTiles(HADeviceGrid<Tile>& grid) {
     }, -1, LEAF | GHOST | NONLEAF, LAUNCH_SUBTREE);
 }
 
-template<typename T>
-struct Vec4Type;
-
-template<>
-struct Vec4Type<float> {
-    using Type = float4;
-};
-
-template<>
-struct Vec4Type<double> {
-    using Type = double4;
-};
-
 
 //follow the same launch convention as launchVoxelFunc
 __global__ void Dot128Kernel(HATileAccessor<Tile> acc, HATileInfo<Tile>* infos, const uint8_t in1_channel, const uint8_t in2_channel, double* sum, int subtree_level, uint8_t launch_types) {
@@ -117,8 +104,8 @@ __global__ void Dot128Kernel(HATileAccessor<Tile> acc, HATileInfo<Tile>* infos, 
     }
 
     auto& tile = info.tile();
-    auto data1AsVec4 = reinterpret_cast<typename Vec4Type<T>::Type*>(tile.mData[in1_channel]);
-    auto data2AsVec4 = reinterpret_cast<typename Vec4Type<T>::Type*>(tile.mData[in2_channel]);
+    auto* data1AsVec4 = reinterpret_cast<cuda_vec4_t<T>*>(tile.mData[in1_channel]);
+    auto* data2AsVec4 = reinterpret_cast<cuda_vec4_t<T>*>(tile.mData[in2_channel]);
     auto data1 = data1AsVec4[ti];
     auto data2 = data2AsVec4[ti];
 	double thread_dot = data1.x * data2.x + data1.y * data2.y + data1.z * data2.z + data1.w * data2.w;
@@ -186,7 +173,7 @@ __global__ void ChannelPowerSumKernel128(const int order, HATileAccessor<Tile> a
     }
 
     auto& tile = info.tile();
-    auto tile_data_as_vec4 = reinterpret_cast<typename Vec4Type<T>::Type*>(tile.mData[in_channel]);
+    auto tile_data_as_vec4 = reinterpret_cast<cuda_vec4_t<T>*>(tile.mData[in_channel]);
     auto data = tile_data_as_vec4[ti];
 	auto tile_types_as_uchar4 = reinterpret_cast<uchar4*>(tile.mCellType);
 	auto type = tile_types_as_uchar4[ti];

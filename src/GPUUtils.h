@@ -34,6 +34,19 @@ do { \
 
 #endif
 
+// CUDA float4 / double4 mapping
+template<typename T>
+struct cuda_vec4;
+
+template<>
+struct cuda_vec4<float> { using type = float4; };
+
+template<>
+struct cuda_vec4<double> { using type = double4; };
+
+template<typename T>
+using cuda_vec4_t = typename cuda_vec4<T>::type;
+
 //execuate in range [0, N)
 template <typename Func>
 __global__ void ForEachKernel(Func f, const int N, const int numGroups) {
