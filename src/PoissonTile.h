@@ -165,5 +165,6 @@ using Tile = PoissonTile<float, 15>;
 using T = Tile::T;
 using Coord = typename Tile::Coord;
 using Vec = Tile::VecType;
-constexpr T NODATA = FLT_MAX;
+//constexpr T NODATA = FLT_MAX;
+constexpr T NODATA = std::numeric_limits<T>::quiet_NaN();
 

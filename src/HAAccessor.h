@@ -63,6 +63,9 @@ public:
 	__hostdev__ static inline Coord localToGlobalCoord(const HATileInfo<Tile>& info, const Coord& l_ijk) {
 		return composeGlobalCoord(info.mTileCoord, l_ijk);
 	}
+	__hostdev__ static inline Coord localToGlobalCoord(const HATileInfo<Tile>& info, const uint32_t offset) {
+		return composeGlobalCoord(info.mTileCoord, localOffsetToCoord(offset));
+	}
 	__hostdev__ static void decomposeGlobalCoordToOffset(const Coord& ijk, uint32_t& tile_ijk, uint32_t& local_offset) {
 		Coord offset_ijk;
 		decomposeGlobalCoord(ijk, tile_ijk, offset_ijk);

@@ -12,13 +12,25 @@
 #include <memory>
 #include <cstdint>
 
+void SanitizeChannelCellValues(HADeviceGrid<Tile>& grid, const int channel) {
+	grid.launchVoxelFuncOnAllTiles(
+		[=] __device__(HATileAccessor<Tile>&acc, HATileInfo<Tile>&info, const Coord & l_ijk) {
+		auto val = info.tile()(channel, l_ijk);
+		if (!isfinite(val)) {
+			auto g_ijk = acc.localToGlobalCoord(info, l_ijk);
+			printf("================bad value %f at level %d tile type %d channel %d cell %d %d %d\n", val, info.mLevel, info.mType, channel, g_ijk[0], g_ijk[1], g_ijk[2]);
+			asm("trap;");
+		}
+	}, LEAF
+	);
+}
+
 void FillChannelsInGridWithValue(
 	HADeviceGrid<Tile>& grid,
 	T value,
 	std::initializer_list<int> channels)
 {
 	static_assert(Tile::num_channels <= 32, "channel mask only supports <=32 channels");
-	Warn("Filling grid with value {} on channels \{{}\}", value, fmt::join(channels, ", "));
 
 	uint32_t mask = 0;
 

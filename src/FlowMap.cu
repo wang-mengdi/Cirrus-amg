@@ -225,6 +225,21 @@ __device__ bool KernelIntpVelocityMAC2(const HATileAccessor<Tile>& acc, const in
 __device__ bool KernelIntpVelocityAndJacobianMAC2(const HATileAccessor<Tile>& acc, const int fine_level, const int coarse_level, const Vec& pos, const int u_channel, Vec& vel, Eigen::Matrix3<T>& jacobian) {
 	for (int i = fine_level; i >= coarse_level; i--) {
 		if (KernelIntpVelocityAndJacobianMAC2AtGivenLevel(acc, i, pos, u_channel, vel, jacobian)) {
+
+
+			{
+				for (int ii = 0; ii < 3; ii++) {
+					CUDA_ASSERT(isfinite(vel[ii]), "vel[%d]=%f at i=%d", ii, vel[ii], i);
+				}
+
+				// iterate over 3*3 and assert matT elements are finite
+				for (int ii = 0; ii < 3; ii++) {
+					for (int jj = 0; jj < 3; jj++) {
+						CUDA_ASSERT(isfinite(jacobian(ii, jj)), "jacobian(%d,%d)=%f at i=%d", ii, jj, jacobian(ii, jj), i);
+					}
+				}
+			}
+
 			return true;
 		}
 	}
@@ -497,9 +512,18 @@ __device__ bool RK4ForwardPositionAndF(const HATileAccessor<Tile>& acc, const in
 	//printf("advect rk4 forward phi and F with phi=%f %f %f u1=%f %f %f\n", phi[0], phi[1], phi[2], u1[0], u1[1], u1[2]);
 
 
+
 	Eigen::Matrix3<T> dFdt1 = gradu1 * F;
 	Vec phi1 = phi + 0.5 * dt * u1;
 	Eigen::Matrix3<T> F1 = F + 0.5 * dt * dFdt1;
+	
+	{
+		for (int ii = 0; ii < 3; ii++) {
+			for (int jj = 0; jj < 3; jj++) {
+				CUDA_ASSERT(isfinite(dFdt1(ii, jj)), "dFdt1(%d,%d)=%f", ii, jj, (double)dFdt1(ii, jj));
+			}
+		}
+	}
 
 	Vec u2; Eigen::Matrix3<T> gradu2;
 	//VelocityAndJacobian(acc, phi1, node_u_channel, u2, gradu2);
@@ -511,6 +535,14 @@ __device__ bool RK4ForwardPositionAndF(const HATileAccessor<Tile>& acc, const in
 	Vec phi2 = phi + 0.5 * dt * u2;
 	Eigen::Matrix3<T> F2 = F + 0.5 * dt * dFdt2;
 
+	{
+		for (int ii = 0; ii < 3; ii++) {
+			for (int jj = 0; jj < 3; jj++) {
+				CUDA_ASSERT(isfinite(dFdt2(ii, jj)), "dFdt2(%d,%d)=%f", ii, jj, (double)dFdt2(ii, jj));
+			}
+		}
+	}
+
 	Vec u3; Eigen::Matrix3<T> gradu3;
 	//VelocityAndJacobian(acc, phi2, node_u_channel, u3, gradu3);
 	success = success && KernelIntpVelocityAndJacobianMAC2(acc, fine_level, coarse_level, phi2, u_channel, u3, gradu3);
@@ -521,6 +553,14 @@ __device__ bool RK4ForwardPositionAndF(const HATileAccessor<Tile>& acc, const in
 	Vec phi3 = phi + dt * u3;
 	Eigen::Matrix3<T> F3 = F + dt * dFdt3;
 
+	{
+		for (int ii = 0; ii < 3; ii++) {
+			for (int jj = 0; jj < 3; jj++) {
+				CUDA_ASSERT(isfinite(dFdt3(ii, jj)), "dFdt3(%d,%d)=%f", ii, jj, (double)dFdt3(ii, jj));
+			}
+		}
+	}
+
 	Vec u4; Eigen::Matrix3<T> gradu4;
 	//VelocityAndJacobian(acc, phi3, node_u_channel, u4, gradu4);
 	success = success && KernelIntpVelocityAndJacobianMAC2(acc, fine_level, coarse_level, phi3, u_channel, u4, gradu4);
@@ -530,6 +570,14 @@ __device__ bool RK4ForwardPositionAndF(const HATileAccessor<Tile>& acc, const in
 	Eigen::Matrix3<T> dFdt4 = gradu4 * F3;
 	phi = phi + dt / 6.0 * (u1 + 2 * u2 + 2 * u3 + u4);
 	F = F + dt / 6.0 * (dFdt1 + 2 * dFdt2 + 2 * dFdt3 + dFdt4);
+
+	{
+		for (int ii = 0; ii < 3; ii++) {
+			for (int jj = 0; jj < 3; jj++) {
+				CUDA_ASSERT(isfinite(dFdt4(ii, jj)), "dFdt4(%d,%d)=%f", ii, jj, (double)dFdt4(ii, jj));
+			}
+		}
+	}
 
 	return success;
 }
@@ -676,6 +724,14 @@ __device__ void NFMBackMarchPsiAndT(const HATileAccessor<Tile>* accs_d_ptr, cons
 	for (int i = end_step - 1; i >= start_step; i--) {
 		const auto& acc = accs_d_ptr[i];
 		RK4ForwardPositionAndF(acc, fine_level, coarse_level, -time_steps_d_ptr[i], u_channel, node_u_channel, psi, matT);
+
+		// iterate over 3*3 and assert matT elements are finite
+		for (int ii = 0; ii < 3; ii++) {
+			for (int jj = 0; jj < 3; jj++) {
+				CUDA_ASSERT(isfinite(matT(ii, jj)), "matT(%d,%d)=%f at i=%d where endstep %d startstep %d", ii, jj, matT(ii, jj), i, end_step, start_step);
+			}
+		}
+
 	}
 }
 

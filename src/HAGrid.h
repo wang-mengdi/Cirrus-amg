@@ -593,6 +593,8 @@ public:
 					holder->mHostTiles.push_back(info.getTile(DEVICE));
 					info.mTilePtr = &(holder->mHostTiles.back());
 					holder->mHostLevels[i].push_back(info);
+
+					//Warn("getHostTileHolder take tile {} with type {} at level {} required types {}", info.mTileCoord, info.mType, i, tile_types);
 				}
 			}
 		}

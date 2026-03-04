@@ -202,6 +202,16 @@ __global__ void ChannelPowerSumKernel128(const int order, HATileAccessor<Tile> a
         ((type.w & launch_cell_types) != 0);
 
 
+    //{//sanity check
+    //    const float* p = reinterpret_cast<const float*>(&data);
+    //    for (int i = 0; i < 4; i++) {
+    //        if (!isfinite(p[i])) {
+    //            printf("invalid value %f at tile %d %d %d bi %d ti %d\n",
+    //                p[i], info.mTileCoord.x(), info.mTileCoord.y(), info.mTileCoord.z(), bi, ti);
+    //        }
+    //    }
+    //}
+
     if (use_abs) {
 		data.x = abs(data.x);
 		data.y = abs(data.y);
@@ -249,7 +259,11 @@ __global__ void ChannelPowerSumKernel128(const int order, HATileAccessor<Tile> a
         value_sum[bi] = block_value_sum * single_weight;
 		if (weights_sum) weights_sum[bi] = block_weight_sum * single_weight;
 
-		//printf("tile level %d coord %d %d %d value_sum %f weights_sum %f wingle weight %f bloick_weight_sum %f thread cnt %d type %x\n", info.mLevel, info.mTileCoord[0], info.mTileCoord[1], info.mTileCoord[2], value_sum[bi], weights_sum ? weights_sum[bi] : 0, single_weight, block_weight_sum, thread_cnt, type);
+        //if (!isfinite(value_sum[bi])) {
+        //    printf("tile level %d coord %d %d %d value_sum %f weights_sum %f wingle weight %f bloick_weight_sum %f thread cnt %d type %x\n", info.mLevel, info.mTileCoord[0], info.mTileCoord[1], info.mTileCoord[2], value_sum[bi], weights_sum ? weights_sum[bi] : 0, single_weight, block_weight_sum, thread_cnt, type);
+        //}
+
+		
 
     }
 }
@@ -292,9 +306,10 @@ double NormSync(HADeviceGrid<Tile>& grid, const int order, const int in_channel,
             double value_sum = CUBDeviceArraySum(grid.dAllTilesReducer.data(), num_tiles);
             double weights_sum = CUBDeviceArraySum(weights_sum_reducer.data(), num_tiles);
 
-			//Info("NormSync order: {} volume_weighted {} value_sum {} weights_sum {}", order,volume_weighted, value_sum, weights_sum);
+			
 
     //        {
+    //            Info("NormSync order: {} launch cell type {} volume_weighted {} value_sum {} weights_sum {}", launch_cell_types, order, volume_weighted, value_sum, weights_sum);
     //            thrust::host_vector<T> h_data = grid.dAllTilesReducer.d_data;
 				//fmt::print("Device value data: {}\n", h_data);
     //        }
@@ -716,6 +731,8 @@ __device__ Vec InterpolateFaceValue(const HATileAccessor<Tile>& acc, const Vec& 
 
         //printf("calc: %lf\n", (1 - w) * 10300 + w * 10350);
         vec[axis] = (1 - w) * v0 + w * v1;
+
+        CUDA_ASSERT(isfinite(vec[axis]), "vec[%d]=%f", axis, vec[axis]);
     }
     return vec;
 }

@@ -42,6 +42,8 @@
     CUDA_CHECK(cudaDeviceSynchronize());                          \
 } while (0)
 
+void SanitizeChannelCellValues(HADeviceGrid<Tile>&grid, const int channel);
+
 void FillChannelsInGridWithValue(HADeviceGrid<Tile>&grid, T value, std::initializer_list<int> channels = {});
 
 double CellPointRMSNormOnHostTiles(
@@ -144,7 +146,7 @@ public:
 			grid.launchVoxelFuncOnAllTiles(
 				[=] __device__(HATileAccessor<Tile>&acc, HATileInfo<Tile>&info, const Coord & l_ijk) {
 				params.setWallCellType(current_time, acc, info, l_ijk);
-			}, -1, LEAF
+			}, LEAF
 			);
 			//set other solid cells and build the whole system
 			CreateAMGLaplacianSystemWithSolidCutOnNodeSDF(grid, BufChnls::sdf, ProjChnls::c0, 0.5);
@@ -466,13 +468,7 @@ public:
 		InterpolateVelocitiesAtAllTiles(last_grid, BufChnls::u, BufChnls::u_node);
 		CheckCudaError("prepare last grid");
 
-		//{
-		//	//show velocity on polyscope before proj
-		//	polyscope::init();
-		//	auto holder = last_grid.getHostTileHolderForLeafs();
-		//	IOFunc::AddPoissonGridCellCentersToPolyscopePointCloud(holder, { { -1,"type" }, { OutputChnls::vor, "vorticity" } }, { { OutputChnls::u_cell, "velocity" } });
-		//	polyscope::show();
-		//}
+
 
 		//{
 		//	for (int i = 0; i < n; i++) {
@@ -549,6 +545,8 @@ public:
 		CheckCudaError("prepare pointers");
 		Info("prepare pointers");
 
+		FillChannelsInGridWithValue(grid, NODATA, { 6,7,8 });
+
 		//advect NFM velocity
 		{
 			auto last_acc = last_grid.deviceAccessor();
@@ -584,10 +582,29 @@ public:
 							NFMBackMarchPsiAndT(accs_d_ptr, fine_level, coarse_level, time_steps_d_ptr, BufChnls::u, BufChnls::u_node, nfm_start_idx, n, psi, matT);
 							//m0 = InterpolateFaceValue(accs_d_ptr[nfm_start_idx], psi, u_channel, last_u_node_channel);
 							m0 = InterpolateFaceValue(nfm_query_acc, psi, BufChnls::u, BufChnls::u_node);
+							{
+								auto g_ijk = acc.localToGlobalCoord(info, l_ijk);
+								CUDA_ASSERT(isfinite(m0[0]), "level %d global %d %d %d axis %d m00 value %f", info.mLevel, g_ijk[0], g_ijk[1], g_ijk[2], axis, m0[0]);
+								CUDA_ASSERT(isfinite(m0[1]), "level %d global %d %d %d axis %d m01 value %f", info.mLevel, g_ijk[0], g_ijk[1], g_ijk[2], axis, m0[1]);
+								CUDA_ASSERT(isfinite(m0[2]), "level %d global %d %d %d axis %d m02 value %f", info.mLevel, g_ijk[0], g_ijk[1], g_ijk[2], axis, m0[2]);
+
+								//assert 3*3 values in matT are finite
+								for(int i=0; i<3; i++) {
+									for(int j=0; j<3; j++) {
+										CUDA_ASSERT(isfinite(matT(i,j)), "level %d global %d %d %d axis %d matT value %f at %d %d", info.mLevel, g_ijk[0], g_ijk[1], g_ijk[2], axis, matT(i,j), i, j);
+									}
+								}
+							}
 
 							Vec m1 = MatrixTimesVec(matT.transpose(), m0);
 
+
 							tile(BufChnls::u + axis, l_ijk) = m1[axis];
+
+							{
+								auto g_ijk = acc.localToGlobalCoord(info, l_ijk);
+								CUDA_ASSERT(isfinite(m1[axis]), "level %d global %d %d %d axis %d m1 value %f", info.mLevel, g_ijk[0], g_ijk[1], g_ijk[2], axis, m1[axis]);
+							}
 
 							//{//dbg
 							//	float v = m1[axis];
@@ -616,7 +633,28 @@ public:
 		cudaDeviceSynchronize(); nfm_advection_time = timer.stop("NFM advection"); timer.start();
 		CheckCudaError("nfm advection");
 
+		//{
+		//	for (int axis : {0, 1, 2}) {
+		//		Info("axis {} velocity l2 rms: {}", axis, NormSync(grid, 2, BufChnls::u + axis, false));
+		//	}
+
+		//	//show velocity on polyscope before proj
+		//	polyscope::init();
+		//	auto holder = last_grid.getHostTileHolderForLeafs();
+		//	IOFunc::AddPoissonGridCellCentersToPolyscopePointCloud(holder, { { -1,"type" } }, { { BufChnls::u, "velocity" } });
+		//	polyscope::show();
+		//}
+
+		{
+			Warn("sanitizing at end of advection");
+			for (int axis : {0, 1, 2}) {
+				SanitizeChannelCellValues(grid, BufChnls::u + axis);
+			}
+		}
+
 		//Info("max impulse after nfm: {}", VelocityLinf(grid, u_channel, -1, LEAF, LAUNCH_SUBTREE));
+
+
 	}
 
 	void applyExternalForce(HADeviceGrid<Tile>& grid, const double dt) {
@@ -693,6 +731,7 @@ public:
 		//}
 
 
+
 		applyExternalForce(grid, dt);
 
 
@@ -704,8 +743,16 @@ public:
 
 
 
+
 		//projection
 		project(metadata, grid, BufChnls::u);
+
+		{
+			Warn("sanitizing after projection");
+			SanitizeChannelCellValues(grid, BufChnls::u);
+			SanitizeChannelCellValues(grid, BufChnls::u + 1);
+			SanitizeChannelCellValues(grid, BufChnls::u + 2);
+		}
 
 		//{
 		//	//show velocity on polyscope before proj
@@ -724,6 +771,13 @@ public:
 		//}
 
 		FillChannelsInGridWithValue(grid, NODATA, { 0,1,2,3,4,5,9,10,11,12,13,14 });
+
+		{
+			Warn("sanitizing at end of advance");
+			SanitizeChannelCellValues(grid, BufChnls::u);
+			SanitizeChannelCellValues(grid, BufChnls::u + 1);
+			SanitizeChannelCellValues(grid, BufChnls::u + 2);
+		}
 
 		CheckCudaError("Advance");
 		time_step_counter++;

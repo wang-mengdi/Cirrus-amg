@@ -10,6 +10,30 @@
 #define __hostdev__
 #endif
 
+#if defined(__CUDA_ARCH__)
+
+#define CUDA_ASSERT(cond, fmt, ...) \
+do { \
+    if (!(cond)) { \
+        printf("CUDA_ASSERT: %s (%s:%d) " fmt "\n", \
+               #cond, __FILE__, __LINE__, ##__VA_ARGS__); \
+        asm volatile("trap;"); \
+    } \
+} while(0)
+
+#else
+
+#define CUDA_ASSERT(cond, fmt, ...) \
+do { \
+    if (!(cond)) { \
+        std::fprintf(stderr, "ASSERT: %s (%s:%d) " fmt "\n", \
+                     #cond, __FILE__, __LINE__, ##__VA_ARGS__); \
+        std::abort(); \
+    } \
+} while(0)
+
+#endif
+
 //execuate in range [0, N)
 template <typename Func>
 __global__ void ForEachKernel(Func f, const int N, const int numGroups) {

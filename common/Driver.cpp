@@ -100,6 +100,8 @@ namespace DriverFunc {
 
 				meta_data.running_cfl = meta_data.cfl * meta_data.dt / math_dt;
 
+				Info("math dt {} actual dt {} cfl {}", math_dt, meta_data.dt, meta_data.running_cfl);
+
 				simulator.Advance(meta_data);
 				num_steps++;
 				meta_data.current_time += meta_data.dt;

@@ -681,6 +681,7 @@ namespace IOFunc {
 
         std::vector<std::vector<float>> scalar_data(scalar_channels.size());
         std::vector<std::vector<Vec>> vec_data(vec_channels.size());
+        std::vector<std::vector<float>> vec_length(vec_channels.size());
 
         auto acc = holder.coordAccessor();
         for (int level = 0; level <= holder.mMaxLevel; level++) {
@@ -715,9 +716,16 @@ namespace IOFunc {
                                     vec_data[t].push_back({ u, v, w });
 
 									auto len = std::sqrt(u * u + v * v + w * w);
-                                    if (len > 100) {
-										Warn("Large vector magnitude at level {}, g_ijk {}: ({}, {}, {})", level, g_ijk, u, v, w);
-                                    }
+                                    if (isnan(len) || isinf(len)) len = invalid_value;
+                                    vec_length[t].push_back(len);
+
+          //                          if (g_ijk == Coord(5, 0, 1)) {
+										//Info("building polyscope level {} g_ijk {} uvw ({}, {}, {}), len {}", level, g_ijk, u, v, w, len);
+          //                          }
+
+          //                          if (len > 100) {
+										//Warn("Large vector magnitude at level {}, g_ijk {}: ({}, {}, {})", level, g_ijk, u, v, w);
+          //                          }
                                 }
                             }
                         }
@@ -736,6 +744,7 @@ namespace IOFunc {
 
         for (int v = 0; v < vec_channels.size(); v++) {
             polyscope::getPointCloud("Poisson Grid")->addVectorQuantity(vec_channels[v].second, vec_data[v]);
+            polyscope::getPointCloud("Poisson Grid")->addScalarQuantity(vec_channels[v].second + "_len", vec_length[v]);
         }
     }
 
