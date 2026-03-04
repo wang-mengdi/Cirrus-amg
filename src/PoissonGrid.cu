@@ -260,6 +260,8 @@ double NormSync(HADeviceGrid<Tile>& grid, const int order, const int in_channel,
         Assert(!volume_weighted, "Linf norm does not support volume weighted, it only works with point-wise norm");
     }
 
+    grid.dAllTilesReducer.fill(NODATA);//FOR DEBUG ONLY
+
 	size_t num_tiles = grid.dAllTiles.size();
     if (num_tiles > 0) {
         if (order == -1) {
@@ -276,7 +278,7 @@ double NormSync(HADeviceGrid<Tile>& grid, const int order, const int in_channel,
             return grid.dAllTilesReducer.maxSync();
         }
         else {
-            DeviceReducer<double> weights_sum_reducer(grid.dAllTiles.size());
+            DeviceReducer<double> weights_sum_reducer(num_tiles);
             ChannelPowerSumKernel128 << <num_tiles, 128 >> > (
                 order, grid.deviceAccessor(),
                 thrust::raw_pointer_cast(grid.dAllTiles.data()),
@@ -291,6 +293,11 @@ double NormSync(HADeviceGrid<Tile>& grid, const int order, const int in_channel,
             double weights_sum = CUBDeviceArraySum(weights_sum_reducer.data(), num_tiles);
 
 			//Info("NormSync order: {} volume_weighted {} value_sum {} weights_sum {}", order,volume_weighted, value_sum, weights_sum);
+
+    //        {
+    //            thrust::host_vector<T> h_data = grid.dAllTilesReducer.d_data;
+				//fmt::print("Device value data: {}\n", h_data);
+    //        }
 
             if (order == 1) return value_sum / weights_sum;
             else if (order == 2) return sqrt(value_sum / weights_sum);

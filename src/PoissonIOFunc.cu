@@ -713,6 +713,11 @@ namespace IOFunc {
                                     auto v = tile(u_channel + 1, l_ijk);
                                     auto w = tile(u_channel + 2, l_ijk);
                                     vec_data[t].push_back({ u, v, w });
+
+									auto len = std::sqrt(u * u + v * v + w * w);
+                                    if (len > 100) {
+										Warn("Large vector magnitude at level {}, g_ijk {}: ({}, {}, {})", level, g_ijk, u, v, w);
+                                    }
                                 }
                             }
                         }

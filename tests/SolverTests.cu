@@ -1880,7 +1880,7 @@ namespace SolverTests
 		//	Assert(false, "grid_name {} not supported", grid_name);
 		//}
 		auto& grid = *grid_ptr;
-		bool is_pure_neumann = false;
+		bool is_pure_neumann = true;
 
 		grid.launchVoxelFuncOnAllTiles(
 			[=] __device__(HATileAccessor<Tile> &acc, HATileInfo<Tile> &info, const Coord & l_ijk)
@@ -1891,10 +1891,11 @@ namespace SolverTests
 				int boundary_axis, boundary_off;
 				if (QueryEffectiveBoundaryDirection(acc, min_level, info, l_ijk, boundary_axis, boundary_off))
 				{
-					if (boundary_axis == 1 && boundary_off == 1)
-						tile.type(l_ijk) = DIRICHLET;
-					else
-						tile.type(l_ijk) = NEUMANN;
+					tile.type(l_ijk) = NEUMANN;
+					//if (boundary_axis == 1 && boundary_off == 1)
+					//	tile.type(l_ijk) = DIRICHLET;
+					//else
+					//	tile.type(l_ijk) = NEUMANN;
 				}
 			}
 		},
@@ -2021,15 +2022,15 @@ namespace SolverTests
 		}, LEAF);
 		ClearAllNeumannNeighborFaces(grid, u_channel);
 		AMGVolumeWeightedDivergenceOnLeafs(grid, u_channel, coeff_channel, b1_channel);
-		grid.launchVoxelFuncOnAllTiles(
-			[=] __device__(HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const Coord& l_ijk)
-		{
-			auto& tile = info.tile();
-			auto pos = acc.cellCenter(info, l_ijk);
-			auto h = acc.voxelSize(info);
-			if (!(tile.type(l_ijk) & INTERIOR))
-				tile(b1_channel, l_ijk) = 0;
-		}, LEAF);
+		//grid.launchVoxelFuncOnAllTiles(
+		//	[=] __device__(HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const Coord& l_ijk)
+		//{
+		//	auto& tile = info.tile();
+		//	auto pos = acc.cellCenter(info, l_ijk);
+		//	auto h = acc.voxelSize(info);
+		//	if (!(tile.type(l_ijk) & INTERIOR))
+		//		tile(b1_channel, l_ijk) = 0;
+		//}, LEAF);
 		
 
 
@@ -2103,9 +2104,9 @@ namespace SolverTests
 		{
 			float vel_val = -1.0;
 			Tile& tile = info.tile();
-			tile(Tile::b_channel, l_ijk) = tile(b1_channel, l_ijk);
+			//tile(Tile::b_channel, l_ijk) = tile(b1_channel, l_ijk);
 			//tile(Tile::b_channel, l_ijk) = tile(b1_channel, l_ijk) -tile(b2_channel, l_ijk);
-			//tile(Tile::b_channel, l_ijk) = tile(b2_channel, l_ijk);
+			tile(Tile::b_channel, l_ijk) = tile(b2_channel, l_ijk);
 		}, LEAF);
 
 

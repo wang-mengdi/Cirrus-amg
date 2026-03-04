@@ -31,6 +31,12 @@ public:
 		return thrust::raw_pointer_cast(d_data.data());
 	}
 
+	void fill(const T& value) {
+		if (n == 0) return;
+		thrust::fill(d_data.begin(), d_data.end(), value);
+		CheckCudaError("DeviceReducer: thrust::fill");
+	}
+
 	void resize(size_t len) {
 		n = len;
 

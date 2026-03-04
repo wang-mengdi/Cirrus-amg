@@ -28,27 +28,32 @@ struct fmt::formatter<nanovdb::Coord> {
 	// Formats the point p using the parsed format specification (presentation)
 	// stored in this formatter.
 	template <typename FormatContext>
-	auto format(const nanovdb::Coord& coord, FormatContext& ctx) -> decltype(ctx.out()) {
+	auto format(const nanovdb::Coord& coord, FormatContext& ctx) const -> decltype(ctx.out()) {
 		return format_to(ctx.out(), "[{},{},{}]", coord.x(), coord.y(), coord.z());
 	}
 };
 
-template<class T>
+template <class T>
 struct fmt::formatter<nanovdb::Vec3<T>> {
+	// Parse the format specification.
+	// Since we do not support custom format specs for Vec3,
+	// we simply check that the spec is either empty or ends with '}'.
 	constexpr auto parse(fmt::format_parse_context& ctx) -> decltype(ctx.begin()) {
-		//https://fmt.dev/latest/api.html#udt
-		auto it = ctx.begin(), end = ctx.end();
-		if (it != end && *it != '}') throw format_error("invalid format");
+		auto it = ctx.begin();
+		auto end = ctx.end();
 
-		// Return an iterator past the end of the parsed range:
+		if (it != end && *it != '}')
+			throw fmt::format_error("invalid format");
+
+		// Return iterator past the end of the parsed range.
 		return it;
 	}
 
-	// Formats the point p using the parsed format specification (presentation)
-	// stored in this formatter.
+	// Format the Vec3. This MUST be a const member function because
+	// fmt holds the formatter object as const during formatting.
 	template <typename FormatContext>
-	auto format(const nanovdb::Vec3<T>& v, FormatContext& ctx) -> decltype(ctx.out()) {
-		return format_to(ctx.out(), "[{},{},{}]", v[0], v[1], v[2]);
+	auto format(const nanovdb::Vec3<T>& v, FormatContext& ctx) const -> decltype(ctx.out()) {
+		return fmt::format_to(ctx.out(), "[{},{},{}]", v[0], v[1], v[2]);
 	}
 };
 

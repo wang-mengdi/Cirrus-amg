@@ -71,7 +71,7 @@ public:
 	//T mRefineThreshold;
 	T mParticleLife;
 	nanovdb::Vec3R mGravity;
-	T mesh_motion_inflow = 1.0;
+	T mesh_motion_inflow = 0.0;
 
 	//MaskGridAccessor mMaskGridAccessor;
 	//SDFGridAccessor mSDFGridAccessor;

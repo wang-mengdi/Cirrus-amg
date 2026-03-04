@@ -28,6 +28,38 @@
 #include <sys/sysinfo.h>
 #endif
 
+#define CUDA_CHECK(call) do {                                     \
+    cudaError_t err__ = (call);                                   \
+    if (err__ != cudaSuccess) {                                   \
+        fprintf(stderr, "CUDA error %s:%d: %s\n",                 \
+                __FILE__, __LINE__, cudaGetErrorString(err__));   \
+        abort();                                                  \
+    }                                                            \
+} while (0)
+
+#define CUDA_KERNEL_CHECK() do {                                  \
+    CUDA_CHECK(cudaGetLastError());                               \
+    CUDA_CHECK(cudaDeviceSynchronize());                          \
+} while (0)
+
+void FillWholeGridWithValue(HADeviceGrid<Tile>&grid, T value);
+
+double CellPointRMSNormOnHostTiles(
+	const std::shared_ptr<HAHostTileHolder<Tile>>&holder_ptr,
+	int channel,                 // scalar channel index
+	int level,                   // -1 for all levels, otherwise specific level
+	uint8_t tile_types,          // e.g., LEAF | GHOST | NONLEAF
+	int norm_type                // 1 (L1 mean), 2 (RMS), -1 (Linf)
+);
+
+double NodePointRMSNormOnHostTiles(
+	const std::shared_ptr<HAHostTileHolder<Tile>>&holder_ptr,
+	int channel,                 // scalar node channel
+	int level,                   // -1 for all levels
+	uint8_t tile_types,          // LEAF | GHOST | NONLEAF
+	int norm_type                // 1 (L1 mean), 2 (RMS), -1 (Linf)
+);
+
 __device__ Vec NFMErodedAdvectionPoint(const int axis, const HATileAccessor<Tile>& acc, const HATileInfo<Tile>& info, const Coord& l_ijk);
 
 //set all face velocities that has a neumann neighbor to 0
@@ -42,6 +74,10 @@ int LockedRefineWithNonBoundaryNeumannCellsOneStep(const T current_time, HADevic
 //void ReseedParticles(HADeviceGrid<Tile>& grid, const FluidParams& params, const int tmp_channel, const double current_time, const int num_particles_per_cell, thrust::device_vector<Particle>& particles);
 
 thrust::device_vector<MarkerParticle> VerticesToMarkerParticles(const Eigen::Matrix<T, -1, 3>& V, const Eigen::Transform<T, 3, Eigen::Affine>& mesh_to_world, const T birth_time);
+
+void ClearAllNeumannNeighborFaces(HADeviceGrid<Tile>& grid, const int u_channel);
+
+
 
 class FluidEuler : public Simulator {
 public:
@@ -183,6 +219,8 @@ public:
 			RefineWithMarkerParticles(grid, marker_particles_d, mParams.mCoarseLevel, mParams.mFineLevel, BufChnls::counter, false);
 		}
 
+		FillWholeGridWithValue(grid, NODATA);
+
 		buildTypesAndAMGCoeffs(grid, 0.);
 
 		{
@@ -228,6 +266,9 @@ public:
 		double vmax = NormSync(grid, -1, BufChnls::u + 1, false);
 		double wmax = NormSync(grid, -1, BufChnls::u + 2, false);
 		double max_vel = std::max(umax, std::max(vmax, wmax));
+
+		Info("Calc CFL umax = {}, vmax = {}, wmax = {}, max_vel = {} calc dx {} cfl {} max_vel {} dt {}", umax, vmax, wmax, max_vel, dx, cfl, max_vel, dx * cfl / max_vel);
+
 		return dx * cfl / max_vel;
 	}
 	virtual void Output(DriverMetaData& metadata) {
@@ -283,25 +324,81 @@ public:
 		//	//make directory
 		//	fs::create_directories(base_path_d);
 
-			auto particles_h_ptr = std::make_shared<thrust::host_vector<MarkerParticle>>(marker_particles_d);
-			metadata.Append_Output_Thread(std::make_shared<std::thread>(IOFunc::OutputMarkerParticleSystemAsVTU,
-				particles_h_ptr, metadata.base_path / fmt::format("particles{:04d}.vtu", metadata.current_frame)
-			));
+			//auto particles_h_ptr = std::make_shared<thrust::host_vector<MarkerParticle>>(marker_particles_d);
+			//metadata.Append_Output_Thread(std::make_shared<std::thread>(IOFunc::OutputMarkerParticleSystemAsVTU,
+			//	particles_h_ptr, metadata.base_path / fmt::format("particles{:04d}.vtu", metadata.current_frame)
+			//));
 		//}
 	}
 
 
-	void project(HADeviceGrid<Tile>& grid, int u_channel, double current_time) {
+	void project(DriverMetaData& metadata, HADeviceGrid<Tile>& grid, int u_channel) {
 		auto c0_channel = ProjChnls::c0;
 
+		{
 
+			grid.launchVoxelFuncOnAllTiles(
+				[=] __device__(HATileAccessor<Tile>&acc, HATileInfo<Tile>&info, const Coord & l_ijk) {
+				info.tile()(ProjChnls::b, l_ijk) = NODATA;
+			}, LEAF | GHOST | NONLEAF, 4
+			);
+			CUDA_CHECK(cudaGetLastError());
+			CUDA_CHECK(cudaDeviceSynchronize());
+
+		}
 
 		//AMG
 		{
 			CalculateNeighborTiles(grid);
 
-			AMGVolumeWeightedDivergenceOnLeafs(grid, u_channel, ProjChnls::b);
+			AMGVolumeWeightedDivergenceOnLeafs(grid, u_channel, c0_channel, ProjChnls::b);
 			Info("div pt l2: {}", NormSync(grid, 2, ProjChnls::b, false));
+			Info("cpu div pt l2: {}", CellPointRMSNormOnHostTiles(grid.getHostTileHolderForLeafs(), ProjChnls::b, -1, LEAF, 2));
+			Info("div pt linf: {}", NormSync(grid, -1, ProjChnls::b, false));
+			Info("cpu div pt linf: {}", CellPointRMSNormOnHostTiles(grid.getHostTileHolderForLeafs(), ProjChnls::b, -1, LEAF, -1));
+
+
+			{
+				grid.launchVoxelFuncOnAllTiles(
+					[=] __device__(HATileAccessor<Tile>&acc, HATileInfo<Tile>&info, const Coord & l_ijk) {
+					auto& tile = info.tile();
+					if (tile(ProjChnls::b, l_ijk) == NODATA) {
+						auto g_ijk = acc.composeGlobalCoord(info.mTileCoord, l_ijk);
+						printf("global coord: (%d, %d, %d), b: %f\n", g_ijk[0], g_ijk[1], g_ijk[2], tile(ProjChnls::b, l_ijk));
+					}
+					T u = tile(u_channel, l_ijk);
+					T v = tile(u_channel + 1, l_ijk);
+					T w = tile(u_channel + 2, l_ijk);
+					tile(BufChnls::tmp, l_ijk) = sqrt(u * u + v * v + w * w);
+
+					T c0 = tile(coeff_channel, l_ijk);
+					T c1 = tile(coeff_channel + 1, l_ijk);
+					T c2 = tile(coeff_channel + 2, l_ijk);
+					T c3 = tile(coeff_channel + 3, l_ijk);
+					tile(BufChnls::counter, l_ijk) = sqrt(c0 * c0 + c1 * c1 + c2 * c2 + c3 * c3);
+						
+					//printf("velocity: (%f, %f, %f), len: %f\n", u, v, w, tile(BufChnls::tmp, l_ijk));
+
+				}, LEAF, 4
+				);
+
+				CUDA_CHECK(cudaGetLastError());
+				CUDA_CHECK(cudaDeviceSynchronize());
+
+				Info("velocity len linf: {}", NormSync(grid, -1, BufChnls::tmp, false));
+				Info("cpu velocity len linf: {}", CellPointRMSNormOnHostTiles(grid.getHostTileHolderForLeafs(), BufChnls::tmp, -1, LEAF, -1));
+				Info("coeff len linf: {}", NormSync(grid, -1, BufChnls::counter, false));
+				Info("cpu coeff len linf: {}", CellPointRMSNormOnHostTiles(grid.getHostTileHolderForLeafs(), BufChnls::counter, -1, LEAF, -1));
+
+				//show velocity on polyscope before proj
+				polyscope::init();
+				auto holder = grid.getHostTileHolderForLeafs();
+				IOFunc::AddPoissonGridCellCentersToPolyscopePointCloud(holder, { { -1,"type" },
+					{ BufChnls::vor, "vorticity" }, {ProjChnls::x, "pressure"},{ProjChnls::b, "div"},{BufChnls::tmp, "vel_len"}, {BufChnls::counter, "coeff len"} },
+					{ {BufChnls::u, "velocity"} });
+				//IOFunc::AddLeveledPoissonGridCellCentersToPolyscopePointCloud(holder, { { -1,"type" }, { BufChnls::vor, "vorticity" } }, { { BufChnls::u, "velocity" } });
+				polyscope::show();
+			}
 
 
 			AMGSolver solver(c0_channel, 0.5, 1, 1);
@@ -309,7 +406,7 @@ public:
 
 			CPUTimer timer;
 			timer.start();
-			auto [iters, err] = solver.solve(grid, false, 1000, 1e-6, 2, 10, 1, mParams.mIsPureNeumann);
+			auto [iters, err] = solver.solve(grid, true, 1000, 1e-6, 2, 10, 1, mParams.mIsPureNeumann);
 			cudaDeviceSynchronize();
 			double elapsed = timer.stop("AMGPCG");
 			double total_cells = grid.numTotalTiles() * Tile::SIZE;
@@ -320,9 +417,12 @@ public:
 			Info("pressure pt l2: {}", NormSync(grid, 2, ProjChnls::x, false));
 
 			AMGAddGradientToFace(grid, -1, LEAF, ProjChnls::x, c0_channel, BufChnls::u);
-			applyVelocityBC(grid, current_time);
 
-			AMGVolumeWeightedDivergenceOnLeafs(grid, u_channel, ProjChnls::b);
+			Info("inflow: {}", mParams.mesh_motion_inflow);
+
+			applyVelocityBC(grid, metadata.current_time);
+
+			AMGVolumeWeightedDivergenceOnLeafs(grid, u_channel, c0_channel, ProjChnls::b);
 			//for (int i : {0, 1, 2}) {
 			//	AccumulateToParents(grid, u_channel + i, u_channel + i, -1, LEAF, LAUNCH_SUBTREE, INTERIOR | DIRICHLET, 1.0 / 4.0, true);
 			//}
@@ -381,6 +481,19 @@ public:
 		//	polyscope::show();
 		//}
 
+		{
+			for (int i = 0; i < n; i++) {
+				printf("grid %d pointer %p\n", i, grid_ptrs[i].get());
+				auto holder = grid_ptrs[i]->getHostTileHolder(LEAF | GHOST, -1);
+				for (int axis : {0, 1, 2}) {
+					Info("vel axis {} gpu l2 {} gpu node l2 {} cpu l2 {} cpu node l2 {}", axis, 
+						NormSync(*grid_ptrs[i], 2, BufChnls::u + axis, false), NormSync(*grid_ptrs[i], 2, BufChnls::u_node + axis, false),
+						CellPointRMSNormOnHostTiles(holder, BufChnls::u + axis, -1, LEAF | GHOST, 2), NodePointRMSNormOnHostTiles(holder, BufChnls::u_node + axis, -1, LEAF | GHOST, 2));
+				}
+				
+			}
+		}
+
 		AdvectMarkerParticlesRK4ForwardAndMarkInvalid(
 			last_grid, mParams.mFineLevel, mParams.mCoarseLevel,
 			BufChnls::u, dt, current_time - mParams.mParticleLife,
@@ -421,8 +534,8 @@ public:
 		cudaDeviceSynchronize(); adaptive_time = timer.stop("adapt with particles"); timer.start();
 		CheckCudaError("adapt with particles");
 		
-
 		buildTypesAndAMGCoeffs(grid, current_time);
+
 
 
 
@@ -453,6 +566,7 @@ public:
 
 			int back_traced_steps = time_step_counter % mParams.mFlowMapStride;
 			int nfm_start_idx = n - back_traced_steps - 1;
+			Info("nfm start idx: {}, back traced steps: {}, accs_d size {}", nfm_start_idx, back_traced_steps, accs_d.size());
 			
 			grid.launchVoxelFuncOnAllTiles(
 				[=] __device__(HATileAccessor<Tile>&acc, HATileInfo<Tile>&info, const Coord & l_ijk) {
@@ -481,10 +595,10 @@ public:
 
 							tile(BufChnls::u + axis, l_ijk) = m1[axis];
 
-							//if (m1[axis] > 1e5) {
-							//	auto g_ijk = acc.localToGlobalCoord(info, l_ijk);
-							//	printf("g_ijk %d %d %d axis %d m1 %f\n", g_ijk[0], g_ijk[1], g_ijk[2], axis, m1[axis]);
-							//}
+							if (m1[axis] > 1e5) {
+								auto g_ijk = acc.localToGlobalCoord(info, l_ijk);
+								printf("g_ijk %d %d %d axis %d m1 %f\n", g_ijk[0], g_ijk[1], g_ijk[2], axis, m1[axis]);
+							}
 						}
 					}
 				}
@@ -510,7 +624,7 @@ public:
 
 		//int tmp_ta_node = 0;
 		//CalcLeafNodeValuesFromCellCenters(grid, Tile::Ta_channel, tmp_ta_node);
-
+		Info("gravity: {}, dt: {}", mParams.mGravity, dt);
 
 		const nanovdb::Vec3R gravity = mParams.mGravity;
 		auto params = mParams;
@@ -563,8 +677,15 @@ public:
 
 		Info("frame {} dt {}", metadata.current_frame, dt);
 
+		for (int i = 0; i < grid_ptrs.size(); i++) {
+			printf("grid %d ptr %p\n", i, grid_ptrs[i].get());
+		}
+
 		adaptAndAdvect(metadata, grid_ptrs);
 
+		{
+			Info("after advection u l2 {} v l2 {} w l2 {}", NormSync(grid, 2, BufChnls::u, false), NormSync(grid, 2, BufChnls::u + 1, false), NormSync(grid, 2, BufChnls::u + 2, false));
+		}
 
 
 		applyExternalForce(grid, dt);
@@ -572,35 +693,32 @@ public:
 
 		applyVelocityBC(grid, metadata.current_time);
 
-
+		{
+			Info("before projection u l2 {} v l2 {} w l2 {}", NormSync(grid, 2, BufChnls::u, false), NormSync(grid, 2, BufChnls::u + 1, false), NormSync(grid, 2, BufChnls::u + 2, false));
+		}
 
 
 
 		//projection
-		project(grid, BufChnls::u, metadata.current_time);
-
-
-		{
-			//show velocity on polyscope before proj
-			polyscope::init();
-			auto holder = grid.getHostTileHolderForLeafs();
-			IOFunc::AddPoissonGridCellCentersToPolyscopePointCloud(holder, { { -1,"type" }, { BufChnls::vor, "vorticity" }, {ProjChnls::x, "pressure"} }, { {BufChnls::u, "velocity"} });
-			//IOFunc::AddLeveledPoissonGridCellCentersToPolyscopePointCloud(holder, { { -1,"type" }, { BufChnls::vor, "vorticity" } }, { { BufChnls::u, "velocity" } });
-			polyscope::show();
-		}
-
-		CalculateVelocityAndVorticityMagnitudeOnLeafCellCenters(grid, mParams.mFineLevel, mParams.mCoarseLevel, BufChnls::u, BufChnls::u_node, BufChnls::u_cell, BufChnls::vor);
-
+		project(metadata, grid, BufChnls::u);
 
 		//{
 		//	//show velocity on polyscope before proj
 		//	polyscope::init();
 		//	auto holder = grid.getHostTileHolderForLeafs();
-		//	IOFunc::AddPoissonGridCellCentersToPolyscopePointCloud(holder, { { -1,"type" }, { BufChnls::vor, "vorticity" } }, { { BufChnls::u, "velocity" } });
+		//	IOFunc::AddPoissonGridCellCentersToPolyscopePointCloud(holder, { { -1,"type" }, { BufChnls::vor, "vorticity" }, {ProjChnls::x, "pressure"}, { ProjChnls::b, "divergence" } }, { {BufChnls::u, "velocity"} });
 		//	//IOFunc::AddLeveledPoissonGridCellCentersToPolyscopePointCloud(holder, { { -1,"type" }, { BufChnls::vor, "vorticity" } }, { { BufChnls::u, "velocity" } });
 		//	polyscope::show();
 		//}
 
+
+		CalculateVelocityAndVorticityMagnitudeOnLeafCellCenters(grid, mParams.mFineLevel, mParams.mCoarseLevel, BufChnls::u, BufChnls::u_node, BufChnls::u_cell, BufChnls::vor);
+
+
+
+		{
+			Info("end of advance u l2 {} v l2 {} w l2 {}", NormSync(grid, 2, BufChnls::u, false), NormSync(grid, 2, BufChnls::u + 1, false), NormSync(grid, 2, BufChnls::u + 2, false));
+		}
 
 		CheckCudaError("Advance");
 		time_step_counter++;

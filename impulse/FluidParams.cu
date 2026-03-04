@@ -52,8 +52,8 @@ FluidParams::FluidParams(json& j)
 	mCoarseLevel = Json::Value<int>(j, "coarse_level", 0);
 	mFineLevel = Json::Value<int>(j, "fine_level", 6);
 	//mRefineThreshold = Json::Value<T>(j, "refine_threshold", 200);
-	//mGravity = Vec(0, 0, 0);
-	//mGravity[2] = Json::Value<double>(j, "gravity", -9.8);
+	mGravity = Vec(0, 0, 0);
+	mGravity[2] = Json::Value<double>(j, "gravity", -9.8);
 	mParticleLife = Json::Value<T>(j, "particle_life", FLT_MAX);
 }
 
@@ -165,8 +165,8 @@ Eigen::Transform<T, 3, Eigen::Affine> FluidParams::meshToWorldTransform(const T 
 		// t = 1 -> (0.5, 0.5, 0.3)
 		const T x = 0.5;
 		const T y = 0.5;
-		const T z0 = 0.8;
-		const T z1 = 0.3;
+		const T z0 = 0.6;// 0.8;
+		const T z1 = 0.4;// 0.3;
 		const T z = (1 - t) * z0 + t * z1;
 
 		Eigen::Transform<T, 3, Eigen::Affine> transform =

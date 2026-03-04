@@ -6,6 +6,154 @@
 #include <thrust/execution_policy.h>
 #include <tbb/parallel_for.h>
 
+
+#include <cmath>
+#include <limits>
+#include <memory>
+#include <cstdint>
+
+void FillWholeGridWithValue(HADeviceGrid<Tile>& grid, T value) {
+	Warn("Filling whole grid with value {}", value);
+
+	//fill all cell and node value to 0
+	grid.launchTileFunc(
+		[=] __device__(HATileAccessor<Tile> acc, const int _, HATileInfo<Tile>&info) {
+		auto& tile = info.tile();
+		for (int c = 0; c < Tile::num_channels; c++) {
+			for (int i = 0; i < Tile::CHNLSIZE; i++) {
+				tile.mData[c][i] = value;
+			}
+		}
+	}, -1, LEAF | GHOST | NONLEAF, LAUNCH_SUBTREE);
+}
+
+double CellPointRMSNormOnHostTiles(
+	const std::shared_ptr<HAHostTileHolder<Tile>>& holder_ptr,
+	int channel,                 // scalar channel index
+	int level,                   // -1 for all levels, otherwise specific level
+	uint8_t tile_types,          // e.g., LEAF | GHOST | NONLEAF
+	int norm_type                // 1 (L1 mean), 2 (RMS), -1 (Linf)
+) {
+	const auto& holder = *holder_ptr;
+	using Coord = typename Tile::CoordType;
+
+	double acc = 0.0; // for L1/L2 accumulation
+	double mx = 0.0;  // for Linf
+	size_t count = 0;
+
+	auto process_level = [&](int lv) {
+		for (const auto& info : holder.mHostLevels[lv]) {
+			if (!(info.mType & tile_types)) continue;
+
+			auto& tile = info.tile();
+
+			for (int i = 0; i < Tile::DIM; ++i) {
+				for (int j = 0; j < Tile::DIM; ++j) {
+					for (int k = 0; k < Tile::DIM; ++k) {
+						Coord l_ijk(i, j, k);
+
+						double x = tile(channel, l_ijk);
+						if (!std::isfinite(x)) continue;
+
+						double ax = std::abs(x);
+
+						if (norm_type == -1) {
+							if (ax > mx) mx = ax;
+						}
+						else if (norm_type == 1) {
+							acc += ax;
+							count++;
+						}
+						else if (norm_type == 2) {
+							acc += x * x;
+							count++;
+						}
+					}
+				}
+			}
+		}
+		};
+
+	int beg = 0, end = holder.mMaxLevel;
+	if (level != -1) beg = end = level;
+
+	for (int lv = beg; lv <= end; ++lv) process_level(lv);
+
+	if (norm_type == -1) return mx;
+
+	if (count == 0) return 0.0;
+
+	if (norm_type == 1) return acc / count;
+	if (norm_type == 2) return std::sqrt(acc / count);
+
+	return std::numeric_limits<double>::quiet_NaN();
+}
+
+double NodePointRMSNormOnHostTiles(
+	const std::shared_ptr<HAHostTileHolder<Tile>>& holder_ptr,
+	int channel,                 // scalar node channel
+	int level,                   // -1 for all levels
+	uint8_t tile_types,          // LEAF | GHOST | NONLEAF
+	int norm_type                // 1 (L1 mean), 2 (RMS), -1 (Linf)
+) {
+	const auto& holder = *holder_ptr;
+	using Coord = typename Tile::CoordType;
+
+	double acc = 0.0;
+	double mx = 0.0;
+	size_t count = 0;
+
+	auto process_level = [&](int lv) {
+		for (const auto& info : holder.mHostLevels[lv]) {
+
+			if (!(info.mType & tile_types)) continue;
+
+			auto& tile = info.tile();
+
+			for (int i = 0; i <= Tile::DIM; ++i) {
+				for (int j = 0; j <= Tile::DIM; ++j) {
+					for (int k = 0; k <= Tile::DIM; ++k) {
+
+						Coord r_ijk(i, j, k);
+
+						double x = tile.node(channel, r_ijk);
+						if (!std::isfinite(x)) continue;
+
+						double ax = std::abs(x);
+
+						if (norm_type == -1) {
+							if (ax > mx) mx = ax;
+						}
+						else if (norm_type == 1) {
+							acc += ax;
+							count++;
+						}
+						else if (norm_type == 2) {
+							acc += x * x;
+							count++;
+						}
+					}
+				}
+			}
+		}
+		};
+
+	int beg = 0, end = holder.mMaxLevel;
+	if (level != -1) beg = end = level;
+
+	for (int lv = beg; lv <= end; ++lv)
+		process_level(lv);
+
+	if (norm_type == -1) return mx;
+
+	if (count == 0) return 0.0;
+
+	if (norm_type == 1) return acc / count;
+	if (norm_type == 2) return std::sqrt(acc / count);
+
+	return std::numeric_limits<double>::quiet_NaN();
+}
+
 __device__ Vec NFMErodedAdvectionPoint(const int axis, const HATileAccessor<Tile>& acc, const HATileInfo<Tile>& info, const Coord& l_ijk) {
 	auto g_ijk = acc.localToGlobalCoord(info, l_ijk);
 	auto ng_ijk = g_ijk; ng_ijk[axis]--;

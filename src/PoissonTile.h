@@ -167,17 +167,3 @@ using Coord = typename Tile::Coord;
 using Vec = Tile::VecType;
 constexpr T NODATA = FLT_MAX;
 
-// Formatter specialization for nanovdb::Vec3<T> (i.e., nanovdb::Vec3<float>)
-template <>
-struct fmt::formatter<nanovdb::Vec3<T>> {
-    // We ignore any custom format specifiers
-    constexpr auto parse(fmt::format_parse_context& ctx) {
-        return ctx.begin();
-    }
-
-    template <typename FormatContext>
-    auto format(const nanovdb::Vec3<T>& v, FormatContext& ctx) const {
-        // Format as "(x, y, z)"
-        return fmt::format_to(ctx.out(), "({}, {}, {})", v[0], v[1], v[2]);
-    }
-};

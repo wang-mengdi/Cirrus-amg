@@ -3,23 +3,24 @@
         "cfl": 0.5,
         "first_frame": 0,
         "fps": 200,
-        "last_frame": 200,
+        "last_frame": 10,
         "min_step_frame_fraction": 0.0,
         "output_base_dir": "./output/smokesphere",
         "queue_size": 4,
         "snapshot_stride": 0
     },
     "scene": {
-        "coarse_level": 1,
-        "fine_level": 5,
+        "coarse_level": 3,
+        "fine_level": 3,
         "flowmap_stride": 5,
         "refine_threshold": 0.1,
-        "gravity": 0.0,
+        "gravity": 2000.0,
         "particle_life": 2.5,
         "test": "meshmotion",
         "mesh_file": "./scenes/sphere.obj",
         "sdf_isovalue": 0.010,
-        "reserve_particles_m": 40
+        "reserve_particles_m": 40,
+        "inflow_velocity": 0.0
     },
     "simulator": "euler"
 }
