@@ -42,9 +42,6 @@
     CUDA_CHECK(cudaDeviceSynchronize());                          \
 } while (0)
 
-void SanitizeChannelCellValues(HADeviceGrid<Tile>&grid, const int channel);
-void SanityCheckChannelNodeValues(HADeviceGrid<Tile>&grid, const int channel);
-
 void FillChannelsInGridWithValue(HADeviceGrid<Tile>&grid, T value, std::initializer_list<int> channels = {});
 
 double CellPointRMSNormOnHostTiles(
@@ -214,7 +211,7 @@ public:
 			RefineWithMarkerParticles(grid, marker_particles_d, mParams.mCoarseLevel, mParams.mFineLevel, BufChnls::counter, false);
 		}
 
-		FillChannelsInGridWithValue(grid, NODATA, {});
+		FillChannelsInGridWithValue(grid, std::numeric_limits<T>::quiet_NaN(), {});
 
 		buildTypesAndAMGCoeffs(grid, 0.);
 
@@ -239,16 +236,7 @@ public:
 
 		//applyVelocityBC(grid, 0.0);
 
-		{
-			//show velocity on polyscope before proj
-			polyscope::init();
-			auto holder = grid.getHostTileHolderForLeafs();
-			IOFunc::AddPoissonGridCellCentersToPolyscopePointCloud(holder, { { -1,"type" },
-				{ BufChnls::vor, "vorticity" }, {ProjChnls::x, "pressure"},{ProjChnls::b, "div"},{ProjChnls::c0 + 3, "c3"} },
-				{ {BufChnls::u, "velocity"} });
-			//IOFunc::AddLeveledPoissonGridCellCentersToPolyscopePointCloud(holder, { { -1,"type" }, { BufChnls::vor, "vorticity" } }, { { BufChnls::u, "velocity" } });
-			polyscope::show();
-		}
+
 
 		//CalculateVorticityMagnitudeOnLeafs(grid, mParams.mFineLevel, mParams.mCoarseLevel, BufChnls::u, BufChnls::u_node, BufChnls::vor);
 
@@ -472,9 +460,9 @@ public:
 
 		{
 			Warn("sanitizing after projection");
-			SanitizeChannelCellValues(grid, BufChnls::u);
-			SanitizeChannelCellValues(grid, BufChnls::u + 1);
-			SanitizeChannelCellValues(grid, BufChnls::u + 2);
+			SanityCheckChannelCellValues(grid, BufChnls::u);
+			SanityCheckChannelCellValues(grid, BufChnls::u + 1);
+			SanityCheckChannelCellValues(grid, BufChnls::u + 2);
 		}
 
 		//{
@@ -526,7 +514,7 @@ public:
 		int n = grid_ptrs.size() - 1;
 		//we only need to prepare the last grid at this time
 		auto& last_grid = *grid_ptrs[n - 1];
-		InterpolateVelocitiesAtAllTiles(last_grid, BufChnls::u, BufChnls::u_node);
+		//InterpolateFaceVelocitiesAtAllTiles(last_grid, BufChnls::u, BufChnls::u_node);
 		CheckCudaError("prepare last grid");
 
 		{
@@ -719,7 +707,7 @@ public:
 		{
 			Warn("sanitizing at end of advection");
 			for (int axis : {0, 1, 2}) {
-				SanitizeChannelCellValues(grid, BufChnls::u + axis);
+				SanityCheckChannelCellValues(grid, BufChnls::u + axis);
 			}
 		}
 
@@ -845,9 +833,9 @@ public:
 
 		{
 			Warn("sanitizing at end of advance");
-			SanitizeChannelCellValues(grid, BufChnls::u);
-			SanitizeChannelCellValues(grid, BufChnls::u + 1);
-			SanitizeChannelCellValues(grid, BufChnls::u + 2);
+			SanityCheckChannelCellValues(grid, BufChnls::u);
+			SanityCheckChannelCellValues(grid, BufChnls::u + 1);
+			SanityCheckChannelCellValues(grid, BufChnls::u + 2);
 		}
 
 		CheckCudaError("Advance");

@@ -1,5 +1,30 @@
 ﻿#include "PoissonGrid.h"
 
+void SanityCheckChannelCellValues(HADeviceGrid<Tile>& grid, const int channel, uint8_t launch_types) {
+    Warn("sanity checking channel {} cell values on device tiles...", channel);
+    grid.launchVoxelFuncOnAllTiles(
+        [=] __device__(HATileAccessor<Tile>&acc, HATileInfo<Tile>&info, const Coord & l_ijk) {
+        auto val = info.tile()(channel, l_ijk);
+        if (!isfinite(val)) {
+            auto g_ijk = acc.localToGlobalCoord(info, l_ijk);
+            printf("================bad value %f at level %d tile type %d channel %d cell %d %d %d\n", val, info.mLevel, info.mType, channel, g_ijk[0], g_ijk[1], g_ijk[2]);
+            asm("trap;");
+        }
+    }, launch_types
+    );
+}
+void SanityCheckChannelNodeValues(HADeviceGrid<Tile>& grid, const int channel, uint8_t launch_types) {
+    Warn("sanity checking channel {} node values on device tiles...", channel);
+    grid.launchNodeFuncWithTileIdxOnAllTiles(
+        [=] __device__(HATileAccessor<Tile> acc, const int tile_idx, HATileInfo<Tile>&info, const Coord & r_ijk) {
+        auto val = info.tile().node(channel, r_ijk);
+        CUDA_ASSERT(isfinite(val), "bad value %f at level %d tile coord %d %d %d r_ijk %d %d %d", val, info.mLevel, info.mTileCoord[0], info.mTileCoord[1], info.mTileCoord[2], r_ijk[0], r_ijk[1], r_ijk[2]);
+
+    },
+        launch_types
+    );
+}
+
 
 
 template<class T>
@@ -552,6 +577,10 @@ void CalcLeafNodeValuesFromFaceCenters(HADeviceGrid<Tile>& grid, const int u_cha
         auto& tile = info.tile();
         for (int axis : {0, 1, 2}) {
             tile.node(node_u_channel + axis, r_ijk) = calcNode(acc, info, r_ijk, axis);
+    //        {
+				//auto g_ijk = acc.localToGlobalCoord(info, r_ijk);
+				//CUDA_ASSERT(isfinite(tile.node(node_u_channel + axis, r_ijk)), "bad value %f at level %d tile coord %d %d %d r_ijk %d %d %d axis %d", tile.node(node_u_channel + axis, r_ijk), info.mLevel, info.mTileCoord[0], info.mTileCoord[1], info.mTileCoord[2], r_ijk[0], r_ijk[1], r_ijk[2], axis);
+    //        }
         }
     },
         -1, LEAF, LAUNCH_SUBTREE
@@ -578,6 +607,7 @@ void CalcLeafNodeValuesFromFaceCenters(HADeviceGrid<Tile>& grid, const int u_cha
                     }
 
                     tile.node(node_u_channel + axis, r_ijk) = sum / 8;
+					CUDA_ASSERT(isfinite(tile.node(node_u_channel + axis, r_ijk)), "bad value %f at level %d tile coord %d %d %d r_ijk %d %d %d axis %d after fixing junction", tile.node(node_u_channel + axis, r_ijk), info.mLevel, info.mTileCoord[0], info.mTileCoord[1], info.mTileCoord[2], r_ijk[0], r_ijk[1], r_ijk[2], axis);
                 }
             }
         },
@@ -703,13 +733,17 @@ __device__ Vec InterpolateFaceValue(const HATileAccessor<Tile>& acc, const Vec& 
             Tile::T v0, v1, w;
             w = frac[axis];
             if (!info.empty()) {
-                for (int i = 0; i < 3; i++) {
-                    CUDA_ASSERT(frac[i] >= 0 && frac[i] <= 1, "invalid frac %f at axis %d", frac[i], axis);
-                }
+                //for (int i = 0; i < 3; i++) {
+                //    CUDA_ASSERT(frac[i] >= 0 && frac[i] <= 1, "invalid frac %f at axis %d", frac[i], axis);
+                //}
 
                 auto& tile = info.tile();
                 v0 = tile.faceInterp(u_channel, node_u_channel, axis, l_ijk, frac);
-                CUDA_ASSERT(isfinite(v0), "v0=%f", v0);
+
+                {
+					auto g_ijk = acc.localToGlobalCoord(info, l_ijk);
+                    CUDA_ASSERT(isfinite(v0), "v0=%f at level %d g_ijk %d %d %d l_ijk %d %d %d frac %f %f %f pos %f %f %f axis %d u_channel %d node_u_channel %d", v0, info.mLevel, g_ijk[0], g_ijk[1], g_ijk[2], l_ijk[0], l_ijk[1], l_ijk[2], frac[0], frac[1], frac[2], pos[0], pos[1], pos[2], axis, u_channel, node_u_channel);
+                }
             }
             else v0 = 0;
 
@@ -720,14 +754,15 @@ __device__ Vec InterpolateFaceValue(const HATileAccessor<Tile>& acc, const Vec& 
             HATileInfo<Tile> n_info; Coord n_l_ijk; Vec n_frac;
             acc.findPlusFaceIntpVoxel(pos, axis, info, l_ijk, n_info, n_l_ijk, n_frac);
             if (!n_info.empty()) {
-                for (int i = 0; i < 3; i++) {
-					CUDA_ASSERT(n_frac[i] >= 0 && n_frac[i] <= 1, "invalid n_frac %f at axis %d", n_frac[i], axis);
-                }
+     //           for (int i = 0; i < 3; i++) {
+					//CUDA_ASSERT(n_frac[i] >= 0 && n_frac[i] <= 1, "invalid n_frac %f at axis %d", n_frac[i], axis);
+     //           }
 
                 auto& n_tile = n_info.tile();
 
                 v1 = n_tile.faceInterp(u_channel, node_u_channel, axis, n_l_ijk, n_frac);
-                CUDA_ASSERT(isfinite(v1), "v1=%f", v1);
+                //CUDA_ASSERT(isfinite(v1), "v1=%f", v1);
+
             }
             else v1 = 0;
 

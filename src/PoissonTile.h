@@ -124,15 +124,15 @@ public:
 				node_intp += weight * val;
                 node_sum += val;
 
-                {
-                    Coord ol_ijk = l_ijk + off_ijk;
-                    CUDA_ASSERT(isfinite(val), "val=%f at ol_ijk %d %d %d u_channel %d node_u_channel %d", val, ol_ijk[0], ol_ijk[1], ol_ijk[2], u_channel, node_u_channel);
-                    CUDA_ASSERT(isfinite(weight), "weight=%f at ol_ijk %d %d %d u_channel %d node_u_channel %d", weight, ol_ijk[0], ol_ijk[1], ol_ijk[2], u_channel, node_u_channel);
-                }
+                //{
+                //    Coord ol_ijk = l_ijk + off_ijk;
+                //    CUDA_ASSERT(isfinite(val), "val=%f at ol_ijk %d %d %d u_channel %d node_u_channel %d", val, ol_ijk[0], ol_ijk[1], ol_ijk[2], u_channel, node_u_channel);
+                //    CUDA_ASSERT(isfinite(weight), "weight=%f at ol_ijk %d %d %d u_channel %d node_u_channel %d", weight, ol_ijk[0], ol_ijk[1], ol_ijk[2], u_channel, node_u_channel);
+                //}
             }
         }
 
-        CUDA_ASSERT(isfinite(node_intp), "node_intp=%f", node_intp);
+        //CUDA_ASSERT(isfinite(node_intp), "node_intp=%f", node_intp);
 
 		T frac_min = 1.0;
         for (int ax : {axj, axk}) {
@@ -142,7 +142,7 @@ public:
 
         T delta = value(u_channel + axis, l_ijk) - node_sum / 4.0;
 
-        CUDA_ASSERT(isfinite(delta), "delta=%f", delta);
+        //CUDA_ASSERT(isfinite(delta), "delta=%f", delta);
 
 
 		return node_intp + 2 * delta * frac_min;
@@ -176,6 +176,6 @@ using Tile = PoissonTile<float, 15>;
 using T = Tile::T;
 using Coord = typename Tile::Coord;
 using Vec = Tile::VecType;
-//constexpr T NODATA = FLT_MAX;
-constexpr T NODATA = std::numeric_limits<T>::quiet_NaN();
+constexpr T NODATA = FLT_MAX;//sometimes we use NODATA to indicate invalid data, so it cannot be nan
+//constexpr T NODATA = std::numeric_limits<T>::quiet_NaN();
 

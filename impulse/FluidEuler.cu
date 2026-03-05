@@ -12,32 +12,6 @@
 #include <memory>
 #include <cstdint>
 
-void SanitizeChannelCellValues(HADeviceGrid<Tile>& grid, const int channel) {
-	Warn("sanity checking channel {} cell values on device tiles...", channel);
-	grid.launchVoxelFuncOnAllTiles(
-		[=] __device__(HATileAccessor<Tile>&acc, HATileInfo<Tile>&info, const Coord & l_ijk) {
-		auto val = info.tile()(channel, l_ijk);
-		if (!isfinite(val)) {
-			auto g_ijk = acc.localToGlobalCoord(info, l_ijk);
-			printf("================bad value %f at level %d tile type %d channel %d cell %d %d %d\n", val, info.mLevel, info.mType, channel, g_ijk[0], g_ijk[1], g_ijk[2]);
-			asm("trap;");
-		}
-	}, LEAF
-	);
-}
-void SanityCheckChannelNodeValues(HADeviceGrid<Tile>& grid, const int channel) {
-	Warn("sanity checking channel {} node values on device tiles...", channel);
-	grid.launchNodeFuncWithTileIdxOnAllTiles(
-		[=] __device__(HATileAccessor<Tile> acc, const int tile_idx, HATileInfo<Tile>&info, const Coord & r_ijk) {
-		auto val = info.tile().node(channel, r_ijk);
-		CUDA_ASSERT(isfinite(val), "bad value %f at level %d tile coord %d %d %d r_ijk %d %d %d", val, info.mLevel, info.mTileCoord[0], info.mTileCoord[1], info.mTileCoord[2], r_ijk[0], r_ijk[1], r_ijk[2]);
-		
-	},
-		LEAF
-	);
-}
-
-
 void FillChannelsInGridWithValue(
 	HADeviceGrid<Tile>& grid,
 	T value,

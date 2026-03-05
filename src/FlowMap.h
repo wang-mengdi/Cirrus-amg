@@ -12,8 +12,10 @@ __hostdev__ T QuadraticKernelDerivative(T x);
 //__device__ void VelocityJacobian(HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const Coord& l_ijk, const Vec& pos, const int node_u_channel, const T h, Eigen::Matrix3<T>& jacobian);
 __hostdev__ Vec MatrixTimesVec(const Eigen::Matrix3<T>& A, const Vec& b);
 
-//calculate velocities on leaf nodes and interpolate velocities at face centers on GHOST and NONLEAF tiles
-void InterpolateVelocitiesAtAllTiles(HADeviceGrid<Tile>& grid, const int u_channel, const int tmp_u_node_channel);
+//interpolate velocities at face centers on GHOST and NONLEAF tiles
+//node velocities at leaf tiles will go as a side produce
+//in the end, we have face velocities at all tiles, and node velocities at leaf tiles
+void InterpolateFaceVelocitiesAtAllTiles(HADeviceGrid<Tile>& grid, const int face_u_channel, const int leaf_node_u_channel);
 
 __device__ void KernelScatterVelocityComponentMAC2(const HATileAccessor<Tile>& acc, const int level, const int axis, const int u_channel, const int uw_channel, const Vec& pos, const Vec& vel, const Eigen::Matrix3<T>& gradu);
 __device__ bool KernelIntpVelocityAndJacobianMAC2AtGivenLevel(const HATileAccessor<Tile>& acc, const int level, const Vec& pos, const int u_channel, Vec& vel, Eigen::Matrix3<T>& jacobian);

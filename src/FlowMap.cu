@@ -1,4 +1,6 @@
 #include "FlowMap.h"
+#include "PoissonIOFunc.h"
+#include <polyscope/polyscope.h>
 
 //quadratic kernel used by MPM and PFM
 //does not guard 1.5
@@ -448,18 +450,18 @@ __hostdev__ Vec MatrixTimesVec(const Eigen::Matrix3<T>& A, const Vec& b) {
 	);
 }
 
-void InterpolateVelocitiesAtAllTiles(HADeviceGrid<Tile>& grid, const int u_channel, const int tmp_u_node_channel)
+void InterpolateFaceVelocitiesAtAllTiles(HADeviceGrid<Tile>& grid, const int face_u_channel, const int leaf_node_u_channel)
 {
 
-	CalcLeafNodeValuesFromFaceCenters(grid, u_channel, tmp_u_node_channel);
+	CalcLeafNodeValuesFromFaceCenters(grid, face_u_channel, leaf_node_u_channel);
 
 	grid.launchVoxelFuncOnAllTiles(
 		[=] __device__(HATileAccessor<Tile>&acc, HATileInfo<Tile>&info, const Coord & l_ijk) {
 		auto& tile = info.tile();
 		for (int axis : {0, 1, 2}) {
 			auto fpos = acc.faceCenter(axis, info, l_ijk);
-			auto vel = InterpolateFaceValue(acc, fpos, u_channel, tmp_u_node_channel);
-			tile(u_channel + axis, l_ijk) = vel[axis];
+			auto vel = InterpolateFaceValue(acc, fpos, face_u_channel, leaf_node_u_channel);
+			tile(face_u_channel + axis, l_ijk) = vel[axis];
 		}
 	}, NONLEAF | GHOST, 4
 	);
@@ -769,7 +771,7 @@ void CalculateVorticityMagnitudeOnLeafs(HADeviceGrid<Tile>& grid, const int fine
 	//    PropagateToChildren(grid, Tile::u_channel + axis, Tile::u_channel + axis, -1, GHOST, LAUNCH_SUBTREE, INTERIOR | DIRICHLET | NEUMANN);
 	//}
 	//CalcLeafNodeValuesFromFaceCenters(grid, Tile::u_channel, tmp_u_node_channel);
-	InterpolateVelocitiesAtAllTiles(grid, u_channel, tmp_u_node_channel);
+	InterpolateFaceVelocitiesAtAllTiles(grid, u_channel, tmp_u_node_channel);
 
 	grid.launchVoxelFuncOnAllTiles(
 		[=] __device__(HATileAccessor<Tile>&acc, HATileInfo<Tile>&info, const Coord & l_ijk) {
@@ -804,13 +806,36 @@ void CalculateVorticityMagnitudeOnLeafs(HADeviceGrid<Tile>& grid, const int fine
 	);
 }
 
-void CalculateVelocityAndVorticityMagnitudeOnLeafCellCenters(HADeviceGrid<Tile>& grid, const int fine_level, const int coarse_level, const int u_channel, const int tmp_u_node_channel, const int cv_channel, const int vor_channel) {
+void CalculateVelocityAndVorticityMagnitudeOnLeafCellCenters(HADeviceGrid<Tile>& grid, const int fine_level, const int coarse_level, const int face_u_channel, const int node_u_channel, const int cell_u_channel, const int vor_channel) {
 	////prepare u node
 	//for (int axis : {0, 1, 2}) {
 	//    PropagateToChildren(grid, Tile::u_channel + axis, Tile::u_channel + axis, -1, GHOST, LAUNCH_SUBTREE, INTERIOR | DIRICHLET | NEUMANN);
 	//}
 	//CalcLeafNodeValuesFromFaceCenters(grid, Tile::u_channel, tmp_u_node_channel);
-	InterpolateVelocitiesAtAllTiles(grid, u_channel, tmp_u_node_channel);
+	InterpolateFaceVelocitiesAtAllTiles(grid, face_u_channel, node_u_channel);
+
+	//Warn("CalculateVelocityAndVorticityMagnitudeOnLeafCellCenters after InterpolateFaceVelocitiesAtAllTiles");
+	//{
+	//	SanityCheckChannelCellValues(grid, face_u_channel, LEAF | NONLEAF | GHOST);
+	//	SanityCheckChannelCellValues(grid, face_u_channel + 1, LEAF | NONLEAF | GHOST);
+	//	SanityCheckChannelCellValues(grid, face_u_channel + 2, LEAF | NONLEAF | GHOST);
+
+
+	//	SanityCheckChannelNodeValues(grid, node_u_channel);
+	//	SanityCheckChannelNodeValues(grid, node_u_channel + 1);
+	//	SanityCheckChannelNodeValues(grid, node_u_channel + 2);
+	//}
+
+	//{
+	//	//show velocity on polyscope before proj
+	//	polyscope::init();
+	//	auto holder = grid.getHostTileHolderForLeafs();
+	//	IOFunc::AddPoissonGridCellCentersToPolyscopePointCloud(holder,
+	//		{ { -1,"type" } },
+	//		{ {face_u_channel, "face u"}, {node_u_channel, "node u"} });
+	//	//IOFunc::AddLeveledPoissonGridCellCentersToPolyscopePointCloud(holder, { { -1,"type" }, { BufChnls::vor, "vorticity" } }, { { BufChnls::u, "velocity" } });
+	//	polyscope::show();
+	//}
 
 	grid.launchVoxelFuncOnAllTiles(
 		[=] __device__(HATileAccessor<Tile>&acc, HATileInfo<Tile>&info, const Coord & l_ijk) {
@@ -828,7 +853,7 @@ void CalculateVelocityAndVorticityMagnitudeOnLeafCellCenters(HADeviceGrid<Tile>&
 		//J[i][j] = du[i]/dx[j]
 		Vec vel;
 		Eigen::Matrix3<T> jacobian;
-		KernelIntpVelocityAndJacobianMAC2(acc, fine_level, coarse_level, pos, u_channel, vel, jacobian);
+		KernelIntpVelocityAndJacobianMAC2(acc, fine_level, coarse_level, pos, face_u_channel, vel, jacobian);
 		//VelocityJacobian(acc, info, l_ijk, pos, tmp_u_node_channel, h, jacobian);
 		//auto jacobian = VelocityJacobian(acc, pos, tmp_u_node_channel, h);
 
@@ -841,14 +866,25 @@ void CalculateVelocityAndVorticityMagnitudeOnLeafCellCenters(HADeviceGrid<Tile>&
 		tile(vor_channel, l_ijk) = omega.length();
 
 		{
-			vel = InterpolateFaceValue(acc, pos, u_channel, tmp_u_node_channel);
-			tile(cv_channel, l_ijk) = vel.length();
+			vel = InterpolateFaceValue(acc, pos, face_u_channel, node_u_channel);
+
+			{
+				auto g_ijk = acc.localToGlobalCoord(info, l_ijk);
+				CUDA_ASSERT(isfinite(vel[0]), "cell vel[0] is %f at level %d coord %d %d %d", (double)vel[0], info.mLevel, g_ijk[0], g_ijk[1], g_ijk[2]);
+				CUDA_ASSERT(isfinite(vel[1]), "cell vel[1] is %f at level %d coord %d %d %d", (double)vel[1], info.mLevel, g_ijk[0], g_ijk[1], g_ijk[2]);
+				CUDA_ASSERT(isfinite(vel[2]), "cell vel[2] is %f at level %d coord %d %d %d", (double)vel[2], info.mLevel, g_ijk[0], g_ijk[1], g_ijk[2]);
+			}
+
+			tile(cell_u_channel, l_ijk) = vel.length();
 			for (int axis : {0, 1, 2}) {
-				tile(cv_channel + axis, l_ijk) = vel[axis];
+				tile(cell_u_channel + axis, l_ijk) = vel[axis];
 			}
 		}
 
 		//printf("vorticity at level %d coord %d %d %d %f %f %f %f\n", info.mLevel, g_ijk[0], g_ijk[1], g_ijk[2], pos[0], pos[1], pos[2], tile(vor_channel, l_ijk));
 	}, LEAF, 4
 	);
+
+	//Warn("CalculateVelocityAndVorticityMagnitudeOnLeafCellCenters done, manually exiting...");
+	//exit(0);
 }

@@ -273,7 +273,7 @@ namespace FlowMapTests {
                 }
             }, LEAF, 4);
 
-            InterpolateVelocitiesAtAllTiles(grid, u_channel, node_u_channel);
+            InterpolateFaceVelocitiesAtAllTiles(grid, u_channel, node_u_channel);
 
             auto acc = grid.deviceAccessor();
             auto particles_d_ptr = thrust::raw_pointer_cast(particles_d.data());
@@ -422,7 +422,7 @@ namespace FlowMapTests {
                 }
             }, -1, LEAF, LAUNCH_SUBTREE
             );
-			InterpolateVelocitiesAtAllTiles(grid, u_channel, node_u_channel);
+			InterpolateFaceVelocitiesAtAllTiles(grid, u_channel, node_u_channel);
 
             time_steps.push_back(dt);
         }

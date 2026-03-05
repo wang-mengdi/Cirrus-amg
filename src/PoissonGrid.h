@@ -6,7 +6,8 @@
 #include <cub/block/block_reduce.cuh>
 #include <thrust/execution_policy.h>
 
-
+void SanityCheckChannelCellValues(HADeviceGrid<Tile>& grid, const int channel, uint8_t launch_types = LEAF);
+void SanityCheckChannelNodeValues(HADeviceGrid<Tile>& grid, const int channel, uint8_t launch_types = LEAF);
 
 //All these operators will only perform on interior cells
 
