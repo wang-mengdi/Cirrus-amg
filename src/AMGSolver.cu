@@ -1451,7 +1451,7 @@ std::tuple<int, double> AMGSolver::solve(HADeviceGrid<Tile>& grid, bool verbose,
         AMGFullNegativeLaplacianOnLeafs(grid, Tile::p_channel, coeff_channel, Tile::Ap_channel);
         //AMGFullNegativeLaplacianOnLeafs(grid, Tile::p_channel, coeff_channel, Tile::Ap_channel);
 
-        SanityCheckChannelCellValues(grid, Tile::Ap_channel, LEAF);
+        //SanityCheckChannelCellValues(grid, Tile::Ap_channel, LEAF);
 
         //alpha_k=gamma_k/(p_k^T*A*p_k)
         DotAsync(fp_d, grid, Tile::p_channel, Tile::Ap_channel, LEAF);//fp_k=p_k^T*A*p_k
