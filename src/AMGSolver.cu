@@ -562,25 +562,45 @@ void NegativeLaplacianSameLevelAMG128(HADeviceGrid<Tile>& grid, thrust::device_v
 
 //on all leafs of the tree
 void AMGFullNegativeLaplacianOnLeafs(HADeviceGrid<Tile>& grid, const int x_channel, const int coeff_channel, const int Ax_channel) {
-    PropagateToChildren(grid, x_channel, x_channel, -1, GHOST, LAUNCH_SUBTREE, INTERIOR);
-    AccumulateToParentsOneStep(grid, x_channel, x_channel, LEAF, 1. / 8, false, INTERIOR);
+    //if (true) {
+    //    Info("before accumulation");
+    //    //show velocity on polyscope before proj
+    //    polyscope::init();
+    //    polyscope::removeAllStructures();
+    //    auto holder = grid.getHostTileHolder(LEAF | NONLEAF | GHOST);
+    //    IOFunc::AddLeveledPoissonGridCellCentersToPolyscopePointCloud(holder,
+    //        { { -1,"type" }, { x_channel, "x_channel"} },
+    //        {  }, -1, 1e10
+    //    );
+    //    //IOFunc::AddLeveledPoissonGridCellCentersToPolyscopePointCloud(holder, { { -1,"type" }, { BufChnls::vor, "vorticity" } }, { { BufChnls::u, "velocity" } });
+    //    polyscope::show();
+    //}
+
+	//Info("before accumulation leaf dot: {}", Dot(grid, x_channel, x_channel, LEAF));
+
+    PropagateToChildren(grid, x_channel, x_channel, -1, GHOST, LAUNCH_SUBTREE, INTERIOR | DIRICHLET | NEUMANN);
+    AccumulateToParentsOneStep(grid, x_channel, x_channel, LEAF, 1. / 8, false, INTERIOR | DIRICHLET | NEUMANN);
+
+    //if (true) {
+    //    cudaDeviceSynchronize();
+    //    //show velocity on polyscope before proj
+    //    polyscope::init();
+    //    polyscope::removeAllStructures();
+    //    auto holder = grid.getHostTileHolder(LEAF | NONLEAF | GHOST);
+    //    IOFunc::AddLeveledPoissonGridCellCentersToPolyscopePointCloud(holder,
+    //        { { -1,"type" }, { x_channel, "x_channel"} },
+    //        {  }, -1, 1e10
+    //    );
+    //    //IOFunc::AddLeveledPoissonGridCellCentersToPolyscopePointCloud(holder, { { -1,"type" }, { BufChnls::vor, "vorticity" } }, { { BufChnls::u, "velocity" } });
+    //    polyscope::show();
+    //}
+
+    //SanityCheckChannelCellValues(grid, x_channel, LEAF | GHOST);
+
+    //Info("after accumulation leaf dot: {}", Dot(grid, x_channel, x_channel, LEAF));
 
 
 
-    SanityCheckChannelCellValues(grid, x_channel, LEAF | GHOST);
-
-
-    if (true) {
-        //show velocity on polyscope before proj
-        polyscope::init();
-        auto holder = grid.getHostTileHolder(LEAF | NONLEAF | GHOST);
-        IOFunc::AddLeveledPoissonGridCellCentersToPolyscopePointCloud(holder,
-            { { -1,"type" }, { x_channel, "x_channel"} },
-            {  }, -1, 1e10
-        );
-        //IOFunc::AddLeveledPoissonGridCellCentersToPolyscopePointCloud(holder, { { -1,"type" }, { BufChnls::vor, "vorticity" } }, { { BufChnls::u, "velocity" } });
-        polyscope::show();
-    }
 
 
     NegativeLaplacianSameLevelAMG128(grid, grid.dAllTiles, grid.dAllTiles.size(), -1, LEAF, x_channel, coeff_channel, Ax_channel);
@@ -1416,7 +1436,6 @@ std::tuple<int, double> AMGSolver::solve(HADeviceGrid<Tile>& grid, bool verbose,
 	//FASFCycle(grid, Tile::z_channel, Tile::r_channel, Tile::Ap_channel, coeff_channel, level_iters, coarsest_iters);
     FASMuCycle(mu_cycle_repeat_times, grid, Tile::z_channel, Tile::r_channel, Tile::Ap_channel, coeff_channel, level_iters, coarsest_iters);
 
-    Pass("mu cycle done");
 
     //p0=z0
     Copy(grid, Tile::z_channel, Tile::p_channel, -1, LEAF, LAUNCH_SUBTREE, INTERIOR | DIRICHLET | NEUMANN);

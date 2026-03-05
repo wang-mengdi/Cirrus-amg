@@ -5,11 +5,8 @@ void SanityCheckChannelCellValues(HADeviceGrid<Tile>& grid, const int channel, u
     grid.launchVoxelFuncOnAllTiles(
         [=] __device__(HATileAccessor<Tile>&acc, HATileInfo<Tile>&info, const Coord & l_ijk) {
         auto val = info.tile()(channel, l_ijk);
-        if (!isfinite(val)) {
-            auto g_ijk = acc.localToGlobalCoord(info, l_ijk);
-            printf("================bad value %f at level %d tile type %d channel %d cell %d %d %d\n", val, info.mLevel, info.mType, channel, g_ijk[0], g_ijk[1], g_ijk[2]);
-            asm("trap;");
-        }
+		auto g_ijk = acc.localToGlobalCoord(info, l_ijk);
+		CUDA_ASSERT(isfinite(val), "bad value %f at level %d tile type %d channel %d cell %d %d %d", val, info.mLevel, info.mType, channel, g_ijk[0], g_ijk[1], g_ijk[2]);
     }, launch_types
     );
 }
