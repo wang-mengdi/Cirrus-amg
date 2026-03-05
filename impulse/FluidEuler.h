@@ -477,12 +477,12 @@ public:
 		}
 
 
-		{
-			Warn("sanitizing after projection");
-			SanityCheckChannelCellValues(grid, BufChnls::u);
-			SanityCheckChannelCellValues(grid, BufChnls::u + 1);
-			SanityCheckChannelCellValues(grid, BufChnls::u + 2);
-		}
+		//{
+		//	Warn("sanitizing after projection");
+		//	SanityCheckChannelCellValues(grid, BufChnls::u);
+		//	SanityCheckChannelCellValues(grid, BufChnls::u + 1);
+		//	SanityCheckChannelCellValues(grid, BufChnls::u + 2);
+		//}
 
 		//{
 		//	//show velocity on polyscope before proj
@@ -723,12 +723,12 @@ public:
 		//	polyscope::show();
 		//}
 
-		{
-			Warn("sanitizing at end of advection");
-			for (int axis : {0, 1, 2}) {
-				SanityCheckChannelCellValues(grid, BufChnls::u + axis);
-			}
-		}
+		//{
+		//	Warn("sanitizing at end of advection");
+		//	for (int axis : {0, 1, 2}) {
+		//		SanityCheckChannelCellValues(grid, BufChnls::u + axis);
+		//	}
+		//}
 
 		//Info("max impulse after nfm: {}", VelocityLinf(grid, u_channel, -1, LEAF, LAUNCH_SUBTREE));
 
