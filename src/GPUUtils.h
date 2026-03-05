@@ -68,7 +68,7 @@ __global__ void ForEachKernel(Func f, const int N, const int numGroups) {
 template<typename Func>
 void LaunchIndexFunc(Func f, const int N, const int blockSize = 512, const int numGroups = 4) {
 	if (N == 0) return;
-	Assert(blockSize % numGroups == 0);
+	ASSERT(blockSize % numGroups == 0);
 	int numBlocks = (N + blockSize - 1) / blockSize;
 	ForEachKernel << <numBlocks, blockSize / numGroups >> > (f, N, numGroups);
 }

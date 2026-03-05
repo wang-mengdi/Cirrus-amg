@@ -127,7 +127,7 @@ MaskGridAccessor MaskGrid::GetDeviceAccessor() {
 void MaskGrid::ReadSDFFile(const fs::path& filename, std::vector<float>& sdf_data) {
     FILE* file = fopen(filename.string().c_str(), "rb");
     if (!file) {
-        Assert(false, "Failed to open the file {}", filename.string());
+        ASSERT(false, "Failed to open the file {}", filename.string());
         return;
     }
     float sx, sy, sz;
@@ -199,7 +199,7 @@ void SDFGrid::ReadSDFFile(const fs::path& filename, std::vector<float>& sdf_data
     FILE* file = fopen(filename.string().c_str(), "rb");
 	Info("Reading SDF file: {}", filename.string());
     if (!file) {
-        Assert(false, "Failed to open the file {}", filename.string());
+        ASSERT(false, "Failed to open the file {}", filename.string());
         return;
     }
     float sx, sy, sz;

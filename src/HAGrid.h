@@ -145,7 +145,7 @@ public:
 
 				if (channel == -1) return tile.type(l_ijk);
 				else {
-					Assert(0 <= channel && channel < Tile::num_channels, "Invalid channel {}", channel);
+					ASSERT(0 <= channel && channel < Tile::num_channels, "Invalid channel {}", channel);
 					return tile(channel, l_ijk);
 				}
 			}
@@ -450,7 +450,7 @@ public:
 	HADeviceGrid& operator=(const HADeviceGrid<Tile>&) = delete;
 
 	~HADeviceGrid() {
-		Assert(mCompressedFlag, "Grid must be compressed before destruction");
+		ASSERT(mCompressedFlag, "Grid must be compressed before destruction");
 		for (int i = 0; i < mNumLevels; i++) {
 			for (int j = 0; j < hNumTiles[i]; j++) {
 				auto info = hTileArrays[i][j];
@@ -464,8 +464,8 @@ public:
 	}
 
 	void setTilesFromHolder(const HAHostTileHolder<Tile>& holder) {
-		Assert(mCompressedFlag, "setTilesFromHolder requires compressed grid");
-		Assert(holder.mNumLevels == mNumLevels, "setTilesFromHolder: num layers mismatch");
+		ASSERT(mCompressedFlag, "setTilesFromHolder requires compressed grid");
+		ASSERT(holder.mNumLevels == mNumLevels, "setTilesFromHolder: num layers mismatch");
 		mH0 = holder.mH0;
 		mNumLevels = holder.mNumLevels;
 		mMaxLevel = holder.mMaxLevel;
@@ -483,7 +483,7 @@ public:
 	}
 
 	std::shared_ptr<HADeviceGrid<Tile>> deepCopy(void){
-		Assert(mCompressedFlag, "deepCopy requires compressed grid");
+		ASSERT(mCompressedFlag, "deepCopy requires compressed grid");
 		auto ptr = std::make_shared<HADeviceGrid<Tile>>(mH0, hLog2Hashes);
 		auto& grid1 = *ptr;
 		for (int i = 0; i <= mMaxLevel; i++) {
@@ -501,7 +501,7 @@ public:
 	}
 
 	int numTotalTiles(void) const {
-		Assert(mCompressedFlag, "numTotalTiles requires compressed grid");
+		ASSERT(mCompressedFlag, "numTotalTiles requires compressed grid");
 		int num = 0;
 		for (int i = 0; i < mNumLevels; i++) {
 			num += hNumTiles[i];
@@ -509,7 +509,7 @@ public:
 		return num;
 	}
 	int numTotalLeafTiles(void) const {
-		Assert(mCompressedFlag, "numTotalLeafs requires compressed grid");
+		ASSERT(mCompressedFlag, "numTotalLeafs requires compressed grid");
 		int num = 0;
 		for (int i = 0; i < mNumLevels; i++) {
 			for (int j = 0; j < hNumTiles[i]; j++) {
@@ -648,7 +648,7 @@ public:
 		}
 	}
 	void syncHostAndDevice(void) {
-		Assert(mCompressedFlag, "syncHostAndDevice requires compressed grid");
+		ASSERT(mCompressedFlag, "syncHostAndDevice requires compressed grid");
 
 		dNumTiles = hNumTiles;
 		dLog2Hashes = hLog2Hashes;
@@ -684,7 +684,7 @@ public:
 	std::vector<uint8_t> dumpBinaryBlob(uint8_t tile_types = (LEAF | GHOST | NONLEAF),
 		int max_level = -1) const
 	{
-		Assert(mCompressedFlag, "dumpBinaryBlob requires compressed grid (call compressHost first).");
+		ASSERT(mCompressedFlag, "dumpBinaryBlob requires compressed grid (call compressHost first).");
 		if (max_level < 0) max_level = mMaxLevel;
 
 		using CoordT = Coord;
@@ -769,7 +769,7 @@ public:
 			}
 		}
 
-		Assert((size_t)(p - blob.data()) == total, "dumpBinaryBlob size mismatch");
+		ASSERT((size_t)(p - blob.data()) == total, "dumpBinaryBlob size mismatch");
 		return blob;
 	}
 
@@ -793,7 +793,7 @@ public:
 		};
 
 		auto require = [&](bool cond, const char* msg) {
-			Assert(cond, "loadBinaryBlob: {}", msg);
+			ASSERT(cond, "loadBinaryBlob: {}", msg);
 			};
 
 		require(size >= sizeof(Header), "buffer too small");
@@ -854,7 +854,7 @@ public:
 		using Acc = HACoordAccessor<Tile>;
 		//note that we will NOT spawn ghost tiles on level 0
 		//because it's the root level, and they will not have parents
-		Assert(mCompressedFlag, "Grid must be compressed and synced before spawn ghost tiles");
+		ASSERT(mCompressedFlag, "Grid must be compressed and synced before spawn ghost tiles");
 		auto h_acc = hostAccessor();
 		for (int level = mMaxLevel; level > 0; level--) {
 			for (int i = 0; i < hNumTiles[level]; i++) {
@@ -910,7 +910,7 @@ public:
 		//if num_groups=2, 256 voxels are launched in the same block
 		//...4,8
 
-		Assert(num_groups == 1 || num_groups == 2 || num_groups == 4 || num_groups == 8, "launchVoxelFunc invalid num groups: {}", num_groups);
+		ASSERT(num_groups == 1 || num_groups == 2 || num_groups == 4 || num_groups == 8, "launchVoxelFunc invalid num groups: {}", num_groups);
 
 		if (level == -1) {
 			if (mode == LAUNCH_LEVEL) {
@@ -1083,7 +1083,7 @@ public:
 		//must be called after ghost tiles are properly spawned
 		//then, refine leafs for one step
 		//this may need to be called multiple times to reach the target level
-		Assert(mDeviceSyncFlag, "Grid must be synced before refine step");
+		ASSERT(mDeviceSyncFlag, "Grid must be synced before refine step");
 
 		constexpr int blockSize = 512;
 		std::vector<int> level_refine_cnts(mNumLevels, 0);
@@ -1091,7 +1091,7 @@ public:
 		for (int i = mMaxLevel; i >= 0; i--) {
 			thrust::host_vector<int> refine_host(hNumTiles[i]);
 			thrust::device_vector<int> refine_flg_dev = refine_host;
-			Assert(refine_flg_dev.size() == hNumTiles[i], "refine_flg_dev size {} mismatch num tiles {}", refine_flg_dev.size(), hNumTiles[i]);
+			ASSERT(refine_flg_dev.size() == hNumTiles[i], "refine_flg_dev size {} mismatch num tiles {}", refine_flg_dev.size(), hNumTiles[i]);
 
 			if (hNumTiles[i] == 0) continue;
 

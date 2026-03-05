@@ -240,7 +240,7 @@ public:
 			key1++; key1 &= HASH_MASK;
 		} while (key1 != key0);
 		printf("Erorr: hash table full when trying to access level %d b_ijk %d %d %d\n", level, b_ijk[0], b_ijk[1], b_ijk[2]);
-		//Assert(false, "hash table full when trying to access level {} b_ijk {}", level, b_ijk);
+		//ASSERT(false, "hash table full when trying to access level {} b_ijk {}", level, b_ijk);
 		return -1;//invalid
 	}
 

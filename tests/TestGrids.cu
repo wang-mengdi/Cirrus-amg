@@ -282,7 +282,7 @@ std::shared_ptr<HADeviceGrid<Tile>> CreateTestGrid(const std::string grid_name, 
     }
     else
     {
-        Assert(false, "grid_name {} not supported", grid_name);
+        ASSERT(false, "grid_name {} not supported", grid_name);
 		return nullptr;
     }
 }

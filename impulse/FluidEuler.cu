@@ -12,6 +12,22 @@
 #include <memory>
 #include <cstdint>
 
+void SanityCheckCoeffs(HADeviceGrid<Tile>& grid, uint8_t launch_types) {
+	Info("Performing sanity check on coeffs");
+	grid.launchVoxelFuncOnAllTiles(
+		[=] __device__(HATileAccessor<Tile>&acc, HATileInfo<Tile>&info, const Coord & l_ijk) {
+		auto& tile = info.tile();
+		auto val = tile(ProjChnls::c0 + 3, l_ijk);
+		auto g_ijk = acc.localToGlobalCoord(info, l_ijk);
+		CUDA_ASSERT(isfinite(val), "SanityCheckCoeffs failed at non-finite value %f at level %d channel %d cell %d %d %d type %d tile type %d", val, info.mLevel, ProjChnls::c0 + 3, g_ijk[0], g_ijk[1], g_ijk[2], tile.type(l_ijk), info.mType);
+		if (info.mType != GHOST && tile.type(l_ijk) & INTERIOR) {
+			CUDA_ASSERT(val > 0, "SanityCheckCoeffs failed at non-positive value %f at level %d channel %d cell %d %d %d type %d tile type %d", val, info.mLevel, ProjChnls::c0 + 3, g_ijk[0], g_ijk[1], g_ijk[2], tile.type(l_ijk), info.mType);
+		}
+	}, launch_types
+	);
+	Pass("Coefficient sanity check passed");
+}
+
 void FillChannelsInGridWithValue(
 	HADeviceGrid<Tile>& grid,
 	T value,
@@ -28,7 +44,7 @@ void FillChannelsInGridWithValue(
 	}
 	else {
 		for (int c : channels) {
-			Assert(c >= 0 && c < Tile::num_channels, "channel index out of range");
+			ASSERT(c >= 0 && c < Tile::num_channels, "channel index out of range");
 			mask |= (1u << c);
 		}
 	}
@@ -271,7 +287,7 @@ __global__ void CalculateReseedingNumbersOnLeafTiles128Kernel(const T current_ti
 //	if (cell_particle_num_d.size() < grid.dAllTiles.size() * Tile::SIZE) {
 //		cell_particle_num_d.resize(grid.dAllTiles.size() * Tile::SIZE);
 //	}
-//	//Assert(cell_particle_num_d.size() == grid.dAllTiles.size() * Tile::SIZE,"");
+//	//ASSERT(cell_particle_num_d.size() == grid.dAllTiles.size() * Tile::SIZE,"");
 //
 //	thrust::fill(cell_particle_num_d.begin(), cell_particle_num_d.end(), 0);
 //	auto cell_particle_num_d_ptr = thrust::raw_pointer_cast(cell_particle_num_d.data());

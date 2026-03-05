@@ -42,6 +42,8 @@
     CUDA_CHECK(cudaDeviceSynchronize());                          \
 } while (0)
 
+void SanityCheckCoeffs(HADeviceGrid<Tile>&grid, uint8_t launch_types);
+
 void FillChannelsInGridWithValue(HADeviceGrid<Tile>&grid, T value, std::initializer_list<int> channels = {});
 
 double CellPointRMSNormOnHostTiles(
@@ -163,7 +165,7 @@ public:
 
 		}
 		else {
-			Assert(false, "need a mesh");
+			ASSERT(false, "need a mesh");
 		}
 	}
 
@@ -215,6 +217,20 @@ public:
 
 		buildTypesAndAMGCoeffs(grid, 0.);
 
+
+		//{
+		//	//show type and coeffs on polyscope before proj
+		//	polyscope::init();
+		//	auto holder = grid.getHostTileHolder(LEAF | NONLEAF | GHOST);
+		//	IOFunc::AddLeveledPoissonGridCellCentersToPolyscopePointCloud(holder, 
+		//		{{ -1,"type" }, {ProjChnls::c0 + 0, "c0"}, {ProjChnls::c0 + 1, "c1"},{ProjChnls::c0 + 2, "c2"}, { ProjChnls::c0 + 3, "c3" } },
+		//		{  });
+		//	//IOFunc::AddLeveledPoissonGridCellCentersToPolyscopePointCloud(holder, { { -1,"type" }, { BufChnls::vor, "vorticity" } }, { { BufChnls::u, "velocity" } });
+		//	polyscope::show();
+		//}
+
+		SanityCheckCoeffs(grid, LEAF | NONLEAF | GHOST);
+
 		//the velocity here is the composed velocity, which is weighted fluid + solid
 		//clear velocity variables to 0
 		FillChannelsInGridWithValue(grid, 0.0, { BufChnls::u, BufChnls::u + 1, BufChnls::u + 2 });
@@ -255,7 +271,7 @@ public:
 	}
 
 	virtual double CFL_Time(const double cfl) {
-		Warn("entering CFL calc");
+		//Warn("entering CFL calc");
 
 		auto& grid = *grid_ptrs.back();
 		//return FLT_MAX;
@@ -267,9 +283,9 @@ public:
 		double wmax = NormSync(grid, -1, BufChnls::u + 2, false);
 		double max_vel = std::max(umax, std::max(vmax, wmax));
 
-		//Info("Calc CFL umax = {}, vmax = {}, wmax = {}, max_vel = {} calc dx {} cfl {} max_vel {} dt {}", umax, vmax, wmax, max_vel, dx, cfl, max_vel, dx * cfl / max_vel);
+		Info("Calc CFL umax = {}, vmax = {}, wmax = {}, max_vel = {} calc dx {} cfl {} max_vel {} dt {}", umax, vmax, wmax, max_vel, dx, cfl, max_vel, dx * cfl / max_vel);
 
-		Warn("calculated math dt {}", dx * cfl / max_vel);
+		//Warn("calculated math dt {}", dx * cfl / max_vel);
 
 		return dx * cfl / max_vel;
 	}
@@ -577,7 +593,7 @@ public:
 		CheckCudaError("adapt with particles");
 		
 		buildTypesAndAMGCoeffs(grid, current_time);
-
+		SanityCheckCoeffs(grid, LEAF | NONLEAF | GHOST);
 
 
 
@@ -644,7 +660,7 @@ public:
 								CUDA_ASSERT(isfinite(m0[1]), "level %d global %d %d %d axis %d m01 value %f", info.mLevel, g_ijk[0], g_ijk[1], g_ijk[2], axis, m0[1]);
 								CUDA_ASSERT(isfinite(m0[2]), "level %d global %d %d %d axis %d m02 value %f", info.mLevel, g_ijk[0], g_ijk[1], g_ijk[2], axis, m0[2]);
 
-								//assert 3*3 values in matT are finite
+								//ASSERT 3*3 values in matT are finite
 								for(int i=0; i<3; i++) {
 									for(int j=0; j<3; j++) {
 										CUDA_ASSERT(isfinite(matT(i,j)), "level %d global %d %d %d axis %d matT value %f at %d %d", info.mLevel, g_ijk[0], g_ijk[1], g_ijk[2], axis, matT(i,j), i, j);
@@ -780,8 +796,8 @@ public:
 		double dt = metadata.dt;
 
 
-		Info("frame {} dt {}", metadata.current_frame, dt);
-		Assert(dt > 0, "dt should be positive");
+		Pass("\nAdvance frame {} current time {} dt {}", metadata.current_frame, metadata.current_time, dt);
+		ASSERT(dt > 0, "dt should be positive");
 
 
 		//for (int i = 0; i < grid_ptrs.size(); i++) {
@@ -942,7 +958,7 @@ public:
 		fs::path file = folder / fmt::format("{:04d}.bin", metadata.current_frame);
 
 		std::ofstream os(file, std::ios::binary);
-		Assert(os.good(), "Save_Frame: failed to open {}", file.string());
+		ASSERT(os.good(), "Save_Frame: failed to open {}", file.string());
 
 		// Header
 		uint32_t magic = 0x31464546u; // 'FEF1' (any magic you like)
@@ -987,7 +1003,7 @@ public:
 				(std::streamsize)(sizeof(MarkerParticle) * (size_t)n_particles));
 		}
 
-		Assert(os.good(), "Save_Frame: write failed {}", file.string());
+		ASSERT(os.good(), "Save_Frame: write failed {}", file.string());
 		Info("Saved snapshot: {}", file.string());
 	}
 
@@ -998,14 +1014,14 @@ public:
 		fs::path file = folder / fmt::format("{:04d}.bin", metadata.current_frame);
 
 		std::ifstream is(file, std::ios::binary);
-		Assert(is.good(), "Load_Frame: failed to open {}", file.string());
+		ASSERT(is.good(), "Load_Frame: failed to open {}", file.string());
 
 		uint32_t magic = 0, version = 0;
 		IOFunc::ReadPod(is, magic);
 		IOFunc::ReadPod(is, version);
 
-		Assert(magic == 0x31464546u, "Load_Frame: bad magic in {}", file.string());
-		Assert(version == 1, "Load_Frame: unsupported version {} in {}", version, file.string());
+		ASSERT(magic == 0x31464546u, "Load_Frame: bad magic in {}", file.string());
+		ASSERT(version == 1, "Load_Frame: unsupported version {} in {}", version, file.string());
 
 		// 1) time_step_counter
 		IOFunc::ReadPod(is, time_step_counter);
@@ -1023,11 +1039,11 @@ public:
 		for (uint64_t i = 0; i < num_grids; ++i) {
 			uint64_t blob_size = 0;
 			IOFunc::ReadPod(is, blob_size);
-			Assert(blob_size > 0, "Load_Frame: grid blob size is 0 (i={})", (size_t)i);
+			ASSERT(blob_size > 0, "Load_Frame: grid blob size is 0 (i={})", (size_t)i);
 
 			std::vector<uint8_t> blob((size_t)blob_size);
 			is.read(reinterpret_cast<char*>(blob.data()), (std::streamsize)blob_size);
-			Assert(is.good(), "Load_Frame: truncated blob (i={})", (size_t)i);
+			ASSERT(is.good(), "Load_Frame: truncated blob (i={})", (size_t)i);
 
 			auto grid_ptr = HADeviceGrid<Tile>::loadBinaryBlob(blob);
 			grid_ptrs.push_back(std::move(grid_ptr));
@@ -1046,12 +1062,12 @@ public:
 		if (n_particles) {
 			is.read(reinterpret_cast<char*>(h_particles.data()),
 				(std::streamsize)(sizeof(MarkerParticle) * (size_t)n_particles));
-			Assert(is.good(), "Load_Frame: truncated particle data");
+			ASSERT(is.good(), "Load_Frame: truncated particle data");
 		}
 
 		marker_particles_d = thrust::device_vector<MarkerParticle>(h_particles.begin(), h_particles.end());
 
-		Assert(is.good(), "Load_Frame: read failed {}", file.string());
+		ASSERT(is.good(), "Load_Frame: read failed {}", file.string());
 		Info("Loaded snapshot: {}", file.string());
 	}
 };

@@ -297,7 +297,7 @@ namespace FlowMapTests {
     }
 
     double LinfErrorBetweenPointCloud(const thrust::host_vector<Vec>& pc1, const thrust::host_vector<Vec>& pc2) {
-        Assert(pc1.size() == pc2.size(), "Two point clouds should have the same size.");
+        ASSERT(pc1.size() == pc2.size(), "Two point clouds should have the same size.");
 
         double max_error = -1;
         int max_idx = -1;
@@ -336,7 +336,7 @@ namespace FlowMapTests {
     }
 
     std::vector<double> CalcLinfErrorBetweenMatrixForbenius2(const thrust::host_vector<Eigen::Matrix3<T>>& mats1, const thrust::host_vector<Eigen::Matrix3<T>>& mats2) {
-        Assert(mats1.size() == mats2.size(), "Two matrix arrays should have the same size.");
+        ASSERT(mats1.size() == mats2.size(), "Two matrix arrays should have the same size.");
 		std::vector<double> errors(mats1.size(), 0.0);
 
         for (size_t i = 0; i < mats1.size(); ++i) {
@@ -348,7 +348,7 @@ namespace FlowMapTests {
     }
 
     double LinfErrorBetweenMatrixForbenius2(const thrust::host_vector<Eigen::Matrix3<T>>& mats1, const thrust::host_vector<Eigen::Matrix3<T>>& mats2) {
-        Assert(mats1.size() == mats2.size(), "Two matrix arrays should have the same size.");
+        ASSERT(mats1.size() == mats2.size(), "Two matrix arrays should have the same size.");
         double max_error = 0.0;
         int max_idx = -1;
 

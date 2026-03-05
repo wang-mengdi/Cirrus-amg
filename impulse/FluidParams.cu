@@ -59,7 +59,7 @@ FluidParams::FluidParams(json& j)
 
 	std::string test = Json::Value<std::string>(j, "test", "meshmotion");
 	if (test == "meshmotion") mTestCase = MESHMOTION;
-	else Assert(false, "invalid test {}", test);
+	else ASSERT(false, "invalid test {}", test);
 
 	if (mTestCase == MESHMOTION) {
 		mIsPureNeumann = true;

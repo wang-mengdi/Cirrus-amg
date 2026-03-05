@@ -21,7 +21,7 @@ void Info(const std::string& str)
 	//Info(str);
 }
 
-void Warn(const std::string& str)
-{
-	Warn(str.c_str());
-}
+//void Warn(const std::string& str)
+//{
+//	Warn(str.c_str());
+//}

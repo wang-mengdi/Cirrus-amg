@@ -619,13 +619,21 @@ namespace IOFunc {
                     for (int j = 0; j < Tile::DIM; j++) {
                         for (int k = 0; k < Tile::DIM; k++) {
                             Coord l_ijk(i, j, k);
+
+                            auto g_ijk = acc.localToGlobalCoord(info, l_ijk);
+                            //if (!(g_ijk[0] == 53 && 44 <= g_ijk[1] && g_ijk[2] <= 46)) continue;
+
+
+                            ijk_values.push_back(g_ijk);
+
+                            
+
                             auto pos = acc.cellCenter(info, l_ijk); // 使用cellCenter代替cellCorner
                             points.push_back(pos);
                             levels.push_back(level);
                             ttypes.push_back(info.mType);
 
-                            auto g_ijk = acc.localToGlobalCoord(info, l_ijk);
-                            ijk_values.push_back(g_ijk);
+
 
                             for (int s = 0; s < scalar_channels.size(); s++) {
                                 int channel = scalar_channels[s].first;

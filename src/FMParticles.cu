@@ -694,7 +694,7 @@ void HistogramSortParticlesAtGivenLevel(HADeviceGrid<Tile>& grid, const int leve
 
 	//tile_prefix_sum_d.back() = 0;
 	int total_counted_particles = thrust::reduce(tile_prefix_sum_d.begin(), tile_prefix_sum_d.end() - 1);
-	//Assert(total_counted_particles == particles_d.size(), "total {} particles however counted {} particles", particles_d.size(), total_counted_particles);
+	//ASSERT(total_counted_particles == particles_d.size(), "total {} particles however counted {} particles", particles_d.size(), total_counted_particles);
 
 	//cudaDeviceSynchronize(); CheckCudaError("HistogramSortParticles::calc total counted particles"); Info("calc total counted particles");
 
@@ -705,7 +705,7 @@ void HistogramSortParticlesAtGivenLevel(HADeviceGrid<Tile>& grid, const int leve
 		tile_prefix_sum_d.begin()
 	);
 	//RunExclusiveScan(tile_prefix_sum_d);
-	//Assert(tile_prefix_sum_d.back() == particles_d.size(), "last prefix sum {} should be equal to total particles {}", tile_prefix_sum_d.back(), particles_d.size());
+	//ASSERT(tile_prefix_sum_d.back() == particles_d.size(), "last prefix sum {} should be equal to total particles {}", tile_prefix_sum_d.back(), particles_d.size());
 
 	//Info("tile_prefix_sum_d: {}", tile_prefix_sum_d);
 	//Info("total counted {} particles", total_counted_particles);

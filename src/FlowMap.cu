@@ -234,7 +234,7 @@ __device__ bool KernelIntpVelocityAndJacobianMAC2(const HATileAccessor<Tile>& ac
 					CUDA_ASSERT(isfinite(vel[ii]), "vel[%d]=%f at i=%d", ii, vel[ii], i);
 				}
 
-				// iterate over 3*3 and assert matT elements are finite
+				// iterate over 3*3 and ASSERT matT elements are finite
 				for (int ii = 0; ii < 3; ii++) {
 					for (int jj = 0; jj < 3; jj++) {
 						CUDA_ASSERT(isfinite(jacobian(ii, jj)), "jacobian(%d,%d)=%f at i=%d", ii, jj, jacobian(ii, jj), i);
@@ -745,7 +745,7 @@ __device__ void NFMBackMarchPsiAndT(const HATileAccessor<Tile>* accs_d_ptr, cons
 		const auto& acc = accs_d_ptr[i];
 		RK4ForwardPositionAndF(acc, fine_level, coarse_level, -time_steps_d_ptr[i], u_channel, node_u_channel, psi, matT);
 
-		// iterate over 3*3 and assert matT elements are finite
+		// iterate over 3*3 and ASSERT matT elements are finite
 		for (int ii = 0; ii < 3; ii++) {
 			for (int jj = 0; jj < 3; jj++) {
 				CUDA_ASSERT(isfinite(matT(ii, jj)), "matT(%d,%d)=%f at i=%d where endstep %d startstep %d", ii, jj, matT(ii, jj), i, end_step, start_step);

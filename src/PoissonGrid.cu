@@ -285,7 +285,7 @@ double NormSync(HADeviceGrid<Tile>& grid, const int order, const int in_channel,
 	//Warn("entering NormSync order {} volume_weighted {} launch_cell_types {:02x}", order, volume_weighted, launch_cell_types);
 
     if (order == -1) {
-        Assert(!volume_weighted, "Linf norm does not support volume weighted, it only works with point-wise norm");
+        ASSERT(!volume_weighted, "Linf norm does not support volume weighted, it only works with point-wise norm");
     }
 
     grid.dAllTilesReducer.fill(NODATA);//FOR DEBUG ONLY
@@ -416,7 +416,7 @@ __global__ void AccumulateToParentsOneStepKernel(HATileAccessor<Tile> acc, HATil
 } 
 
 void AccumulateToParentsOneStep(HADeviceGrid<Tile>& grid, const int fine_channel, const int coarse_channel, const uint8_t fine_tile_types, const Tile::T coeff, bool additive, uint8_t cell_types) {
-    Assert(fine_tile_types == GHOST || fine_tile_types == LEAF, "AccumulateToParentsOneStep can only be carried out on GHOST or LEAF tiles");
+    ASSERT(fine_tile_types == GHOST || fine_tile_types == LEAF, "AccumulateToParentsOneStep can only be carried out on GHOST or LEAF tiles");
 
 	int num_fine_tiles = grid.dAllTiles.size();
     AccumulateToParentsOneStepKernel << <num_fine_tiles, 128 >> > (
@@ -482,7 +482,7 @@ __global__ void AccumulateFacesToParentsOneStepKernel(HATileAccessor<Tile> acc, 
 }
 
 void AccumulateFacesToParentsOneStep(HADeviceGrid<Tile>& grid, const int fine_u_channel, const int coarse_u_channel, const uint8_t fine_tile_types, const Tile::T coeff, bool additive, uint8_t cell_types) {
-	Assert(fine_tile_types == GHOST || fine_tile_types == LEAF, "AccumulateFacesToParentsOneStep can only be carried out on GHOST or LEAF tiles");
+	ASSERT(fine_tile_types == GHOST || fine_tile_types == LEAF, "AccumulateFacesToParentsOneStep can only be carried out on GHOST or LEAF tiles");
 
 	int num_fine_tiles = grid.dAllTiles.size();
     AccumulateFacesToParentsOneStepKernel << <num_fine_tiles, 128 >> > (

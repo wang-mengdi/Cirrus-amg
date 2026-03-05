@@ -7,12 +7,6 @@
 
 
 int main(int argc, char** argv) {
-	static_assert(std::is_trivially_copyable_v<HATileInfo<Tile>>, "T must be trivially copyable");
-	static_assert(std::is_trivially_copyable_v<T>, "T must be trivially copyable");
-	static_assert(std::is_trivially_copyable_v<Coord>, "Coord must be trivially copyable");
-	static_assert(std::is_trivially_copyable_v<Tile>, "Tile must be trivially copyable for raw binary load");
-
-
 	try {
 		json j = {
 			{

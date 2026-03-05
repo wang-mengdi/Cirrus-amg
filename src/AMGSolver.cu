@@ -1424,6 +1424,7 @@ std::tuple<int, double> AMGSolver::solve(HADeviceGrid<Tile>& grid, bool verbose,
 
         if (sync_stride > 0 && (i + 1) % sync_stride == 0) {
             double residual_norm2 = Dot(grid, Tile::r_channel, Tile::r_channel, LEAF);
+            ASSERT(isfinite(residual_norm2));
             if (verbose) {
                 Info("ConjugateGradient iter {} norm {:e}({:e}), convergence factor={:e}", i+1, sqrt(residual_norm2), sqrt(residual_norm2 / rhs_norm2), 1.0 / sqrt(residual_norm2 / last_residual_norm2));
                 last_residual_norm2 = residual_norm2;

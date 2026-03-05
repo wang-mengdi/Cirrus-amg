@@ -365,7 +365,7 @@ namespace SolverTests
 		// algorithm: "cmg"/"amg"
 		fmt::print("==========================================================\n");
 		Info("Test Poisson Solver on Neumann/Dirichlet BC on grid {} with given function for {}", ToString(grid_name), algorithm);
-		Assert(algorithm == "cmg" || algorithm == "amg", "algorithm should be cmg or amg");
+		ASSERT(algorithm == "cmg" || algorithm == "amg", "algorithm should be cmg or amg");
 
 		uint32_t scale = 8;
 		float h = 1.0 / scale;
@@ -382,7 +382,7 @@ namespace SolverTests
 		int total_hash_bytes = grid.hashTableDeviceBytes();
 		Info("Total {}M cells, hash table {}GB", num_cells / (1024.0 * 1024), total_hash_bytes / (1024.0 * 1024 * 1024));
 
-		Assert(Tile::num_channels >= 10, "Tile::num_channels should be >= 10 for this test");
+		ASSERT(Tile::num_channels >= 10, "Tile::num_channels should be >= 10 for this test");
 		// channels 0,1,2,3,4: channels implicitly required by GMGPCG
 		// channels 5: grdt channel
 		// channels 6,7,8,9: coeffs channel for AMG
@@ -521,7 +521,7 @@ namespace SolverTests
 		// A Fast Unsmoothed Aggregation Algebraic Multigrid Framework for the Large - Scale Simulation of Incompressible Flow
 		fmt::print("==========================================================\n");
 		Info("Test Poisson Solver with Static Pressure on grid {} with given function for {}", ToString(grid_name), algorithm);
-		Assert(algorithm == "cmg" || algorithm == "amg", "algorithm should be cmg or amg");
+		ASSERT(algorithm == "cmg" || algorithm == "amg", "algorithm should be cmg or amg");
 
 		uint32_t scale = 8;
 		float h = 1.0 / scale;
@@ -538,7 +538,7 @@ namespace SolverTests
 		int total_hash_bytes = grid.hashTableDeviceBytes();
 		Info("Total {}M cells, hash table {}GB", num_cells / (1024.0 * 1024), total_hash_bytes / (1024.0 * 1024 * 1024));
 
-		Assert(Tile::num_channels >= 10, "Tile::num_channels should be >= 10 for this test");
+		ASSERT(Tile::num_channels >= 10, "Tile::num_channels should be >= 10 for this test");
 		// channels 0,1,2,3,4: channels implicitly required by GMGPCG
 		// channels 5: grdt channel
 		// channels 6,7,8,9: coeffs channel for AMG
@@ -1020,7 +1020,7 @@ namespace SolverTests
 		}
 		else
 		{
-			Assert(false, "bc_name {} not supported", bc_name);
+			ASSERT(false, "bc_name {} not supported", bc_name);
 		}
 
 		CalcCellTypesFromLeafs(grid);
@@ -1123,7 +1123,7 @@ namespace SolverTests
 			return std::make_tuple(iters, err, elapsed);
 		}
 		else {
-			Assert(false, "SolveLinearSystem algorithm {} not supported", params.algorithm);
+			ASSERT(false, "SolveLinearSystem algorithm {} not supported", params.algorithm);
 		}
 	}
 
@@ -1159,7 +1159,7 @@ namespace SolverTests
 				return std::make_pair(iters, err);
 			}
 			else {
-				Assert(false, "TestIterativeConvergenceWithAnalyticalSolution algorithm {} not supported", algorithm);
+				ASSERT(false, "TestIterativeConvergenceWithAnalyticalSolution algorithm {} not supported", algorithm);
 			}
 			};
 
@@ -1591,7 +1591,7 @@ namespace SolverTests
 			Info("Residual pointwise L2 norm at step {}: {}", max_iters, NormSync(grid, 2, iter_r_channel, false));
 		}
 		else {
-			Assert(false, "TestIterativeResidualReduction algorithm {} not supported", algorithm);
+			ASSERT(false, "TestIterativeResidualReduction algorithm {} not supported", algorithm);
 		}
 	}
 
@@ -1877,7 +1877,7 @@ namespace SolverTests
 		//}
 		//else
 		//{
-		//	Assert(false, "grid_name {} not supported", grid_name);
+		//	ASSERT(false, "grid_name {} not supported", grid_name);
 		//}
 		auto& grid = *grid_ptr;
 		bool is_pure_neumann = true;
@@ -1929,7 +1929,7 @@ namespace SolverTests
 			CreateLaplacianSystemWithSolidCut(grid, func_phi, coeff_channel, R_matrix_coeff);
 		}
 		else {
-			Assert(false, "grid_name {} not supported for CreateLaplacianSystemWithSolidCut", grid_name);
+			ASSERT(false, "grid_name {} not supported for CreateLaplacianSystemWithSolidCut", grid_name);
 		}
 
 		CalculateNeighborTiles(grid);
@@ -2177,7 +2177,7 @@ namespace SolverTests
 		//}
 		//else
 		//{
-		//	Assert(false, "grid_name {} not supported", grid_name);
+		//	ASSERT(false, "grid_name {} not supported", grid_name);
 		//}
 		auto& grid = *grid_ptr;
 		bool is_pure_neumann = false;

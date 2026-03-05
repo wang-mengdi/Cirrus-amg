@@ -66,7 +66,7 @@ void Error(const char* fmt_str, const Args&...args) {
     fmt::print(fg(fmt::color::red), msg);
     throw msg;
 }
-void Error(const std::string& str);
+//void Error(const std::string& str);
 
 template<typename ...Args>
 void Pass(const char* fmt_str, const Args&...args) {
@@ -76,12 +76,68 @@ void Pass(const char* fmt_str, const Args&...args) {
 }
 void Pass(const std::string& str);
 
-template <typename... Args>
-void Assert(const bool flg, const char* fmt_str = "", const Args &...args) {
-    if (!flg) {
-        Error(fmt_str, args...);
+//template <typename... Args>
+//void ASSERT(const bool flg, const char* fmt_str = "", const Args &...args) {
+//    if (!flg) {
+//        Error(fmt_str, args...);
+//    }
+//}
+
+#include <fmt/format.h>
+#include <fmt/color.h>
+
+inline void CpuAssertImpl(bool cond,
+    const char* expr,
+    const char* file,
+    int line)
+{
+    if (!cond) {
+        fmt::print(fmt::fg(fmt::color::red),
+            "ASSERT FAILED: {}\n  at {}:{}\n",
+            expr, file, line);
+
+#if defined(_MSC_VER)
+        __debugbreak();
+#else
+        __builtin_trap();
+#endif
     }
 }
+
+template<typename... Args>
+inline void CpuAssertMsgImpl(bool cond,
+    const char* expr,
+    const char* file,
+    int line,
+    const char* fmt_str,
+    const Args&... args)
+{
+    if (!cond) {
+        fmt::print(fmt::fg(fmt::color::red),
+            "ASSERT FAILED: {}\n  at {}:{}\n",
+            expr, file, line);
+
+        fmt::print(fmt::fg(fmt::color::red), fmt_str, args...);
+        fmt::print("\n");
+
+#if defined(_MSC_VER)
+        __debugbreak();
+#else
+        __builtin_trap();
+#endif
+    }
+}
+
+#define ASSERT_1(cond) \
+    CpuAssertImpl((cond), #cond, __FILE__, __LINE__)
+
+#define ASSERT_2(cond, fmt_str, ...) \
+    CpuAssertMsgImpl((cond), #cond, __FILE__, __LINE__, fmt_str, ##__VA_ARGS__)
+
+#define GET_ASSERT_MACRO(_1,_2,_3,NAME,...) NAME
+
+#define ASSERT(...) \
+    GET_ASSERT_MACRO(__VA_ARGS__, ASSERT_2, ASSERT_1)(__VA_ARGS__)
 
 
 namespace Json {
