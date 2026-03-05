@@ -107,11 +107,13 @@ public:
 	//set type, velocity, smoke
 	__hostdev__ void setInitialVelocity(HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const Coord& l_ijk)const;
 	//includes the outer walls of the computational field, but not including the movable mesh inside
+	//it will return a cell type in the computational grid only considering wall, fluid, air
+	__hostdev__ uint8_t wallCellType(const T current_time, const HATileAccessor<Tile>& acc, const int level, const Coord& g_ijk)const;
 	__hostdev__ uint8_t wallCellType(const T current_time, const HATileAccessor<Tile>& acc, const HATileInfo<Tile>& info, const nanovdb::Coord& l_ijk) const;
 	__hostdev__ void setWallCellType(const T current_time, const HATileAccessor<Tile>& acc, const HATileInfo<Tile>& info, const nanovdb::Coord& l_ijk) const;
+
 	//require coeffs(fluid ratios) are precomputed
 	__hostdev__ void setVelocityBoundaryCondition(const T current_time, const HATileAccessor<Tile>& acc, const HATileInfo<Tile>& info, const nanovdb::Coord& l_ijk) const;
-	__hostdev__ Vec solidVelocityAtFaceCenter(const T current_time, const HATileAccessor<Tile>& acc, const HATileInfo<Tile>& info, const Coord& l_ijk)const;
 
 
 	//runtime functions
@@ -122,7 +124,7 @@ public:
 		return DIRICHLET;
 	}
 
-	Eigen::Transform<T, 3, Eigen::Affine> meshToWorldTransform(const T current_time) const;
+	__hostdev__ Eigen::Transform<T, 3, Eigen::Affine> meshToWorldTransform(const T current_time) const;
 
-
+	__device__ void addSolidVelocityToFaceCenter(const T current_time, const T dt, const HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const Coord& l_ijk, const int axis)const;
 };

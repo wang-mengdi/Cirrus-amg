@@ -23,17 +23,35 @@ __hostdev__ bool QueryBoundaryDirectionN1P1(const HATileAccessor<Tile>& acc, con
 
 //the actual level might be finer than the checking level
 //it's for like building a wall with respect to the coarse level
-__hostdev__ bool QueryBoundaryDirectionN1P1OnCoarseLevel(const HATileAccessor<Tile>& acc, int coarse_chk_level, const HATileInfo<Tile>& info, const nanovdb::Coord& l_ijk, int& boundary_axis, int& boundary_off) {
-	coarse_chk_level = min(coarse_chk_level, info.mLevel);
-	int level_diff = info.mLevel - coarse_chk_level;
-
-	auto g_ijk = acc.localToGlobalCoord(info, l_ijk);
+__hostdev__ bool QueryBoundaryDirectionN1P1OnCoarseLevel(const HATileAccessor<Tile>& acc, int coarse_chk_level, int fine_cell_level, Coord g_ijk, int& boundary_axis, int& boundary_off) {
+	CUDA_ASSERT(coarse_chk_level <= fine_cell_level, "QueryBoundaryDirectionN1P1OnCoarseLevel error");
+	//coarse_chk_level = min(coarse_chk_level, info.mLevel);
+	int level_diff = fine_cell_level - coarse_chk_level;
 
 
 	g_ijk = Coord(g_ijk[0] >> level_diff, g_ijk[1] >> level_diff, g_ijk[2] >> level_diff);
 
 	//printf("level %d chk level %d diff %d g_ijk %d %d %d\n", info.mLevel, chk_level, level_diff, g_ijk[0], g_ijk[1], g_ijk[2]);
 	return QueryBoundaryDirectionN1P1(acc, coarse_chk_level, g_ijk, boundary_axis, boundary_off);
+}
+
+//the actual level might be finer than the checking level
+//it's for like building a wall with respect to the coarse level
+__hostdev__ bool QueryBoundaryDirectionN1P1OnCoarseLevel(const HATileAccessor<Tile>& acc, int coarse_chk_level, const HATileInfo<Tile>& info, const nanovdb::Coord& l_ijk, int& boundary_axis, int& boundary_off) {
+	auto g_ijk = acc.localToGlobalCoord(info, l_ijk);
+	return QueryBoundaryDirectionN1P1OnCoarseLevel(acc, coarse_chk_level, info.mLevel, g_ijk, boundary_axis, boundary_off);
+
+
+	//coarse_chk_level = min(coarse_chk_level, info.mLevel);
+	//int level_diff = info.mLevel - coarse_chk_level;
+
+	//auto g_ijk = acc.localToGlobalCoord(info, l_ijk);
+
+
+	//g_ijk = Coord(g_ijk[0] >> level_diff, g_ijk[1] >> level_diff, g_ijk[2] >> level_diff);
+
+	////printf("level %d chk level %d diff %d g_ijk %d %d %d\n", info.mLevel, chk_level, level_diff, g_ijk[0], g_ijk[1], g_ijk[2]);
+	//return QueryBoundaryDirectionN1P1(acc, coarse_chk_level, g_ijk, boundary_axis, boundary_off);
 }
 
 FluidParams::FluidParams(json& j)
@@ -77,10 +95,11 @@ __hostdev__ void FluidParams::setInitialVelocity(HATileAccessor<Tile>& acc, HATi
 	}
 }
 
-
-
-__hostdev__ uint8_t FluidParams::wallCellType(const T current_time, const HATileAccessor<Tile>& acc, const HATileInfo<Tile>& info, const nanovdb::Coord& l_ijk) const {
+__hostdev__ uint8_t FluidParams::wallCellType(const T current_time, const HATileAccessor<Tile>& acc, const int level, const Coord& g_ijk) const
+{
 	if (mTestCase == MESHMOTION) {
+		//uses 1 layer of solid walls on the coarse level
+
 		//z+ air
 		//other walls
 		bool is_neumann = false;
@@ -88,7 +107,7 @@ __hostdev__ uint8_t FluidParams::wallCellType(const T current_time, const HATile
 		int boundary_axis, boundary_off;
 
 		//int boundary_axis, boundary_off;
-		if (QueryBoundaryDirectionN1P1OnCoarseLevel(acc, mCoarseLevel, info, l_ijk, boundary_axis, boundary_off)) {
+		if (QueryBoundaryDirectionN1P1OnCoarseLevel(acc, mCoarseLevel, level, g_ijk, boundary_axis, boundary_off)) {
 			is_neumann = true;
 		}
 
@@ -100,6 +119,34 @@ __hostdev__ uint8_t FluidParams::wallCellType(const T current_time, const HATile
 		return DIRICHLET;
 	}
 }
+
+__hostdev__ uint8_t FluidParams::wallCellType(const T current_time, const HATileAccessor<Tile>& acc, const HATileInfo<Tile>& info, const nanovdb::Coord& l_ijk) const {
+	auto g_ijk = acc.localToGlobalCoord(info, l_ijk);
+	return wallCellType(current_time, acc, info.mLevel, g_ijk);
+	//if (mTestCase == MESHMOTION) {
+	//	//uses 1 layer of solid walls on the coarse level
+
+	//	//z+ air
+	//	//other walls
+	//	bool is_neumann = false;
+	//	bool is_dirichlet = false;
+	//	int boundary_axis, boundary_off;
+
+	//	//int boundary_axis, boundary_off;
+	//	if (QueryBoundaryDirectionN1P1OnCoarseLevel(acc, mCoarseLevel, info, l_ijk, boundary_axis, boundary_off)) {
+	//		is_neumann = true;
+	//	}
+
+	//	if (is_neumann) return NEUMANN;
+	//	else if (is_dirichlet) return DIRICHLET;
+	//	return INTERIOR;
+	//}
+	//else {
+	//	return DIRICHLET;
+	//}
+}
+
+
 
 __hostdev__ void FluidParams::setWallCellType(const T current_time, const HATileAccessor<Tile>& acc, const HATileInfo<Tile>& info, const nanovdb::Coord& l_ijk) const
 {
@@ -154,18 +201,8 @@ __hostdev__ void FluidParams::setVelocityBoundaryCondition(const T current_time,
 	}
 }
 
-__hostdev__ Vec FluidParams::solidVelocityAtFaceCenter(const T current_time, const HATileAccessor<Tile>& acc, const HATileInfo<Tile>& info, const Coord& l_ijk) const
-{
-	if (mTestCase == MESHMOTION) {
 
-	}
-	else {
-		CUDA_ASSERT(false, "solidVelocityAtFaceCenter not implemented for test case {}", int(mTestCase));
-		return Vec(0, 0, 0);
-	}
-}
-
-Eigen::Transform<T, 3, Eigen::Affine> FluidParams::meshToWorldTransform(const T current_time) const
+__hostdev__ Eigen::Transform<T, 3, Eigen::Affine> FluidParams::meshToWorldTransform(const T current_time) const
 {
 	if (mTestCase == MESHMOTION) {
 		// Clamp time parameter to [0, 1]
@@ -189,7 +226,52 @@ Eigen::Transform<T, 3, Eigen::Affine> FluidParams::meshToWorldTransform(const T 
 		return transform;
 	}
 	else {
-		Error("meshToWorldTransform not implemented for test case {}", int(mTestCase));
+		CUDA_ASSERT(false, "meshToWorldTransform not implemented for test case %d", int(mTestCase));
 	}
 }
 
+__device__ void FluidParams::addSolidVelocityToFaceCenter(const T current_time, const T dt, const HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const Coord& l_ijk, const int axis) const
+{
+	if (mTestCase == MESHMOTION) {
+		Vec wall_vel(0, 0, mesh_motion_inflow);
+		T solid_ratio = 0, solid_vel = 0;
+
+		auto g_ijk = acc.localToGlobalCoord(info, l_ijk);
+		auto ng_ijk = g_ijk; ng_ijk[axis]--;
+		if (wallCellType(current_time, acc, info.mLevel, g_ijk) == NEUMANN || wallCellType(current_time, acc, info.mLevel, ng_ijk) == NEUMANN) {
+			//it's a wall boundary NEUMANN cell
+			solid_ratio = 1;
+			solid_vel = wall_vel[axis];
+		}
+		else {
+			//it either intersects with the mesh sdf or not
+			cuda_vec4_t<T> sdfs = FaceCornerSDFs(BufChnls::sdf, acc, info, l_ijk, axis);
+			if (AllNonNegative<T>(sdfs)) {//does not intersect, no solid part
+				solid_ratio = 0;
+				solid_vel = 0;
+			}
+			else {
+				auto pos0 = acc.faceCenter(axis, info, l_ijk);
+
+				auto T0 = meshToWorldTransform(current_time);
+				auto T1 = meshToWorldTransform(current_time + dt);
+
+				Eigen::Matrix<T, 3, 1> p0(pos0[0], pos0[1], pos0[2]);
+				Eigen::Matrix<T, 3, 1> p1 = T1 * (T0.inverse() * p0);
+
+				nanovdb::Vec3<T> pos1(p1[0], p1[1], p1[2]);
+				auto rigid_vel = (pos1 - pos0) / dt;
+
+
+				solid_ratio = 1 - FaceFluidRatio(sdfs);
+				solid_vel = rigid_vel[axis];
+			}
+		}
+
+		auto& tile = info.tile();
+		tile(BufChnls::u + axis, l_ijk) += solid_ratio * solid_vel;
+	}
+	else {
+		CUDA_ASSERT(false, "solidVelocityAtFaceCenter not implemented for test case %d", int(mTestCase));
+	}
+}

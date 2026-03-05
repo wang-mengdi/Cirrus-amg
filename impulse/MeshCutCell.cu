@@ -87,6 +87,37 @@ __hostdev__ float FracInside(float a, float b)
 		return 1.0;
 }
 
+__device__ cuda_vec4_t<T> FaceCornerSDFs(const int node_sdf_channel, const HATileAccessor<Tile>& acc, const HATileInfo<Tile>& info, const Coord& l_ijk, const int axis) {
+	auto& tile = info.tile();
+	cuda_vec4_t<T> face_corner_sdf;
+	//negative face of the cell
+	if (axis == 0)
+	{
+		face_corner_sdf.x = tile.node(node_sdf_channel, l_ijk + Coord(0, 0, 0));
+		face_corner_sdf.y = tile.node(node_sdf_channel, l_ijk + Coord(0, 0, 1));
+		face_corner_sdf.z = tile.node(node_sdf_channel, l_ijk + Coord(0, 1, 1));
+		face_corner_sdf.w = tile.node(node_sdf_channel, l_ijk + Coord(0, 1, 0));
+	}
+	else if (axis == 1)
+	{
+		face_corner_sdf.x = tile.node(node_sdf_channel, l_ijk + Coord(0, 0, 0));
+		face_corner_sdf.y = tile.node(node_sdf_channel, l_ijk + Coord(0, 0, 1));
+		face_corner_sdf.z = tile.node(node_sdf_channel, l_ijk + Coord(1, 0, 1));
+		face_corner_sdf.w = tile.node(node_sdf_channel, l_ijk + Coord(1, 0, 0));
+	}
+	else if (axis == 2)
+	{
+		face_corner_sdf.x = tile.node(node_sdf_channel, l_ijk + Coord(0, 0, 0));
+		face_corner_sdf.y = tile.node(node_sdf_channel, l_ijk + Coord(0, 1, 0));
+		face_corner_sdf.z = tile.node(node_sdf_channel, l_ijk + Coord(1, 1, 0));
+		face_corner_sdf.w = tile.node(node_sdf_channel, l_ijk + Coord(1, 0, 0));
+	}
+	else {
+		CUDA_ASSERT(false, "axis=%d", axis);
+	}
+	return face_corner_sdf;
+}
+
 __hostdev__ float FaceFluidRatio(float phi0, float phi1, float phi2, float phi3)
 {
 	// calculate vol
@@ -192,36 +223,11 @@ __hostdev__ float FaceFluidRatio(float phi0, float phi1, float phi2, float phi3)
 	return ret;
 }
 
-__device__ cuda_vec4_t<T> FaceCornerSDFs(const int node_sdf_channel, HATileAccessor<Tile>& acc, const HATileInfo<Tile>& info, const Coord& l_ijk, const int axis) {
-	auto& tile = info.tile();
-	cuda_vec4_t<T> face_corner_sdf;
-	//negative face of the cell
-	if (axis == 0)
-	{
-		face_corner_sdf.x = tile.node(node_sdf_channel, l_ijk + Coord(0, 0, 0));
-		face_corner_sdf.y = tile.node(node_sdf_channel, l_ijk + Coord(0, 0, 1));
-		face_corner_sdf.z = tile.node(node_sdf_channel, l_ijk + Coord(0, 1, 1));
-		face_corner_sdf.w = tile.node(node_sdf_channel, l_ijk + Coord(0, 1, 0));
-	}
-	else if (axis == 1)
-	{
-		face_corner_sdf.x = tile.node(node_sdf_channel, l_ijk + Coord(0, 0, 0));
-		face_corner_sdf.y = tile.node(node_sdf_channel, l_ijk + Coord(0, 0, 1));
-		face_corner_sdf.z = tile.node(node_sdf_channel, l_ijk + Coord(1, 0, 1));
-		face_corner_sdf.w = tile.node(node_sdf_channel, l_ijk + Coord(1, 0, 0));
-	}
-	else if (axis == 2)
-	{
-		face_corner_sdf.x = tile.node(node_sdf_channel, l_ijk + Coord(0, 0, 0));
-		face_corner_sdf.y = tile.node(node_sdf_channel, l_ijk + Coord(0, 1, 0));
-		face_corner_sdf.z = tile.node(node_sdf_channel, l_ijk + Coord(1, 1, 0));
-		face_corner_sdf.w = tile.node(node_sdf_channel, l_ijk + Coord(1, 0, 0));
-	}
-	else {
-		CUDA_ASSERT(false, "axis=%d", axis);
-	}
-	return face_corner_sdf;
+__hostdev__ T FaceFluidRatio(const cuda_vec4_t<T>& corner_phis) {
+	return FaceFluidRatio(corner_phis.x, corner_phis.y, corner_phis.z, corner_phis.w);
 }
+
+
 
 void CreateAMGLaplacianSystemWithSolidCutOnNodeSDF(HADeviceGrid<Tile>& grid, const int node_sdf_channel, const int coeff_channel, const T R_matrix_coeff) {
 	//1. make sure pure NEUMANN cells defined by phi are set to NEUMANN
@@ -327,7 +333,9 @@ void CreateAMGLaplacianSystemWithSolidCutOnNodeSDF(HADeviceGrid<Tile>& grid, con
 					//	face_corner_sdf[2] = tile.node(node_sdf_channel, l_ijk + Coord(1, 1, 0));
 					//	face_corner_sdf[3] = tile.node(node_sdf_channel, l_ijk + Coord(1, 0, 0));
 					//}
-					coeff = h * FaceFluidRatio(face_corner_sdf.x, face_corner_sdf.y, face_corner_sdf.z, face_corner_sdf.w);
+					
+					//coeff = h * FaceFluidRatio(face_corner_sdf.x, face_corner_sdf.y, face_corner_sdf.z, face_corner_sdf.w);
+					coeff = h * FaceFluidRatio(face_corner_sdf);
 				}
 				tile(coeff_channel + axis, l_ijk) = -coeff;
 			});
