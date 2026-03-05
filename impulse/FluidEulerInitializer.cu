@@ -6,9 +6,9 @@
 class FluidEulerInitializer {
 public:
 
-	void Apply(json& j_all, FluidEuler& fluid) {
+	void Apply(json& j_all, FluidEuler& fluid, DriverMetaData &metadata) {
 		json& j = j_all.at("scene");
-		fluid.init(j);
+		fluid.init(j, metadata);
 	}
 };
 

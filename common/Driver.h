@@ -38,7 +38,7 @@ namespace DriverFunc {	//will change timer
 		Info("Driver::Initialize_And_Run parse json: \n{}", j.dump(2));
 		DriverMetaData meta_data;
 		meta_data.Init(j.at("driver"));
-		scene.Apply(j, simulator);
+		scene.Apply(j, simulator, meta_data);
 		fs::create_directories(meta_data.output_base_dir);
 		//FileFunc::CreateDirectory(meta_data.output_base_dir);
 		fs::path dump_file = fs::path(meta_data.output_base_dir) / fs::path("config.json");

@@ -105,17 +105,28 @@ public:
 	double nfm_advection_time = 0;
 	double projection_time = 0;
 
-	void applyVelocityBC(HADeviceGrid<Tile>& grid, const double current_time) {
-		//if (mParams.mTestCase == TVORTEX || mParams.mTestCase==FORCE_) 
-		{
-			//ClearAllNeumannNeighborFaces(grid, AdvChnls::u);
-			auto params = mParams;
-			grid.launchVoxelFuncOnAllTiles(
-				[params, current_time] __device__(HATileAccessor<Tile>&acc, HATileInfo<Tile>&info, const Coord & l_ijk) {
-				params.setVelocityBoundaryCondition(current_time, acc, info, l_ijk);
-			}, LEAF
-			);
-		}
+	//void applyVelocityBC(HADeviceGrid<Tile>& grid, const double current_time) {
+	//	//if (mParams.mTestCase == TVORTEX || mParams.mTestCase==FORCE_) 
+	//	{
+	//		//ClearAllNeumannNeighborFaces(grid, AdvChnls::u);
+	//		auto params = mParams;
+	//		grid.launchVoxelFuncOnAllTiles(
+	//			[params, current_time] __device__(HATileAccessor<Tile>&acc, HATileInfo<Tile>&info, const Coord & l_ijk) {
+	//			params.setVelocityBoundaryCondition(current_time, acc, info, l_ijk);
+	//		}, LEAF
+	//		);
+	//	}
+	//}
+
+	void addSolidVelocityWithFractionsToFaces(HADeviceGrid<Tile>& grid, const double current_time, const double dt) {
+		auto params = mParams;
+		grid.launchVoxelFuncOnAllTiles(
+			[params, current_time, dt] __device__(HATileAccessor<Tile>&acc, HATileInfo<Tile>&info, const Coord & l_ijk) {
+			for (int axis : {0, 1, 2}) {
+				params.addSolidVelocityToFaceCenter(current_time, dt, acc, info, l_ijk, axis);
+			}
+		}, LEAF
+		);
 	}
 
 	void buildTypesAndAMGCoeffs(HADeviceGrid<Tile>& grid, const T current_time) {
@@ -159,7 +170,7 @@ public:
 		}
 	}
 
-	void init(json &j) {
+	void init(json &j, DriverMetaData &metadata) {
 		//fmt::print("current path: {}\n", fs::current_path().string());
 
 		std::string mesh_file = Json::Value<std::string>(j, "mesh_file", "mesh.obj");
@@ -207,17 +218,26 @@ public:
 
 		buildTypesAndAMGCoeffs(grid, 0.);
 
-		{
-			//set initial velocity
-			auto params = mParams;
-			grid.launchVoxelFuncOnAllTiles(
-				[params] __device__(HATileAccessor<Tile>&acc, HATileInfo<Tile>&info, const Coord & l_ijk) {
-				params.setInitialVelocity(acc, info, l_ijk);
-			}, LEAF
-			);
-		}
+		//the velocity here is the composed velocity, which is weighted fluid + solid
+		//clear velocity variables to 0
+		FillChannelsInGridWithValue(grid, 0.0, { BufChnls::u, BufChnls::u + 1, BufChnls::u + 2 });
+		//add solid velocity to velocity variables
+		//Info("metadata current time: {} dt: {} fps {}", metadata.current_time, metadata.dt, metadata.fps);
+		addSolidVelocityWithFractionsToFaces(grid, 0.0, 1e-3);//t=0, dt=1e-3
+		project(grid);
 
-		applyVelocityBC(grid, 0.0);
+
+		//{
+		//	//set initial velocity
+		//	auto params = mParams;
+		//	grid.launchVoxelFuncOnAllTiles(
+		//		[params] __device__(HATileAccessor<Tile>&acc, HATileInfo<Tile>&info, const Coord & l_ijk) {
+		//		params.setInitialVelocity(acc, info, l_ijk);
+		//	}, LEAF
+		//	);
+		//}
+
+		//applyVelocityBC(grid, 0.0);
 
 		//{
 		//	//show sdf values on nodes
@@ -324,8 +344,8 @@ public:
 	}
 
 
-	void project(DriverMetaData& metadata, HADeviceGrid<Tile>& grid, int u_channel) {
-		auto c0_channel = ProjChnls::c0;
+	void project(HADeviceGrid<Tile>& grid) {
+		//auto c0_channel = ProjChnls::c0;
 
 		{
 
@@ -343,12 +363,12 @@ public:
 		{
 			CalculateNeighborTiles(grid);
 
-			AMGVolumeWeightedDivergenceOnLeafs(grid, u_channel, c0_channel, ProjChnls::b);
+			AMGVolumeWeightedDivergenceWithoutCoeffOnLeafs(grid, BufChnls::u, ProjChnls::b);
 
 
 
-
-			Info("before proj div pt l2: {}", NormSync(grid, 2, ProjChnls::b, false));
+			Info("before proj div lensqr: {}", Dot(grid, ProjChnls::b, ProjChnls::b, LEAF));
+			//Info("before proj div pt l2: {}", NormSync(grid, 2, ProjChnls::b, false));
 			//Info("cpu div pt l2: {}", CellPointRMSNormOnHostTiles(grid.getHostTileHolderForLeafs(), ProjChnls::b, -1, LEAF, 2));
 			//Info("div pt linf: {}", NormSync(grid, -1, ProjChnls::b, false));
 			//Info("cpu div pt linf: {}", CellPointRMSNormOnHostTiles(grid.getHostTileHolderForLeafs(), ProjChnls::b, -1, LEAF, -1));
@@ -396,19 +416,19 @@ public:
 			//	polyscope::show();
 			//}
 
-			{
-				//show velocity on polyscope before proj
-				polyscope::init();
-				auto holder = grid.getHostTileHolderForLeafs();
-				IOFunc::AddPoissonGridCellCentersToPolyscopePointCloud(holder, { { -1,"type" },
-					{ BufChnls::vor, "vorticity" }, {ProjChnls::x, "pressure"},{ProjChnls::b, "div"},{ProjChnls::c0 + 3, "c3"} },
-					{ {BufChnls::u, "velocity"} });
-				//IOFunc::AddLeveledPoissonGridCellCentersToPolyscopePointCloud(holder, { { -1,"type" }, { BufChnls::vor, "vorticity" } }, { { BufChnls::u, "velocity" } });
-				polyscope::show();
-			}
+			//{
+			//	//show velocity on polyscope before proj
+			//	polyscope::init();
+			//	auto holder = grid.getHostTileHolderForLeafs();
+			//	IOFunc::AddPoissonGridCellCentersToPolyscopePointCloud(holder, { { -1,"type" },
+			//		{ BufChnls::vor, "vorticity" }, {ProjChnls::x, "pressure"},{ProjChnls::b, "div"},{ProjChnls::c0 + 3, "c3"} },
+			//		{ {BufChnls::u, "velocity"} });
+			//	//IOFunc::AddLeveledPoissonGridCellCentersToPolyscopePointCloud(holder, { { -1,"type" }, { BufChnls::vor, "vorticity" } }, { { BufChnls::u, "velocity" } });
+			//	polyscope::show();
+			//}
 
 
-			AMGSolver solver(c0_channel, 0.5, 1, 1);
+			AMGSolver solver(ProjChnls::c0, 0.5, 1, 1);
 			//solver.prepareTypesAndCoeffs(grid);
 
 			CPUTimer timer;
@@ -423,17 +443,21 @@ public:
 
 			Info("pressure pt l2: {}", NormSync(grid, 2, ProjChnls::x, false));
 
-			AMGAddGradientToFace(grid, -1, LEAF, ProjChnls::x, c0_channel, BufChnls::u);
+			AMGAddFaceWeightedGradientToFace(grid, -1, LEAF, ProjChnls::x, ProjChnls::c0, BufChnls::u);
+
+			AMGVolumeWeightedDivergenceWithoutCoeffOnLeafs(grid, BufChnls::u, ProjChnls::b);
 
 			Info("inflow: {}", mParams.mesh_motion_inflow);
 
-			applyVelocityBC(grid, metadata.current_time);
+			//applyVelocityBC(grid, metadata.current_time);
 
-			AMGVolumeWeightedDivergenceOnLeafs(grid, u_channel, c0_channel, ProjChnls::b);
+			//AMGVolumeWeightedDivergenceOnLeafs(grid, u_channel, c0_channel, ProjChnls::b);
 			//for (int i : {0, 1, 2}) {
 			//	AccumulateToParents(grid, u_channel + i, u_channel + i, -1, LEAF, LAUNCH_SUBTREE, INTERIOR | DIRICHLET, 1.0 / 4.0, true);
 			//}
-			Info("div pt linf: {}", NormSync(grid, -1, ProjChnls::b, false));
+			//Info("div pt linf: {}", NormSync(grid, -1, ProjChnls::b, false));
+			//Info("div pt l2: {}")
+			Info("after proj div lensqr: {}", Dot(grid, ProjChnls::b, ProjChnls::b, LEAF));
 		}
 
 
@@ -760,7 +784,7 @@ public:
 		applyExternalForce(grid, dt);
 
 
-		applyVelocityBC(grid, metadata.current_time);
+		//applyVelocityBC(grid, metadata.current_time);
 
 		//{
 		//	Info("before projection u l2 {} v l2 {} w l2 {}", NormSync(grid, 2, BufChnls::u, false), NormSync(grid, 2, BufChnls::u + 1, false), NormSync(grid, 2, BufChnls::u + 2, false));
@@ -770,7 +794,7 @@ public:
 
 
 		//projection
-		project(metadata, grid, BufChnls::u);
+		project(grid);
 
 		{
 			Warn("sanitizing after projection");

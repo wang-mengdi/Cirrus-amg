@@ -597,7 +597,67 @@ void AMGAddGradientToFace(HADeviceGrid<Tile>& grid, int subtree_level, uint8_t l
     AMGAddGradientToFace128Kernel << <grid.dAllTiles.size(), 128 >> > (grid.deviceAccessor(), thrust::raw_pointer_cast(grid.dAllTiles.data()), subtree_level, launch_tile_types, x_channel, coeff_channel, u_channel);
 }
 
-void AMGVolumeWeightedDivergenceOnLeafs(HADeviceGrid<Tile>& grid, int u_channel, int x_channel) {
+__global__ void AMGAddFaceWeightedGradientToFace128Kernel(const HATileAccessor<Tile> acc, HATileInfo<Tile>* tiles, int subtree_level, uint8_t launch_tile_types, int x_channel, int coeff_channel, int u_channel) {
+    __shared__ AMGLaplacianTileData shared_data;
+    //bi: block idx, ti: thread idx
+    int bi = blockIdx.x, ti = threadIdx.x;
+    //somehow it's faster with the reference symbol
+    const auto& info = tiles[bi];
+    if (!(info.subtreeType(subtree_level) & launch_tile_types)) return;
+    LoadAMGLaplacianTileData(acc, info, shared_data, x_channel, coeff_channel, ti);
+    __syncthreads();
+
+    auto& tile = info.tile();
+    auto h = acc.voxelSize(info);
+    for (int i = 0; i < 4; i++) {
+        //voxel idx
+        int vi = i * 128 + ti;
+        Coord l_ijk = acc.localOffsetToCoord(vi);
+
+
+
+        for (int axis : {0, 1, 2}) {
+            //printf("axis %d l_ijk %d %d %d u %f\n",axis, l_ijk[0], l_ijk[1], l_ijk[2], tile(u_channel + axis, l_ijk));
+
+            Coord dl_ijk = l_ijk; dl_ijk[axis]--;
+            T pu = shared_data.xValueT(l_ijk);
+            T pd = shared_data.xValueT(dl_ijk);
+            //tile(u_channel + axis, l_ijk) -= (pu - pd) * shared_data.offDiagValueT(axis, l_ijk) / (h * h);
+            //tile(u_channel + axis, l_ijk) += (pu - pd) / h;
+            auto fluid_ratio = -shared_data.offDiagValueT(axis, l_ijk) / h;
+            tile(u_channel + axis, l_ijk) += (pu - pd) / h * fluid_ratio;
+
+            //{
+            //    auto g_ijk = acc.localToGlobalCoord(info, l_ijk);
+            //    if (g_ijk == Coord(3, 4, 2)) {
+            //        printf("AMGAddFaceWeightedGradientToFace128Kernel g_ijk %d %d %d axis %d pu %f pd %f fluid_ratio %f\n", g_ijk[0], g_ijk[1], g_ijk[2], pu, pd, fluid_ratio);
+            //    }
+            //}
+
+            //        {
+                        //auto g_ijk = acc.composeGlobalCoord(info.mTileCoord, l_ijk);
+            //            if (
+            //                //(info.mLevel==2&&g_ijk == Coord(16,30,22))
+            //                //||
+            //                (info.mLevel==1&&g_ijk==Coord(7,8,10))
+            //                ) {
+                        //	printf("calculating grad g_ijk %d %d %d axis %d pu %f pd %f off %f term %f vel %f\n", g_ijk[0], g_ijk[1], g_ijk[2], axis, pu, pd, shared_data.offDiagValueT(axis, l_ijk), (pu - pd) / h, tile(u_channel + axis, l_ijk));
+            //            }
+            //        }
+        }
+    }
+}
+
+void AMGAddFaceWeightedGradientToFace(HADeviceGrid<Tile>& grid, int subtree_level, uint8_t launch_tile_types, int x_channel, int coeff_channel, int u_channel) {
+    //first calculate GHOST and NONLEAF values
+    PropagateToChildren(grid, x_channel, x_channel, -1, GHOST, LAUNCH_SUBTREE, INTERIOR | DIRICHLET | NEUMANN);
+    AccumulateToParentsOneStep(grid, x_channel, x_channel, LEAF, 1. / 8, false, INTERIOR | DIRICHLET | NEUMANN);
+    //then launch AMGAddGradientToFace128Kernel on all leafs to add grad(x) to u
+    AMGAddFaceWeightedGradientToFace128Kernel << <grid.dAllTiles.size(), 128 >> > (grid.deviceAccessor(), thrust::raw_pointer_cast(grid.dAllTiles.data()), subtree_level, launch_tile_types, x_channel, coeff_channel, u_channel);
+}
+
+
+void AMGVolumeWeightedDivergenceWithoutCoeffOnLeafs(HADeviceGrid<Tile>& grid, int u_channel, int x_channel) {
     for (int axis : {0, 1, 2}) {
         PropagateToChildren(grid, u_channel + axis, u_channel + axis, -1, GHOST, LAUNCH_SUBTREE, INTERIOR | DIRICHLET | NEUMANN);
         //AccumulateToParentsOneStep(grid, u_channel + axis, u_channel + axis, LEAF, 1. / 8, false, INTERIOR | DIRICHLET | NEUMANN);
@@ -617,6 +677,7 @@ void AMGVolumeWeightedDivergenceOnLeafs(HADeviceGrid<Tile>& grid, int u_channel,
 
             T u0 = tile(u_channel + axis, l_ijk);
             T u1;
+            //CUDA_ASSERT(isfinite(u0), "u0 %f is not finite at level %d l_ijk %d %d %d axis %d sgn %d\n", u0, info.mLevel, l_ijk[0], l_ijk[1], l_ijk[2], axis, sgn);
 
             if (ninfo.empty()) {
                 u1 = 0;
@@ -625,11 +686,21 @@ void AMGVolumeWeightedDivergenceOnLeafs(HADeviceGrid<Tile>& grid, int u_channel,
                 auto& ntile = ninfo.tile();
                 u1 = ntile(u_channel + axis, nl_ijk);
             }
+			//CUDA_ASSERT(isfinite(u1), "u1 %f is not finite at level %d nl_ijk %d %d %d axis %d sgn %d\n", u1, info.mLevel, nl_ijk[0], nl_ijk[1], nl_ijk[2], axis, sgn);
 
             //basically coeff is -h
             //sum += (sgn == -1) ? u0 * coeff * h : -u1 * coeff * h;
 
             sum += (sgn == -1) ? -u0 * h * h : u1 * h * h;
+
+     //       {
+     //           auto g_ijk = acc.localToGlobalCoord(info, l_ijk);
+     //           if (g_ijk == Coord(3, 4, 1)) {
+					//auto ng_ijk = acc.localToGlobalCoord(ninfo, nl_ijk);
+     //               printf("AMGVolumeWeightedDivergenceWithoutCoeffOnLeafs g_ijk %d %d %d nb empty %d ng_ijk %d %d %d axis %d sgn %d vel %f sum %f\n", g_ijk[0], g_ijk[1], g_ijk[2], ninfo.empty(), ng_ijk[0], ng_ijk[1], ng_ijk[2], axis, sgn, (sgn == -1) ? -u0 : u1, sum);
+     //           }
+     //       }
+			
         });
 
         //tile(x_channel, l_ijk) = sum;

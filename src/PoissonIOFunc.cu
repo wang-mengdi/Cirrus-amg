@@ -716,7 +716,10 @@ namespace IOFunc {
                                     vec_data[t].push_back({ u, v, w });
 
 									auto len = std::sqrt(u * u + v * v + w * w);
-                                    if (isnan(len) || isinf(len)) len = invalid_value;
+                                    if (!isfinite(len)) {
+                                        Info("Non-finite vector length at level {}, g_ijk {}: ({}, {}, {})", level, g_ijk, u, v, w);
+                                        len = invalid_value;
+                                    }
                                     vec_length[t].push_back(len);
 
           //                          if (g_ijk == Coord(5, 0, 1)) {

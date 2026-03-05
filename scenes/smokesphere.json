@@ -10,8 +10,8 @@
         "snapshot_stride": 0
     },
     "scene": {
-        "coarse_level": 3,
-        "fine_level": 3,
+        "coarse_level": 2,
+        "fine_level": 5,
         "flowmap_stride": 5,
         "refine_threshold": 0.1,
         "gravity": 0.0,
