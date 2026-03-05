@@ -1,13 +1,13 @@
 {
     "driver": {
         "cfl": 0.5,
-        "first_frame": 0,
+        "first_frame": 14,
         "fps": 200,
-        "last_frame": 10,
+        "last_frame": 14,
         "min_step_frame_fraction": 0.0,
         "output_base_dir": "./output/smokesphere",
         "queue_size": 4,
-        "snapshot_stride": 0
+        "snapshot_stride": 1
     },
     "scene": {
         "coarse_level": 2,

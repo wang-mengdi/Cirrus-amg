@@ -13,7 +13,7 @@
 #include <cstdint>
 
 void SanityCheckCoeffs(HADeviceGrid<Tile>& grid, uint8_t launch_types) {
-	Info("Performing sanity check on coeffs");
+	Info("Performing sanity check on coeffs...");
 	grid.launchVoxelFuncOnAllTiles(
 		[=] __device__(HATileAccessor<Tile>&acc, HATileInfo<Tile>&info, const Coord & l_ijk) {
 		auto& tile = info.tile();
@@ -25,7 +25,6 @@ void SanityCheckCoeffs(HADeviceGrid<Tile>& grid, uint8_t launch_types) {
 		}
 	}, launch_types
 	);
-	Pass("Coefficient sanity check passed");
 }
 
 void FillChannelsInGridWithValue(

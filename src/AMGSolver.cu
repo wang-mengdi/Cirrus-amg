@@ -7,6 +7,8 @@
 #include "PoissonIOFunc.h"
 #include <polyscope/polyscope.h>
 
+std::atomic<int> amg_solver_open_visualization{ 0 };
+
 __forceinline__ __device__ T NegativeLaplacianCoeff(T h, uint8_t ttype0, uint8_t ttype1, uint8_t ctype0, const uint8_t ctype1) {
     //valid if both are leafs, or one leaf one ghost
     bool both_leafs = ((ttype0 & LEAF) && (ttype1 & LEAF));
@@ -339,6 +341,8 @@ public:
 			    
 
                 sum += offDiagValueT(axis, ul_ijk) * xValueT(nl_ijk);
+				//CUDA_ASSERT(isfinite(offDiagValueT(axis, ul_ijk)));
+                //CUDA_ASSERT(isfinite(xValueT(nl_ijk)), "xValueT %f nl_ijk %d %d %d", xValueT(nl_ijk), nl_ijk[0], nl_ijk[1], nl_ijk[2]);
 
                 ////if (l_ijk == Coord(4, 4, 4)) 
                 //{
@@ -407,6 +411,12 @@ __device__ void LoadAMGLaplacianTileData(const HATileAccessor<Tile>& acc, const 
         shared_data.offDiag2ValueT(l_ijk) = tile(coeff_channel + 2, vi);
 
         shared_data.diagValueT(l_ijk) = tile(coeff_channel + 3, vi);  // Load diagonal coefficient
+
+  //      CUDA_ASSERT(isfinite(shared_data.xValueT(l_ijk)));
+		//CUDA_ASSERT(isfinite(shared_data.offDiag0ValueT(l_ijk)));
+		//CUDA_ASSERT(isfinite(shared_data.offDiag1ValueT(l_ijk)));
+		//CUDA_ASSERT(isfinite(shared_data.offDiag2ValueT(l_ijk)));
+		//CUDA_ASSERT(isfinite(shared_data.diagValueT(l_ijk)));
     }
 
     __syncthreads();
@@ -471,6 +481,11 @@ __device__ void LoadAMGLaplacianTileData(const HATileAccessor<Tile>& acc, const 
                 //T vg = shared_data.xValueT(cl_ijk) +  (V1 - V0);
                 shared_data.xValueT(fl_ijk) = vg;
 
+                {
+                    auto ng_ijk = acc.localToGlobalCoord(ninfo, nl_ijk);
+                    CUDA_ASSERT(isfinite(V1), "bad V1 value %f with axis %d sgn %d level %d ng_ijk %d %d %d ntiletype %d nb_ijk %d %d %d nl_ijk %d %d %d", V1, axis, sgn, ninfo.mLevel, ng_ijk[0], ng_ijk[1], ng_ijk[2], ninfo.mType, nb_ijk[0], nb_ijk[1], nb_ijk[2], nl_ijk[0], nl_ijk[1], nl_ijk[2]);
+                }
+
                 if (sgn == 1) shared_data.offDiagValueT(axis, fl_ijk) = ninfo.tile()(coeff_channel + axis, nl_ijk);
             }
 
@@ -531,6 +546,11 @@ __global__ void NegativeLaplacianSameLevelAMG128Kernel(const HATileAccessor<Tile
   //      else continue;
 
         info.tile()(Ax_channel, vi) = info.tile().type(vi) == INTERIOR ? shared_data.negativeLap(l_ijk) : 0;
+
+        {
+			auto g_ijk = acc.composeGlobalCoord(info.mTileCoord, l_ijk);
+            CUDA_ASSERT(isfinite(info.tile()(Ax_channel, vi)), "invalid laplacian value %f at level %d g_ijk %d %d %d cell type %d", info.tile()(Ax_channel, vi), info.mLevel, g_ijk[0], g_ijk[1], g_ijk[2], info.tile().type(vi));
+        }
     }
 }
 
@@ -544,6 +564,25 @@ void NegativeLaplacianSameLevelAMG128(HADeviceGrid<Tile>& grid, thrust::device_v
 void AMGFullNegativeLaplacianOnLeafs(HADeviceGrid<Tile>& grid, const int x_channel, const int coeff_channel, const int Ax_channel) {
     PropagateToChildren(grid, x_channel, x_channel, -1, GHOST, LAUNCH_SUBTREE, INTERIOR);
     AccumulateToParentsOneStep(grid, x_channel, x_channel, LEAF, 1. / 8, false, INTERIOR);
+
+
+
+    SanityCheckChannelCellValues(grid, x_channel, LEAF | GHOST);
+
+
+    if (true) {
+        //show velocity on polyscope before proj
+        polyscope::init();
+        auto holder = grid.getHostTileHolder(LEAF | NONLEAF | GHOST);
+        IOFunc::AddLeveledPoissonGridCellCentersToPolyscopePointCloud(holder,
+            { { -1,"type" }, { x_channel, "x_channel"} },
+            {  }, -1, 1e10
+        );
+        //IOFunc::AddLeveledPoissonGridCellCentersToPolyscopePointCloud(holder, { { -1,"type" }, { BufChnls::vor, "vorticity" } }, { { BufChnls::u, "velocity" } });
+        polyscope::show();
+    }
+
+
     NegativeLaplacianSameLevelAMG128(grid, grid.dAllTiles, grid.dAllTiles.size(), -1, LEAF, x_channel, coeff_channel, Ax_channel);
 }
 
@@ -796,9 +835,10 @@ __global__ void NegativeLaplacianAndGaussSeidelSameLevelAMG128Kernel(const HATil
 			T D = shared_data.diagValueT(l_ijk);
             if (D == 0 && (ctype & INTERIOR)) {
                 auto g_ijk = acc.localToGlobalCoord(info, l_ijk);
-                printf("D is zero!!!!!!!!!!!!!!! at g_ijk %d %d %d level %d\n", g_ijk[0], g_ijk[1], g_ijk[2], info.mLevel);
+				CUDA_ASSERT(false, "D is zero at level %d g_ijk %d %d %d\n", info.mLevel, g_ijk[0], g_ijk[1], g_ijk[2]);
             }
             T delta_x = (ctype & INTERIOR) ? (b - Ax) / D : 0;
+			CUDA_ASSERT(isfinite(delta_x), "delta_x is not finite at level %d tile coord %d %d %d l_ijk %d %d %d\n", info.mLevel, info.mTileCoord[0], info.mTileCoord[1], info.mTileCoord[2], l_ijk[0], l_ijk[1], l_ijk[2]);
             info.tile()(x_channel, vi) = shared_data.xValueT(l_ijk) + delta_x * omega;
         }
     }
@@ -1376,6 +1416,8 @@ std::tuple<int, double> AMGSolver::solve(HADeviceGrid<Tile>& grid, bool verbose,
 	//FASFCycle(grid, Tile::z_channel, Tile::r_channel, Tile::Ap_channel, coeff_channel, level_iters, coarsest_iters);
     FASMuCycle(mu_cycle_repeat_times, grid, Tile::z_channel, Tile::r_channel, Tile::Ap_channel, coeff_channel, level_iters, coarsest_iters);
 
+    Pass("mu cycle done");
+
     //p0=z0
     Copy(grid, Tile::z_channel, Tile::p_channel, -1, LEAF, LAUNCH_SUBTREE, INTERIOR | DIRICHLET | NEUMANN);
 
@@ -1389,6 +1431,8 @@ std::tuple<int, double> AMGSolver::solve(HADeviceGrid<Tile>& grid, bool verbose,
         //here A=-lap
         AMGFullNegativeLaplacianOnLeafs(grid, Tile::p_channel, coeff_channel, Tile::Ap_channel);
         //AMGFullNegativeLaplacianOnLeafs(grid, Tile::p_channel, coeff_channel, Tile::Ap_channel);
+
+        SanityCheckChannelCellValues(grid, Tile::Ap_channel, LEAF);
 
         //alpha_k=gamma_k/(p_k^T*A*p_k)
         DotAsync(fp_d, grid, Tile::p_channel, Tile::Ap_channel, LEAF);//fp_k=p_k^T*A*p_k
@@ -1410,6 +1454,7 @@ std::tuple<int, double> AMGSolver::solve(HADeviceGrid<Tile>& grid, bool verbose,
             }
 
         }, LEAF, 4);
+
         grid.launchVoxelFuncOnAllTiles(
             [alpha_ptr]__device__(HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const Coord& l_ijk) {
             auto& tile = info.tile();

@@ -362,6 +362,8 @@ void PropagateToChildren(HADeviceGrid<Tile>& grid, const int coarse_channel, con
             }
         }
         tile(fine_channel, fine_l_ijk) = val;
+
+		CUDA_ASSERT(isfinite(val), "bad value %f at level %d tile type %d channel %d cell %d %d %d", val, info.mLevel, info.mType, fine_channel, fine_g_ijk[0], fine_g_ijk[1], fine_g_ijk[2]);
     },
         target_subtree_level, target_tile_types, mode, COARSE_FIRST);
 }

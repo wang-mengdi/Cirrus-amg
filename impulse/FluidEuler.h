@@ -42,6 +42,9 @@
     CUDA_CHECK(cudaDeviceSynchronize());                          \
 } while (0)
 
+
+extern std::atomic<int> amg_solver_open_visualization;
+
 void SanityCheckCoeffs(HADeviceGrid<Tile>&grid, uint8_t launch_types);
 
 void FillChannelsInGridWithValue(HADeviceGrid<Tile>&grid, T value, std::initializer_list<int> channels = {});
@@ -429,12 +432,12 @@ public:
 			//	polyscope::show();
 			//}
 
-			//{
+			//if (time_step_counter == 65) {
 			//	//show velocity on polyscope before proj
 			//	polyscope::init();
 			//	auto holder = grid.getHostTileHolderForLeafs();
 			//	IOFunc::AddPoissonGridCellCentersToPolyscopePointCloud(holder, { { -1,"type" },
-			//		{ BufChnls::vor, "vorticity" }, {ProjChnls::x, "pressure"},{ProjChnls::b, "div"},{ProjChnls::c0 + 3, "c3"} },
+			//		{ BufChnls::vor, "vorticity" }, {ProjChnls::x, "pressure"},{ProjChnls::b, "div"},{ProjChnls::c0 + 3, "c3"},{ProjChnls::b, "div"} },
 			//		{ {BufChnls::u, "velocity"} });
 			//	//IOFunc::AddLeveledPoissonGridCellCentersToPolyscopePointCloud(holder, { { -1,"type" }, { BufChnls::vor, "vorticity" } }, { { BufChnls::u, "velocity" } });
 			//	polyscope::show();
@@ -795,8 +798,8 @@ public:
 		auto& last_grid = *grid_ptrs[grid_ptrs.size() - 2];
 		double dt = metadata.dt;
 
-
-		Pass("\nAdvance frame {} current time {} dt {}", metadata.current_frame, metadata.current_time, dt);
+		fmt::print("\n");
+		Pass("Advance frame {} current time {} dt {} step counter {}", metadata.current_frame, metadata.current_time, dt, time_step_counter);
 		ASSERT(dt > 0, "dt should be positive");
 
 
@@ -821,7 +824,12 @@ public:
 		//}
 
 
-
+		if (time_step_counter == 65) {
+			amg_solver_open_visualization = 1;
+		}
+		else {
+			amg_solver_open_visualization = 0;
+		}
 
 		//projection
 		project(grid);

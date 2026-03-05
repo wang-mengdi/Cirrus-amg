@@ -1,4 +1,4 @@
-//////////////////////////////////////////////////////////////////////////
+﻿//////////////////////////////////////////////////////////////////////////
 // Common header
 // Copyright (c) (2022-), Bo Zhu, Mengdi Wang
 // This file is part of MESO, whose distribution is governed by the LICENSE file.
@@ -83,62 +83,62 @@ void Pass(const std::string& str);
 //    }
 //}
 
-#include <fmt/format.h>
-#include <fmt/color.h>
-
-inline void CpuAssertImpl(bool cond,
-    const char* expr,
-    const char* file,
-    int line)
-{
-    if (!cond) {
-        fmt::print(fmt::fg(fmt::color::red),
-            "ASSERT FAILED: {}\n  at {}:{}\n",
-            expr, file, line);
 
 #if defined(_MSC_VER)
-        __debugbreak();
-#else
-        __builtin_trap();
+#include <intrin.h>
 #endif
-    }
-}
 
-template<typename... Args>
-inline void CpuAssertMsgImpl(bool cond,
-    const char* expr,
-    const char* file,
-    int line,
-    const char* fmt_str,
-    const Args&... args)
-{
-    if (!cond) {
-        fmt::print(fmt::fg(fmt::color::red),
-            "ASSERT FAILED: {}\n  at {}:{}\n",
-            expr, file, line);
-
-        fmt::print(fmt::fg(fmt::color::red), fmt_str, args...);
-        fmt::print("\n");
+namespace detail {
 
 #if defined(_MSC_VER)
-        __debugbreak();
-#else
-        __builtin_trap();
-#endif
+    __forceinline void CpuTrap() {
+        __debugbreak();   // stop in debugger
+        __fastfail(1);    // if continued, terminate hard
     }
-}
+#else
+    __attribute__((noreturn)) inline void CpuTrap() { __builtin_trap(); }
+#endif
 
-#define ASSERT_1(cond) \
-    CpuAssertImpl((cond), #cond, __FILE__, __LINE__)
+    inline void AssertImpl(bool cond,
+        const char* expr,
+        const char* file,
+        int line)
+    {
+        if (!cond) {
+            fmt::print(fmt::fg(fmt::color::red),
+                "ASSERT FAILED: {}\n  at {}:{}\n",
+                expr, file, line);
+            CpuTrap();
+        }
+    }
 
-#define ASSERT_2(cond, fmt_str, ...) \
-    CpuAssertMsgImpl((cond), #cond, __FILE__, __LINE__, fmt_str, ##__VA_ARGS__)
+    template <typename... Args>
+    inline void AssertImpl(bool cond,
+        const char* expr,
+        const char* file,
+        int line,
+        const char* fmt_str,
+        Args&&... args)
+    {
+        if (!cond) {
+            fmt::print(fmt::fg(fmt::color::red),
+                "ASSERT FAILED: {}\n  at {}:{}\n",
+                expr, file, line);
 
-#define GET_ASSERT_MACRO(_1,_2,_3,NAME,...) NAME
+            if (fmt_str && fmt_str[0] != '\0') {
+                fmt::print(fmt::fg(fmt::color::red),
+                    fmt_str, std::forward<Args>(args)...);
+                fmt::print("\n");
+            }
+            CpuTrap();
+        }
+    }
 
-#define ASSERT(...) \
-    GET_ASSERT_MACRO(__VA_ARGS__, ASSERT_2, ASSERT_1)(__VA_ARGS__)
+} // namespace detail
 
+// ASSERT(cond) OR ASSERT(cond, "msg {}", arg...)
+#define ASSERT(cond, ...) \
+    detail::AssertImpl((cond), #cond, __FILE__, __LINE__, ##__VA_ARGS__)
 
 namespace Json {
 	template<class T>
