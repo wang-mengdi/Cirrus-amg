@@ -257,6 +257,8 @@ __global__ void ChannelPowerSumKernel128(const int order, HATileAccessor<Tile> a
 
 //on LEAF tiles and INTERIOR cells
 double NormSync(HADeviceGrid<Tile>& grid, const int order, const int in_channel, bool volume_weighted, uint8_t launch_cell_types) {
+	//Warn("entering NormSync order {} volume_weighted {} launch_cell_types {:02x}", order, volume_weighted, launch_cell_types);
+
     if (order == -1) {
         Assert(!volume_weighted, "Linf norm does not support volume weighted, it only works with point-wise norm");
     }
@@ -300,6 +302,8 @@ double NormSync(HADeviceGrid<Tile>& grid, const int order, const int in_channel,
     //            thrust::host_vector<T> h_data = grid.dAllTilesReducer.d_data;
 				//fmt::print("Device value data: {}\n", h_data);
     //        }
+
+			//Warn("NormSync order {} volume_weighted {} launch_cell_types {:02x} value_sum {} weights_sum {}", order, volume_weighted, launch_cell_types, value_sum, weights_sum);
 
             if (order == 1) return value_sum / weights_sum;
             else if (order == 2) return sqrt(value_sum / weights_sum);

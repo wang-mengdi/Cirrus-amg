@@ -13,6 +13,7 @@
 #include <cstdint>
 
 void SanitizeChannelCellValues(HADeviceGrid<Tile>& grid, const int channel) {
+	Warn("sanity checking channel {} cell values on device tiles...", channel);
 	grid.launchVoxelFuncOnAllTiles(
 		[=] __device__(HATileAccessor<Tile>&acc, HATileInfo<Tile>&info, const Coord & l_ijk) {
 		auto val = info.tile()(channel, l_ijk);
@@ -25,6 +26,7 @@ void SanitizeChannelCellValues(HADeviceGrid<Tile>& grid, const int channel) {
 	);
 }
 void SanityCheckChannelNodeValues(HADeviceGrid<Tile>& grid, const int channel) {
+	Warn("sanity checking channel {} node values on device tiles...", channel);
 	grid.launchNodeFuncWithTileIdxOnAllTiles(
 		[=] __device__(HATileAccessor<Tile> acc, const int tile_idx, HATileInfo<Tile>&info, const Coord & r_ijk) {
 		auto val = info.tile().node(channel, r_ijk);

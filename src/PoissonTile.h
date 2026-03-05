@@ -126,8 +126,8 @@ public:
 
                 {
                     Coord ol_ijk = l_ijk + off_ijk;
-                    CUDA_ASSERT(isfinite(val), "val=%f at ol_ijk %d %d %d", val, ol_ijk[0], ol_ijk[1], ol_ijk[2]);
-                    CUDA_ASSERT(isfinite(weight), "weight=%f at ol_ijk %d %d %d", weight, ol_ijk[0], ol_ijk[1], ol_ijk[2]);
+                    CUDA_ASSERT(isfinite(val), "val=%f at ol_ijk %d %d %d u_channel %d node_u_channel %d", val, ol_ijk[0], ol_ijk[1], ol_ijk[2], u_channel, node_u_channel);
+                    CUDA_ASSERT(isfinite(weight), "weight=%f at ol_ijk %d %d %d u_channel %d node_u_channel %d", weight, ol_ijk[0], ol_ijk[1], ol_ijk[2], u_channel, node_u_channel);
                 }
             }
         }

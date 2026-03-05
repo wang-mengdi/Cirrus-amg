@@ -239,15 +239,20 @@ public:
 
 		//applyVelocityBC(grid, 0.0);
 
-		//{
-		//	//show sdf values on nodes
-		//	polyscope::init();
-		//	auto holder = grid.getHostTileHolderForLeafs();
-		//	IOFunc::AddPoissonGridNodesToPolyscope(holder, { {BufChnls::sdf, "sdf"} }, {});
-		//	polyscope::show();
-		//}
+		{
+			//show velocity on polyscope before proj
+			polyscope::init();
+			auto holder = grid.getHostTileHolderForLeafs();
+			IOFunc::AddPoissonGridCellCentersToPolyscopePointCloud(holder, { { -1,"type" },
+				{ BufChnls::vor, "vorticity" }, {ProjChnls::x, "pressure"},{ProjChnls::b, "div"},{ProjChnls::c0 + 3, "c3"} },
+				{ {BufChnls::u, "velocity"} });
+			//IOFunc::AddLeveledPoissonGridCellCentersToPolyscopePointCloud(holder, { { -1,"type" }, { BufChnls::vor, "vorticity" } }, { { BufChnls::u, "velocity" } });
+			polyscope::show();
+		}
 
-		CalculateVorticityMagnitudeOnLeafs(*grid_ptr, mParams.mFineLevel, mParams.mCoarseLevel, BufChnls::u, BufChnls::u_node, BufChnls::vor);
+		//CalculateVorticityMagnitudeOnLeafs(grid, mParams.mFineLevel, mParams.mCoarseLevel, BufChnls::u, BufChnls::u_node, BufChnls::vor);
+
+		CalculateVelocityAndVorticityMagnitudeOnLeafCellCenters(grid, mParams.mFineLevel, mParams.mCoarseLevel, BufChnls::u, BufChnls::u_node, BufChnls::u_cell, BufChnls::vor);
 
 
 		//{
@@ -262,6 +267,8 @@ public:
 	}
 
 	virtual double CFL_Time(const double cfl) {
+		Warn("entering CFL calc");
+
 		auto& grid = *grid_ptrs.back();
 		//return FLT_MAX;
 		HATileAccessor<Tile> acc = grid.deviceAccessor();
@@ -273,6 +280,8 @@ public:
 		double max_vel = std::max(umax, std::max(vmax, wmax));
 
 		//Info("Calc CFL umax = {}, vmax = {}, wmax = {}, max_vel = {} calc dx {} cfl {} max_vel {} dt {}", umax, vmax, wmax, max_vel, dx, cfl, max_vel, dx * cfl / max_vel);
+
+		Warn("calculated math dt {}", dx * cfl / max_vel);
 
 		return dx * cfl / max_vel;
 	}
@@ -462,15 +471,22 @@ public:
 
 
 		{
-			//show velocity on polyscope before proj
-			polyscope::init();
-			auto holder = grid.getHostTileHolderForLeafs();
-			IOFunc::AddPoissonGridCellCentersToPolyscopePointCloud(holder, { { -1,"type" },
-				{ BufChnls::vor, "vorticity" }, {ProjChnls::x, "pressure"},{ProjChnls::b, "div"},{ProjChnls::c0 + 3, "c3"} },
-				{ {BufChnls::u, "velocity"} });
-			//IOFunc::AddLeveledPoissonGridCellCentersToPolyscopePointCloud(holder, { { -1,"type" }, { BufChnls::vor, "vorticity" } }, { { BufChnls::u, "velocity" } });
-			polyscope::show();
+			Warn("sanitizing after projection");
+			SanitizeChannelCellValues(grid, BufChnls::u);
+			SanitizeChannelCellValues(grid, BufChnls::u + 1);
+			SanitizeChannelCellValues(grid, BufChnls::u + 2);
 		}
+
+		//{
+		//	//show velocity on polyscope before proj
+		//	polyscope::init();
+		//	auto holder = grid.getHostTileHolderForLeafs();
+		//	IOFunc::AddPoissonGridCellCentersToPolyscopePointCloud(holder, { { -1,"type" },
+		//		{ BufChnls::vor, "vorticity" }, {ProjChnls::x, "pressure"},{ProjChnls::b, "div"},{ProjChnls::c0 + 3, "c3"} },
+		//		{ {BufChnls::u, "velocity"} });
+		//	//IOFunc::AddLeveledPoissonGridCellCentersToPolyscopePointCloud(holder, { { -1,"type" }, { BufChnls::vor, "vorticity" } }, { { BufChnls::u, "velocity" } });
+		//	polyscope::show();
+		//}
 	}
 
 	void adaptAndAdvect(DriverMetaData& metadata, std::vector<std::shared_ptr<HADeviceGrid<Tile>>> grid_ptrs) {
@@ -594,9 +610,12 @@ public:
 		CheckCudaError("prepare pointers");
 		Info("prepare pointers");
 
-		FillChannelsInGridWithValue(grid, NODATA, { 6,7,8 });
+		FillChannelsInGridWithValue(grid, 0., { BufChnls::u, BufChnls::u + 1, BufChnls::u + 2 });
 
-		//advect NFM velocity
+		//add solid velocity to velocity field
+		addSolidVelocityWithFractionsToFaces(grid, current_time, dt);
+
+		//add advected NFM velocity to velocity field
 		{
 			auto last_acc = last_grid.deviceAccessor();
 			auto nfm_query_acc = nfm_query_grid_ptr->deviceAccessor();
@@ -648,7 +667,10 @@ public:
 							Vec m1 = MatrixTimesVec(matT.transpose(), m0);
 
 
-							tile(BufChnls::u + axis, l_ijk) = m1[axis];
+							//tile(BufChnls::u + axis, l_ijk) = m1[axis];
+							auto fluid_ratio = -tile(ProjChnls::c0 + axis, l_ijk) / acc.voxelSize(info);
+							tile(BufChnls::u + axis, l_ijk) += fluid_ratio * m1[axis];
+
 
 							{
 								auto g_ijk = acc.localToGlobalCoord(info, l_ijk);
@@ -726,7 +748,10 @@ public:
 
 				nanovdb::Vec3R a = gravity;
 				//a[1] += buoyancy;
-				tile(BufChnls::u + axis, l_ijk) += a[axis] * dt;
+				//tile(BufChnls::u + axis, l_ijk) += a[axis] * dt;
+
+				auto fluid_ratio = -tile(ProjChnls::c0 + axis, l_ijk) / acc.voxelSize(info);
+				tile(BufChnls::u + axis, l_ijk) += fluid_ratio * a[axis] * dt;
 			}
 		}, -1, LEAF, LAUNCH_SUBTREE
 		);
@@ -768,6 +793,8 @@ public:
 
 
 		Info("frame {} dt {}", metadata.current_frame, dt);
+		Assert(dt > 0, "dt should be positive");
+
 
 		//for (int i = 0; i < grid_ptrs.size(); i++) {
 		//	printf("grid %d ptr %p\n", i, grid_ptrs[i].get());
@@ -778,7 +805,6 @@ public:
 		//{
 		//	Info("after advection u l2 {} v l2 {} w l2 {}", NormSync(grid, 2, BufChnls::u, false), NormSync(grid, 2, BufChnls::u + 1, false), NormSync(grid, 2, BufChnls::u + 2, false));
 		//}
-
 
 
 		applyExternalForce(grid, dt);
@@ -796,12 +822,6 @@ public:
 		//projection
 		project(grid);
 
-		{
-			Warn("sanitizing after projection");
-			SanitizeChannelCellValues(grid, BufChnls::u);
-			SanitizeChannelCellValues(grid, BufChnls::u + 1);
-			SanitizeChannelCellValues(grid, BufChnls::u + 2);
-		}
 
 
 
