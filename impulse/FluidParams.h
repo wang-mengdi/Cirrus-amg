@@ -73,6 +73,9 @@ public:
 	nanovdb::Vec3R mGravity;
 	T mesh_motion_inflow = 0.0;
 
+	int mSampleParticleCount;
+	T mRelativeSampleRadius;//k*dx, where dx is the finest level
+
 	//MaskGridAccessor mMaskGridAccessor;
 	//SDFGridAccessor mSDFGridAccessor;
 
@@ -105,7 +108,7 @@ public:
 	//initialization
 	__hostdev__ int initialLevelTarget(const HATileAccessor<Tile>& acc, HATileInfo<Tile>& info) const;
 	//set type, velocity, smoke
-	__hostdev__ void setInitialVelocity(HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const Coord& l_ijk)const;
+	//__hostdev__ void setInitialVelocity(HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const Coord& l_ijk)const;
 	//includes the outer walls of the computational field, but not including the movable mesh inside
 	//it will return a cell type in the computational grid only considering wall, fluid, air
 	__hostdev__ uint8_t wallCellType(const T current_time, const HATileAccessor<Tile>& acc, const int level, const Coord& g_ijk)const;
@@ -113,16 +116,16 @@ public:
 	__hostdev__ void setWallCellType(const T current_time, const HATileAccessor<Tile>& acc, const HATileInfo<Tile>& info, const nanovdb::Coord& l_ijk) const;
 
 	//require coeffs(fluid ratios) are precomputed
-	__hostdev__ void setVelocityBoundaryCondition(const T current_time, const HATileAccessor<Tile>& acc, const HATileInfo<Tile>& info, const nanovdb::Coord& l_ijk) const;
+	//__hostdev__ void setVelocityBoundaryCondition(const T current_time, const HATileAccessor<Tile>& acc, const HATileInfo<Tile>& info, const nanovdb::Coord& l_ijk) const;
 
 
 	//runtime functions
-	__hostdev__ bool isInParticleGenerationRegion(const T current_time, const HATileAccessor<Tile>& acc, const HATileInfo<Tile>& info, const Coord& l_ijk)const {
-		return false;
-	}
-	__device__ uint8_t cellType(const T current_time, const HATileAccessor<Tile>& acc, const HATileInfo<Tile>& info, const nanovdb::Coord& l_ijk, int& boundary_axis, int& boundary_off) const {
-		return DIRICHLET;
-	}
+	//__hostdev__ bool isInParticleGenerationRegion(const T current_time, const HATileAccessor<Tile>& acc, const HATileInfo<Tile>& info, const Coord& l_ijk)const {
+	//	return false;
+	//}
+	//__device__ uint8_t cellType(const T current_time, const HATileAccessor<Tile>& acc, const HATileInfo<Tile>& info, const nanovdb::Coord& l_ijk, int& boundary_axis, int& boundary_off) const {
+	//	return DIRICHLET;
+	//}
 
 	__hostdev__ Eigen::Transform<T, 3, Eigen::Affine> meshToWorldTransform(const T current_time) const;
 

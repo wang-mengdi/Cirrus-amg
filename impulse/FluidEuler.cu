@@ -274,29 +274,29 @@ void MarkOldParticlesAsInvalid(thrust::device_vector<Particle>& particles, const
 	}, particles.size(), 128);
 }
 
-__global__ void CalculateReseedingNumbersOnLeafTiles128Kernel(const T current_time, HATileAccessor<Tile> acc, HATileInfo<Tile>* tile_infos, FluidParams params, const int tmp_channel, const int num_particles_per_cell, int* reseed_number_per_cell) {
-	int bidx = blockIdx.x;
-	auto& info = tile_infos[bidx];
-	auto& tile = info.tile();
-
-	if (!(info.mType & LEAF)) return;
-
-	//int reseed_threshold = num_particles_per_cell / 2;
-	int reseed_threshold = 1;
-
-	for (int i = threadIdx.x; i < Tile::SIZE; i += blockDim.x) {
-		auto l_ijk = acc.localOffsetToCoord(i);
-		int reseed_num = 0;
-
-		if (tile.type(l_ijk) == INTERIOR && params.isInParticleGenerationRegion(current_time, acc, info, l_ijk)) {
-			int num_particles = tile(tmp_channel, l_ijk);
-			if (num_particles < reseed_threshold) {
-				reseed_num = num_particles_per_cell - num_particles;
-			}
-		}
-		reseed_number_per_cell[bidx * Tile::SIZE + i] = reseed_num;
-	}
-}
+//__global__ void CalculateReseedingNumbersOnLeafTiles128Kernel(const T current_time, HATileAccessor<Tile> acc, HATileInfo<Tile>* tile_infos, FluidParams params, const int tmp_channel, const int num_particles_per_cell, int* reseed_number_per_cell) {
+//	int bidx = blockIdx.x;
+//	auto& info = tile_infos[bidx];
+//	auto& tile = info.tile();
+//
+//	if (!(info.mType & LEAF)) return;
+//
+//	//int reseed_threshold = num_particles_per_cell / 2;
+//	int reseed_threshold = 1;
+//
+//	for (int i = threadIdx.x; i < Tile::SIZE; i += blockDim.x) {
+//		auto l_ijk = acc.localOffsetToCoord(i);
+//		int reseed_num = 0;
+//
+//		if (tile.type(l_ijk) == INTERIOR && params.isInParticleGenerationRegion(current_time, acc, info, l_ijk)) {
+//			int num_particles = tile(tmp_channel, l_ijk);
+//			if (num_particles < reseed_threshold) {
+//				reseed_num = num_particles_per_cell - num_particles;
+//			}
+//		}
+//		reseed_number_per_cell[bidx * Tile::SIZE + i] = reseed_num;
+//	}
+//}
 
 //void ReseedParticles(HADeviceGrid<Tile>& grid, const FluidParams& params, const int tmp_channel, const double current_time, const int num_particles_per_cell, thrust::device_vector<Particle>& particles) {
 //	//CPUTimer timer; timer.start();
@@ -364,102 +364,160 @@ __global__ void CalculateReseedingNumbersOnLeafTiles128Kernel(const T current_ti
 //	particles.insert(particles.end(), reseed_particles_h.begin(), reseed_particles_h.end());
 //}
 
-int LockedRefineWithNonBoundaryNeumannCellsOneStep(const T current_time, HADeviceGrid<Tile>& grid, const FluidParams params, const int tmp_channel, bool verbose) {
-	int coarse_level = params.mCoarseLevel;
-	int fine_level = params.mFineLevel;
-	auto levelTarget = [coarse_level, fine_level]__device__(const HATileAccessor<Tile> &acc, const HATileInfo<Tile> &info) ->int {
-		auto& tile = info.tile();
-		if (tile.mIsInterestArea > 0) return fine_level;
-		return coarse_level;
-	};
+//int LockedRefineWithNonBoundaryNeumannCellsOneStep(const T current_time, HADeviceGrid<Tile>& grid, const FluidParams params, const int tmp_channel, bool verbose) {
+//	int coarse_level = params.mCoarseLevel;
+//	int fine_level = params.mFineLevel;
+//	auto levelTarget = [coarse_level, fine_level]__device__(const HATileAccessor<Tile> &acc, const HATileInfo<Tile> &info) ->int {
+//		auto& tile = info.tile();
+//		if (tile.mIsInterestArea > 0) return fine_level;
+//		return coarse_level;
+//	};
+//
+//	
+//	//mark non-boundary neumann cells
+//	grid.launchVoxelFuncOnAllTiles(
+//		[=] __device__(HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const Coord& l_ijk) {
+//		auto& tile = info.tile();
+//		tile(tmp_channel, l_ijk) = 0;
+//		if (tile.type(l_ijk) & NEUMANN) {
+//			int boundary_axis, boundary_off;
+//			if (params.cellType(current_time, acc, info, l_ijk, boundary_axis, boundary_off) == NEUMANN) {
+//				if (boundary_axis == -1) {
+//					tile(tmp_channel, l_ijk) = 1;
+//				}
+//			}
+//			//int boundary_axis, boundary_off;
+//			//if (!FluidParams::queryBoundaryDirection(acc, info, l_ijk, boundary_axis, boundary_off)) {
+//			//	tile(tmp_channel, l_ijk) = 1;
+//			//}
+//		}
+//	}, LEAF, 4
+//	);
+//
+//	{
+//		//Info("all {} tiles", grid.dAllTiles.size());
+//		auto info_ptr = thrust::raw_pointer_cast(grid.dAllTiles.data());
+//		//LockedMarkInterestAreaMinAndMax128Kernel << <grid.dAllTiles.size(), 128 >> > (grid.deviceAccessor(), info_ptr, tmp_channel, -1, LEAF);
+//		MarkRegionOfInterestWithChannelMinAndMax128Kernel << <grid.dAllTiles.size(), 128 >> > (
+//			grid.deviceAccessor(), info_ptr, -1, LEAF,
+//			tmp_channel,
+//			[=]__device__(const T tile_min, const T tile_max) {
+//			return tile_min == 0 && tile_max > 0;
+//		},
+//			false
+//			);
+//	}
+//
+//	//struct LevelTargetFunctor {
+//	//	int coarse_level;
+//	//	int fine_level;
+//
+//	//	__hostdev__
+//	//	int operator()(const HATileAccessor<Tile>& acc, const HATileInfo<Tile>& info) const {
+//	//		const auto& tile = info.tile();
+//	//		return (tile.mIsInterestArea > 0) ? fine_level : coarse_level;
+//	//	}
+//	//};
+//	//LevelTargetFunctor level_target = { coarse_level, fine_level };
+//
+//	//auto refine_cnts = RefineLeafsOneStep(grid, levelTarget, verbose);
+//	auto refine_cnts = grid.refineStep(levelTarget, verbose);
+//	//auto refine_cnts = grid.refineLeafsOneStep<LevelTargetFunctor>(level_target, verbose);
+//	grid.spawnGhostTiles(verbose);
+//	//SpawnGhostTiles(grid, verbose);
+//	if (verbose) Info("Refine {} tiles on each layer", refine_cnts);
+//	auto cnt = std::accumulate(refine_cnts.begin(), refine_cnts.end(), 0);
+//
+//	//Info("locked refine with non-boundary neumann cells one step: {}", cnt);
+//
+//	return cnt;
+//}
 
-	
-	//mark non-boundary neumann cells
-	grid.launchVoxelFuncOnAllTiles(
-		[=] __device__(HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const Coord& l_ijk) {
-		auto& tile = info.tile();
-		tile(tmp_channel, l_ijk) = 0;
-		if (tile.type(l_ijk) & NEUMANN) {
-			int boundary_axis, boundary_off;
-			if (params.cellType(current_time, acc, info, l_ijk, boundary_axis, boundary_off) == NEUMANN) {
-				if (boundary_axis == -1) {
-					tile(tmp_channel, l_ijk) = 1;
-				}
-			}
-			//int boundary_axis, boundary_off;
-			//if (!FluidParams::queryBoundaryDirection(acc, info, l_ijk, boundary_axis, boundary_off)) {
-			//	tile(tmp_channel, l_ijk) = 1;
-			//}
-		}
-	}, LEAF, 4
-	);
+// Sample N marker particles outside the mesh.
+// For each candidate:
+// 1. Randomly pick one mesh vertex.
+// 2. Sample a point uniformly inside a world-space ball of radius r centered at that vertex.
+// 3. Reject the point if it is inside the mesh (sdf < 0).
+// 4. Accept the point if it is outside or exactly on the surface (sdf >= 0).
+thrust::device_vector<MarkerParticle> SampleMarkerParticlesOutsideMesh(const MeshSDFAccel& mesh_sdf, const Eigen::Transform<T, 3, Eigen::Affine>& mesh_to_world, int N,	T r, T birth_time, RandomGenerator& rng, int batch_size)
+{
+	ASSERT(N >= 0);
+	ASSERT(r > T(0));
+	ASSERT(batch_size > 0);
+	ASSERT(mesh_sdf.V_.rows() > 0);
 
-	{
-		//Info("all {} tiles", grid.dAllTiles.size());
-		auto info_ptr = thrust::raw_pointer_cast(grid.dAllTiles.data());
-		//LockedMarkInterestAreaMinAndMax128Kernel << <grid.dAllTiles.size(), 128 >> > (grid.deviceAccessor(), info_ptr, tmp_channel, -1, LEAF);
-		MarkRegionOfInterestWithChannelMinAndMax128Kernel << <grid.dAllTiles.size(), 128 >> > (
-			grid.deviceAccessor(), info_ptr, -1, LEAF,
-			tmp_channel,
-			[=]__device__(const T tile_min, const T tile_max) {
-			return tile_min == 0 && tile_max > 0;
-		},
-			false
-			);
+	if (N == 0) {
+		return thrust::device_vector<MarkerParticle>();
 	}
 
-	//struct LevelTargetFunctor {
-	//	int coarse_level;
-	//	int fine_level;
+	std::vector<MarkerParticle> h_particles;
+	h_particles.reserve(static_cast<size_t>(N));
 
-	//	__hostdev__
-	//	int operator()(const HATileAccessor<Tile>& acc, const HATileInfo<Tile>& info) const {
-	//		const auto& tile = info.tile();
-	//		return (tile.mIsInterestArea > 0) ? fine_level : coarse_level;
-	//	}
-	//};
-	//LevelTargetFunctor level_target = { coarse_level, fine_level };
+	std::vector<Vec> candidates;
+	candidates.reserve(static_cast<size_t>(batch_size));
 
-	//auto refine_cnts = RefineLeafsOneStep(grid, levelTarget, verbose);
-	auto refine_cnts = grid.refineStep(levelTarget, verbose);
-	//auto refine_cnts = grid.refineLeafsOneStep<LevelTargetFunctor>(level_target, verbose);
-	grid.spawnGhostTiles(verbose);
-	//SpawnGhostTiles(grid, verbose);
-	if (verbose) Info("Refine {} tiles on each layer", refine_cnts);
-	auto cnt = std::accumulate(refine_cnts.begin(), refine_cnts.end(), 0);
+	while (static_cast<int>(h_particles.size()) < N) {
+		const int remaining = N - static_cast<int>(h_particles.size());
+		const int curr_batch_size = std::min(batch_size, remaining);
 
-	//Info("locked refine with non-boundary neumann cells one step: {}", cnt);
+		candidates.clear();
+		candidates.resize(static_cast<size_t>(curr_batch_size));
 
-	return cnt;
-}
+		// Generate candidate points in world space
+		for (int k = 0; k < curr_batch_size; ++k) {
+			// Randomly pick one vertex in mesh-local space
+			const int vid = rng.rand(0, static_cast<int>(mesh_sdf.V_.rows()) - 1);
 
-thrust::device_vector<MarkerParticle> VerticesToMarkerParticles(const Eigen::Matrix<T, -1, 3>& V, const Eigen::Transform<T, 3, Eigen::Affine>& mesh_to_world, const T birth_time)
-{
-	// Host-side particle buffer
-	std::vector<MarkerParticle> h_particles(V.rows());
+			Eigen::Matrix<T, 3, 1> p_mesh(
+				mesh_sdf.V_(vid, 0),
+				mesh_sdf.V_(vid, 1),
+				mesh_sdf.V_(vid, 2));
 
-	// Fill particles in parallel on CPU
-	tbb::parallel_for(
-		tbb::blocked_range<size_t>(0, static_cast<size_t>(V.rows())),
-		[&](const tbb::blocked_range<size_t>& r)
-		{
-			for (size_t i = r.begin(); i != r.end(); ++i)
-			{
-				// Position in mesh space
-				Eigen::Matrix<T, 3, 1> p_mesh(
-					V(static_cast<Eigen::Index>(i), 0),
-					V(static_cast<Eigen::Index>(i), 1),
-					V(static_cast<Eigen::Index>(i), 2));
+			// Transform the vertex to world space
+			const Eigen::Matrix<T, 3, 1> center_world = mesh_to_world * p_mesh;
 
-				// Transform to world space
-				Eigen::Matrix<T, 3, 1> p_world = mesh_to_world * p_mesh;
+			// Sample a random direction by rejection from the unit ball
+			Eigen::Matrix<T, 3, 1> dir;
+			while (true) {
+				dir << T(rng.uniform(-1.0, 1.0)),
+					T(rng.uniform(-1.0, 1.0)),
+					T(rng.uniform(-1.0, 1.0));
 
-				// Store world-space position and birth time
-				h_particles[i].pos = Vec(p_world(0), p_world(1), p_world(2));
-				h_particles[i].birth_time = birth_time;
+				const T norm2 = dir.squaredNorm();
+				if (norm2 > T(1e-12) && norm2 <= T(1)) {
+					dir /= std::sqrt(norm2);
+					break;
+				}
 			}
-		});
 
-	// Upload to device
+			// Sample radius with volume-uniform distribution
+			const T u = T(rng.uniform(0.0, 1.0));
+			const T rho = r * std::cbrt(u);
+
+			// Final candidate point in world space
+			const Eigen::Matrix<T, 3, 1> sample_world = center_world + rho * dir;
+			candidates[static_cast<size_t>(k)] = Vec(sample_world(0), sample_world(1), sample_world(2));
+		}
+
+		// Query SDF for the whole batch
+		const std::vector<T> sdf = mesh_sdf.querySDF(candidates, mesh_to_world);
+		ASSERT(static_cast<int>(sdf.size()) == curr_batch_size);
+
+		// Keep points outside the mesh or exactly on the surface
+		for (int k = 0; k < curr_batch_size; ++k) {
+			if (sdf[static_cast<size_t>(k)] < T(0)) {
+				continue;
+			}
+
+			MarkerParticle p;
+			p.pos = candidates[static_cast<size_t>(k)];
+			p.birth_time = birth_time;
+			h_particles.push_back(p);
+		}
+	}
+
+	ASSERT(static_cast<int>(h_particles.size()) >= N);
+	h_particles.resize(static_cast<size_t>(N));
+
 	return thrust::device_vector<MarkerParticle>(h_particles.begin(), h_particles.end());
 }

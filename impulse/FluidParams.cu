@@ -73,6 +73,9 @@ FluidParams::FluidParams(json& j)
 	mGravity = Vec(0, 0, 0);
 	mGravity[2] = Json::Value<double>(j, "gravity", -9.8);
 	mParticleLife = Json::Value<T>(j, "particle_life", FLT_MAX);
+
+	mSampleParticleCount = Json::Value<int>(j, "marker_particles_per_step", 1024);
+	mRelativeSampleRadius = Json::Value<double>(j, "relative_sample_radius", 5.);
 }
 
 
@@ -80,20 +83,20 @@ __hostdev__ int FluidParams::initialLevelTarget(const HATileAccessor<Tile>& acc,
 	return mCoarseLevel;
 }
 
-__hostdev__ void FluidParams::setInitialVelocity(HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const Coord& l_ijk) const {
-	double current_time = 0.0;
-
-	if (mTestCase == MESHMOTION) {
-		Vec initial_vel = Vec(0, 0, mesh_motion_inflow);
-
-		Tile& tile = info.tile();
-		for (int axis : {0, 1, 2}) {
-			tile(BufChnls::u + axis, l_ijk) = initial_vel[axis];
-		}
-		//int boundary_axis, boundary_off;
-		//tile.type(l_ijk) = cellType(current_time, acc, info, l_ijk, boundary_axis, boundary_off);
-	}
-}
+//__hostdev__ void FluidParams::setInitialVelocity(HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const Coord& l_ijk) const {
+//	double current_time = 0.0;
+//
+//	if (mTestCase == MESHMOTION) {
+//		Vec initial_vel = Vec(0, 0, mesh_motion_inflow);
+//
+//		Tile& tile = info.tile();
+//		for (int axis : {0, 1, 2}) {
+//			tile(BufChnls::u + axis, l_ijk) = initial_vel[axis];
+//		}
+//		//int boundary_axis, boundary_off;
+//		//tile.type(l_ijk) = cellType(current_time, acc, info, l_ijk, boundary_axis, boundary_off);
+//	}
+//}
 
 __hostdev__ uint8_t FluidParams::wallCellType(const T current_time, const HATileAccessor<Tile>& acc, const int level, const Coord& g_ijk) const
 {
@@ -154,52 +157,52 @@ __hostdev__ void FluidParams::setWallCellType(const T current_time, const HATile
 	tile.type(l_ijk) = wallCellType(current_time, acc, info, l_ijk);
 }
 
-__hostdev__ void FluidParams::setVelocityBoundaryCondition(const T current_time, const HATileAccessor<Tile>& acc, const HATileInfo<Tile>& info, const nanovdb::Coord& l_ijk) const
-{
-	auto& tile = info.tile();
-	if (mTestCase == MESHMOTION) {
-		Vec vel(0, 0, mesh_motion_inflow);
-
-		for (int axis : {0, 1, 2}) {
-			//first set all faces around NEUMANN to 0
-			//there might be something wrong with a T-junction?
-			{
-				bool to_set = false;
-				IterateFaceNeighborCellTypes(acc, info, l_ijk, axis, [&](const uint8_t type0, const uint8_t type1) {
-					if ((type0 & NEUMANN) || (type1 & NEUMANN) || ((type0 & DIRICHLET) && (type1 & DIRICHLET))) {
-						to_set = true;
-					}
-					});
-
-				//{
-				//	//global coord (122, 142, 208) at level 5
-				//	auto g_ijk = acc.localToGlobalCoord(info, l_ijk);
-				//	if(info.mLevel == 5 && g_ijk == Coord(122, 142, 208)) {
-				//		printf("g_ijk %d %d %d\n", g_ijk[0], g_ijk[1], g_ijk[2]);
-				//		printf("type center %d\n", tile.type(l_ijk));
-				//		printf("to_set: %d\n", to_set);
-				//		IterateFaceNeighborCellTypes(acc, info, l_ijk, axis, [&](const uint8_t type0, const uint8_t type1) {
-				//			printf("type neighbor %d %d\n", type0, type1);
-				//			});
-				//	}
-				//}
-
-				if (to_set) {
-					info.tile()(BufChnls::u + axis, l_ijk) = 0;
-				}
-			}
-
-			//then set the inflow velocity
-			{
-				auto nl_ijk = l_ijk; nl_ijk[axis] -= 1;
-				if ((wallCellType(current_time, acc, info, l_ijk) & NEUMANN) || (wallCellType(current_time, acc, info, nl_ijk) & NEUMANN)) {
-					tile(BufChnls::u + axis, l_ijk) = vel[axis];
-				}
-			}
-		}
-
-	}
-}
+//__hostdev__ void FluidParams::setVelocityBoundaryCondition(const T current_time, const HATileAccessor<Tile>& acc, const HATileInfo<Tile>& info, const nanovdb::Coord& l_ijk) const
+//{
+//	auto& tile = info.tile();
+//	if (mTestCase == MESHMOTION) {
+//		Vec vel(0, 0, mesh_motion_inflow);
+//
+//		for (int axis : {0, 1, 2}) {
+//			//first set all faces around NEUMANN to 0
+//			//there might be something wrong with a T-junction?
+//			{
+//				bool to_set = false;
+//				IterateFaceNeighborCellTypes(acc, info, l_ijk, axis, [&](const uint8_t type0, const uint8_t type1) {
+//					if ((type0 & NEUMANN) || (type1 & NEUMANN) || ((type0 & DIRICHLET) && (type1 & DIRICHLET))) {
+//						to_set = true;
+//					}
+//					});
+//
+//				//{
+//				//	//global coord (122, 142, 208) at level 5
+//				//	auto g_ijk = acc.localToGlobalCoord(info, l_ijk);
+//				//	if(info.mLevel == 5 && g_ijk == Coord(122, 142, 208)) {
+//				//		printf("g_ijk %d %d %d\n", g_ijk[0], g_ijk[1], g_ijk[2]);
+//				//		printf("type center %d\n", tile.type(l_ijk));
+//				//		printf("to_set: %d\n", to_set);
+//				//		IterateFaceNeighborCellTypes(acc, info, l_ijk, axis, [&](const uint8_t type0, const uint8_t type1) {
+//				//			printf("type neighbor %d %d\n", type0, type1);
+//				//			});
+//				//	}
+//				//}
+//
+//				if (to_set) {
+//					info.tile()(BufChnls::u + axis, l_ijk) = 0;
+//				}
+//			}
+//
+//			//then set the inflow velocity
+//			{
+//				auto nl_ijk = l_ijk; nl_ijk[axis] -= 1;
+//				if ((wallCellType(current_time, acc, info, l_ijk) & NEUMANN) || (wallCellType(current_time, acc, info, nl_ijk) & NEUMANN)) {
+//					tile(BufChnls::u + axis, l_ijk) = vel[axis];
+//				}
+//			}
+//		}
+//
+//	}
+//}
 
 
 __hostdev__ Eigen::Transform<T, 3, Eigen::Affine> FluidParams::meshToWorldTransform(const T current_time) const

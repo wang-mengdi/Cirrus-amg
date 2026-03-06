@@ -77,10 +77,10 @@ void MarkOldParticlesAsInvalid(thrust::device_vector<Particle>& particles, const
 
 __device__ Vec SemiLagrangianBackwardPosition(const HATileAccessor<Tile>& acc, const Vec& pos, const T dt, const int u_channel, const int node_u_channel);
 
-int LockedRefineWithNonBoundaryNeumannCellsOneStep(const T current_time, HADeviceGrid<Tile>& grid, const FluidParams params, const int tmp_channel, bool verbose);
+//int LockedRefineWithNonBoundaryNeumannCellsOneStep(const T current_time, HADeviceGrid<Tile>& grid, const FluidParams params, const int tmp_channel, bool verbose);
 //void ReseedParticles(HADeviceGrid<Tile>& grid, const FluidParams& params, const int tmp_channel, const double current_time, const int num_particles_per_cell, thrust::device_vector<Particle>& particles);
 
-thrust::device_vector<MarkerParticle> VerticesToMarkerParticles(const Eigen::Matrix<T, -1, 3>& V, const Eigen::Transform<T, 3, Eigen::Affine>& mesh_to_world, const T birth_time);
+thrust::device_vector<MarkerParticle> SampleMarkerParticlesOutsideMesh(const MeshSDFAccel & mesh_sdf, const Eigen::Transform<T, 3, Eigen::Affine>&mesh_to_world, int N, T r, T birth_time, RandomGenerator & rng, int batch_size = 4096);
 
 void ClearAllNeumannNeighborFaces(HADeviceGrid<Tile>& grid, const int u_channel);
 
@@ -101,6 +101,8 @@ public:
 	FluidParams mParams;
 	std::shared_ptr<MeshSDFAccel> mMeshSDFAccel = nullptr;
 
+
+	RandomGenerator mRamdonGenerator;
 
 	double advance_time = 0;
 	double particle_advection_time = 0;
@@ -214,7 +216,10 @@ public:
 		if(mMeshSDFAccel != nullptr)
 		{
 			//refine using mesh vertices
-			marker_particles_d = VerticesToMarkerParticles(mMeshSDFAccel->V_, mParams.meshToWorldTransform(0.), 0.);
+			//marker_particles_d = VerticesToMarkerParticles(mMeshSDFAccel->V_, mParams.meshToWorldTransform(0.), 0.);
+			auto h_acc = grid.deviceAccessor();
+			auto sample_r = mParams.mRelativeSampleRadius * h_acc.voxelSize(mParams.mFineLevel);
+			auto new_particles_d = SampleMarkerParticlesOutsideMesh(*mMeshSDFAccel, mParams.meshToWorldTransform(0.), mParams.mSampleParticleCount, sample_r, 0., mRamdonGenerator);
 			RefineWithMarkerParticles(grid, marker_particles_d, mParams.mCoarseLevel, mParams.mFineLevel, BufChnls::counter, false);
 		}
 		//SanityCheckTiles(grid);
@@ -567,8 +572,10 @@ public:
 		cudaDeviceSynchronize(); particle_advection_time = timer.stop("Advect particles"); timer.start();
 		CheckCudaError("adv particle");
 
-
-		auto new_particles_d = VerticesToMarkerParticles(mMeshSDFAccel->V_, mParams.meshToWorldTransform(current_time), current_time);
+		auto h_acc = last_grid.deviceAccessor();
+		auto sample_r = mParams.mRelativeSampleRadius * h_acc.voxelSize(mParams.mFineLevel);
+		auto new_particles_d = SampleMarkerParticlesOutsideMesh(*mMeshSDFAccel, mParams.meshToWorldTransform(current_time), mParams.mSampleParticleCount, sample_r, current_time, mRamdonGenerator);
+		//auto new_particles_d = VerticesToMarkerParticles(mMeshSDFAccel->V_, mParams.meshToWorldTransform(current_time), current_time);
 		marker_particles_d.insert(marker_particles_d.end(), new_particles_d.begin(), new_particles_d.end());
 
 		//{
