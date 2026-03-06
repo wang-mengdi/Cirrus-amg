@@ -10,7 +10,8 @@ add_requires("vtk >=9.5.1", {configs = {cuda = true}})
 --add_requires("polyscope =2.3")
 --add_requireconfs("polyscope.glm", {override = true, version = "0.9.9+8"})
 --add_requireconfs("polyscope.imgui", {override = true, version = "1.91.1"})
-add_requires("polyscope >=2.5")
+add_requires("polyscope", {version = "2.5.0"})
+add_requireconfs("polyscope.glm", {override = true, version = "0.9.9+8"})
 
 add_requires("openvdb >=12.1.1")
 
