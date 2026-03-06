@@ -107,6 +107,7 @@ public:
 
 	//initialization
 	__hostdev__ int initialLevelTarget(const HATileAccessor<Tile>& acc, HATileInfo<Tile>& info) const;
+	__device__ void addInitialVelocityToFaceCenter(HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const Coord& l_ijk) const;
 	//set type, velocity, smoke
 	//__hostdev__ void setInitialVelocity(HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const Coord& l_ijk)const;
 	//includes the outer walls of the computational field, but not including the movable mesh inside

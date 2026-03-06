@@ -70,6 +70,26 @@ __hostdev__ int FluidParams::initialLevelTarget(const HATileAccessor<Tile>& acc,
 	return mCoarseLevel;
 }
 
+__device__ void FluidParams::addInitialVelocityToFaceCenter(HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const Coord& l_ijk) const {
+
+	if (mTestCase == MESHMOTION) {
+
+
+		Vec initial_vel = Vec(0, 0, mesh_motion_inflow);
+
+		Tile& tile = info.tile();
+		for (int axis : {0, 1, 2}) {
+			cuda_vec4_t<T> sdfs = FaceCornerSDFs(BufChnls::sdf, acc, info, l_ijk, axis);
+
+			auto alpha = FaceFluidRatio(sdfs);
+
+			tile(BufChnls::u + axis, l_ijk) = alpha * initial_vel[axis];
+		}
+		//int boundary_axis, boundary_off;
+		//tile.type(l_ijk) = cellType(current_time, acc, info, l_ijk, boundary_axis, boundary_off);
+	}
+}
+
 
 __hostdev__ uint8_t FluidParams::wallCellType(const T current_time, const HATileAccessor<Tile>& acc, const int level, const Coord& g_ijk) const
 {
