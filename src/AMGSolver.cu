@@ -106,6 +106,18 @@ void PrepareLaplacianSystemFromLeafAndGhostCellTypesAndFaceCoeffs(HADeviceGrid<T
         }
     }
 
+    //{
+    //    //show type and coeffs on polyscope before proj
+    //    polyscope::init();
+    //    polyscope::removeAllStructures();
+    //    auto holder = grid.getHostTileHolder(LEAF | NONLEAF | GHOST);
+    //    IOFunc::AddLeveledPoissonGridCellCentersToPolyscopePointCloud(holder,
+    //        { { -1,"type" }, {coeff_channel, "c0"}, {coeff_channel + 1, "c1"},{coeff_channel + 2, "c2"}, { coeff_channel + 3, "c3" } },
+    //        {  });
+    //    //IOFunc::AddLeveledPoissonGridCellCentersToPolyscopePointCloud(holder, { { -1,"type" }, { BufChnls::vor, "vorticity" } }, { { BufChnls::u, "velocity" } });
+    //    polyscope::show();
+    //}
+
     //calculate diagonal terms for LEAF/GHOST cells
     //calculate diagonal terms for NONLEAF cells
     //calculate cell types for NONLEAF cells
@@ -128,8 +140,21 @@ void PrepareLaplacianSystemFromLeafAndGhostCellTypesAndFaceCoeffs(HADeviceGrid<T
                     //if (ninfo.mType == GHOST) face_term /= 8;
                     //if (ninfo.mType == GHOST) face_term /= 4;
 
+                    //{
+                    //    auto g_ijk = acc.localToGlobalCoord(info, l_ijk);
+                    //    if (g_ijk == Coord(146, 130, 127) || g_ijk == Coord(145, 125, 127)) {
+                    //        auto ng_ijk = acc.localToGlobalCoord(ninfo, nl_ijk);
+                    //        printf("g_ijk %d %d %d axis %d sgn %d ng_ijk %d %d %d c0 %f c1 %f face_term %f type %d ntype %d\n", g_ijk[0], g_ijk[1], g_ijk[2], axis, sgn, ng_ijk[0], ng_ijk[1], ng_ijk[2], c0, c1, face_term, tile.type(l_ijk), ninfo.tile().type(nl_ijk));
+                    //    }
+
+                    //}
+
                     diag_coeff -= face_term;
                 });
+
+
+                if (info.mType == LEAF) CUDA_ASSERT(diag_coeff > 0, "non-positive diagonal INTERIOR coeff %f at level %d g_ijk %d %d %d tile type %d cell type %d", diag_coeff, info.mLevel, g_ijk[0], g_ijk[1], g_ijk[2], info.mType, tile.type(l_ijk));
+
             }
             tile(coeff_channel + 3, l_ijk) = diag_coeff;
         }

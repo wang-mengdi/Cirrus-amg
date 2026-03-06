@@ -52,7 +52,7 @@ void CalculateSDFOnNodes(HADeviceGrid<Tile>& grid, int node_sdf_channel, const M
 	);
 }
 
-__hostdev__ int CornerInteriorCount(const Tile& tile, const int node_sdf_channel, const Coord& l_ijk, T isovalue = 0) {
+__hostdev__ int CellCornerSDFInsideCount(const Tile& tile, const int node_sdf_channel, const Coord& l_ijk, T isovalue) {
 	int inside_cnt = 0;
 	for (int di : {0, 1})
 	{
@@ -238,7 +238,8 @@ void CreateAMGLaplacianSystemWithSolidCutOnNodeSDF(HADeviceGrid<Tile>& grid, con
 		[=] __device__(HATileAccessor<Tile> &acc, HATileInfo<Tile> &info, const Coord & l_ijk)
 	{
 		auto& tile = info.tile();
-		int interior_cnt = CornerInteriorCount(tile, node_sdf_channel, l_ijk);
+		auto h = acc.voxelSize(info);
+		int interior_cnt = CellCornerSDFInsideCount(tile, node_sdf_channel, l_ijk, h * SDF_REL_EPS);
 		if (interior_cnt == 8) tile.type(l_ijk) = NEUMANN;
 	},
 		LEAF);
@@ -336,7 +337,17 @@ void CreateAMGLaplacianSystemWithSolidCutOnNodeSDF(HADeviceGrid<Tile>& grid, con
 					
 					//coeff = h * FaceFluidRatio(face_corner_sdf.x, face_corner_sdf.y, face_corner_sdf.z, face_corner_sdf.w);
 					coeff = h * FaceFluidRatio(face_corner_sdf);
+
+					{
+						auto g_ijk = acc.localToGlobalCoord(info, l_ijk);
+						if (g_ijk == Coord(147, 130, 127)) {
+							printf("tile %d, local %d %d %d, global %d %d %d, axis %d, sgn %d, coeff %f sdfs %f %f %f %f\n", info.mTileCoord.x(), l_ijk.x(), l_ijk.y(), l_ijk.z(), g_ijk.x(), g_ijk.y(), g_ijk.z(), axis, sgn, coeff, face_corner_sdf.x, face_corner_sdf.y, face_corner_sdf.z, face_corner_sdf.w);
+						}
+					}
 				}
+
+
+
 				tile(coeff_channel + axis, l_ijk) = -coeff;
 			});
 		}

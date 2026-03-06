@@ -7,7 +7,7 @@
         "min_step_frame_fraction": 0.0,
         "output_base_dir": "./output/smokesphere",
         "queue_size": 4,
-        "snapshot_stride": 10
+        "snapshot_stride": 1
     },
     "scene": {
         "coarse_level": 2,

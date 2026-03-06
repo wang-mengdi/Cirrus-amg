@@ -246,7 +246,8 @@ __device__ void FluidParams::addSolidVelocityToFaceCenter(const T current_time, 
 		else {
 			//it either intersects with the mesh sdf or not
 			cuda_vec4_t<T> sdfs = FaceCornerSDFs(BufChnls::sdf, acc, info, l_ijk, axis);
-			if (AllNonNegative<T>(sdfs)) {//does not intersect, no solid part
+			auto h = acc.voxelSize(info.mLevel);
+			if (FaceSDFAllOutside<T>(sdfs, h * SDF_REL_EPS)) {//does not intersect, no solid part
 				solid_ratio = 0;
 				solid_vel = 0;
 			}

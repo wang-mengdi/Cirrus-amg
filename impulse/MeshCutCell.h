@@ -3,11 +3,14 @@
 #include "MeshSDFAccel.h"
 #include "PoissonGrid.h"
 
+constexpr T SDF_REL_EPS = 1e-3;
+
 void CalculateSDFOnNodes(HADeviceGrid<Tile>& grid, int node_sdf_channel, const MeshSDFAccel& mesh_sdf, const uint8_t launch_types, const Eigen::Transform<T, 3, Eigen::Affine>& xform);
 void CreateAMGLaplacianSystemWithSolidCutOnNodeSDF(HADeviceGrid<Tile>& grid, const int node_sdf_channel, const int coeff_channel, const T R_matrix_coeff);
 __device__ cuda_vec4_t<T> FaceCornerSDFs(const int node_sdf_channel, const HATileAccessor<Tile>& acc, const HATileInfo<Tile>& info, const Coord& l_ijk, const int axis);
-template<typename T> __device__  __forceinline__ bool AllNonNegative(const cuda_vec4_t<T>& v)
+__hostdev__ int CellCornerSDFInsideCount(const Tile& tile, const int node_sdf_channel, const Coord& l_ijk, T isovalue);
+template<typename T> __device__  __forceinline__ bool FaceSDFAllOutside(const cuda_vec4_t<T>& v, const T isovalue)
 {
-    return v.x >= 0 && v.y >= 0 && v.z >= 0 && v.w >= 0;
+    return v.x >= isovalue && v.y >= isovalue && v.z >= isovalue && v.w >= isovalue;
 }
 __hostdev__ T FaceFluidRatio(const cuda_vec4_t<T>& corner_phis);

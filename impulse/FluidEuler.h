@@ -43,9 +43,11 @@
 } while (0)
 
 
-extern std::atomic<int> amg_solver_open_visualization;
+extern std::atomic<int> amg_solver_open_visualization; // DEBUG
 
 void SanityCheckCoeffs(HADeviceGrid<Tile>&grid, uint8_t launch_types);
+
+void SanityCheckTiles(HADeviceGrid<Tile>&grid);
 
 void FillChannelsInGridWithValue(HADeviceGrid<Tile>&grid, T value, std::initializer_list<int> channels = {});
 
@@ -215,6 +217,7 @@ public:
 			marker_particles_d = VerticesToMarkerParticles(mMeshSDFAccel->V_, mParams.meshToWorldTransform(0.), 0.);
 			RefineWithMarkerParticles(grid, marker_particles_d, mParams.mCoarseLevel, mParams.mFineLevel, BufChnls::counter, false);
 		}
+		//SanityCheckTiles(grid);
 
 		FillChannelsInGridWithValue(grid, std::numeric_limits<T>::quiet_NaN(), {});
 
@@ -594,11 +597,18 @@ public:
 		CoarsenWithMarkerParticles(grid, marker_particles_d, mParams.mCoarseLevel, mParams.mFineLevel, BufChnls::counter, false);
 		cudaDeviceSynchronize(); adaptive_time = timer.stop("adapt with particles"); timer.start();
 		CheckCudaError("adapt with particles");
+
+		//SanityCheckTiles(grid);
 		
 		buildTypesAndAMGCoeffs(grid, current_time);
 		SanityCheckCoeffs(grid, LEAF | NONLEAF | GHOST);
 
-
+		//for (int level = 0; level < grid.mNumLevels; level++) {
+		//	for (int i = 0; i < grid.hNumTiles[level]; i++) {
+		//		const auto& info = grid.hTileArrays[level][i];
+		//		Info("level {} tile {} coord {} type {} pointer {}", level, i, info.mTileCoord, info.mType, (void*)info.mTilePtr);
+		//	}
+		//}
 
 		Info("time step counter: {}", time_step_counter);
 		auto nfm_query_grid_ptr = grid_ptrs[n - 1 - (time_step_counter % mParams.mFlowMapStride)];

@@ -11,6 +11,7 @@
 #include <limits>
 #include <memory>
 #include <cstdint>
+#include <unordered_set>
 
 void SanityCheckCoeffs(HADeviceGrid<Tile>& grid, uint8_t launch_types) {
 	Info("Performing sanity check on coeffs...");
@@ -25,6 +26,33 @@ void SanityCheckCoeffs(HADeviceGrid<Tile>& grid, uint8_t launch_types) {
 		}
 	}, launch_types
 	);
+}
+
+struct CoordHash {
+	size_t operator()(const nanovdb::Coord& c) const noexcept {
+		size_t h = std::hash<int>()(c[0]);
+		h ^= std::hash<int>()(c[1]) + 0x9e3779b9 + (h << 6) + (h >> 2);
+		h ^= std::hash<int>()(c[2]) + 0x9e3779b9 + (h << 6) + (h >> 2);
+		return h;
+	}
+};
+
+void SanityCheckTiles(HADeviceGrid<Tile>& grid) {
+	//check if there are any repeat tiles in the grid
+	for (int level = 0; level < grid.mNumLevels; level++) {
+		std::unordered_set<Coord, CoordHash> unique_coords;
+		for (int i = 0; i < grid.hNumTiles[level]; i++) {
+			const auto& info = grid.hTileArrays[level][i];
+			ASSERT(info.mTilePtr != nullptr, "Tile {} pointer is null at level {} tile {}", info.mTileCoord, level, i);
+			//the tile coordinate should be unique in the level
+			bool insert_success = unique_coords.insert(info.mTileCoord).second;
+			if (!insert_success) exit(1);
+			ASSERT(insert_success, "Duplicate tile coordinate {} at level {} tile {}", info.mTileCoord, level, i);
+			
+			
+			//if (level == 5) Info("level {} tile {} coord {} type {} pointer {}", level, i, info.mTileCoord, info.mType, (void*)info.mTilePtr);
+		}
+	}
 }
 
 void FillChannelsInGridWithValue(
