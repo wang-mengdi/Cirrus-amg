@@ -40,7 +40,7 @@ void FillChannelsInGridWithValue(HADeviceGrid<Tile>& grid, T value, uint8_t tile
         }
     }
 
-    Warn("Filling {} tiles with value {} mask {}", tile_types, value, mask);
+    Warn("Filling type mask {} tiles with value {} channel mask {}", tile_types, value, mask);
 
     grid.launchTileFunc(
         [=] __device__(HATileAccessor<Tile> acc, const int _, HATileInfo<Tile>&info)

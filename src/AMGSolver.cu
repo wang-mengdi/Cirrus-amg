@@ -747,26 +747,6 @@ void AMGVolumeWeightedDivergenceWithoutCoeffOnLeafs(HADeviceGrid<Tile>& grid, in
         //AccumulateToParentsOneStep(grid, u_channel + axis, u_channel + axis, LEAF, 1. / 8, false, INTERIOR | DIRICHLET | NEUMANN);
     }
     AccumulateFacesToParentsOneStep(grid, u_channel, u_channel, LEAF, 1. / 4, false, INTERIOR | DIRICHLET | NEUMANN);
-
-  //  {
-  //      Warn("before div after accumulation");
-  //      auto holder = grid.getHostTileHolder(LEAF | GHOST);
-  //      int test_axis = 2;
-  //      int test_level = 3;
-		//Coord test_g_ijk(61, 43, 17);
-  //      Info("level {} face {} axis {} velocity {}", test_level, test_g_ijk, test_axis, holder->cellValue(test_level, test_g_ijk, u_channel + test_axis));
-  //      test_g_ijk = Coord(61, 43, 16);
-  //      Info("level {} face {} axis {} velocity {}", test_level, test_g_ijk, test_axis, holder->cellValue(test_level, test_g_ijk, u_channel + test_axis));
-  //      test_g_ijk = Coord(61, 43, 18);
-  //      Info("level {} face {} axis {} velocity {}", test_level, test_g_ijk, test_axis, holder->cellValue(test_level, test_g_ijk, u_channel + test_axis));
-
-  //      test_level = 2;
-  //      test_g_ijk = Coord(30, 21, 7);
-		//Info("level {} face {} axis {} velocity {}", test_level, test_g_ijk, test_axis, holder->cellValue(test_level, test_g_ijk, u_channel + test_axis));
-  //      test_g_ijk = Coord(30, 21, 8);
-  //      Info("level {} face {} axis {} velocity {}", test_level, test_g_ijk, test_axis, holder->cellValue(test_level, test_g_ijk, u_channel + test_axis));
-  //  }
-
     grid.launchVoxelFuncOnAllTiles(
         [=] __device__(HATileAccessor<Tile>&acc, HATileInfo<Tile>&info, const Coord & l_ijk) {
         auto h = acc.voxelSize(info);
@@ -791,18 +771,7 @@ void AMGVolumeWeightedDivergenceWithoutCoeffOnLeafs(HADeviceGrid<Tile>& grid, in
             }
 			//CUDA_ASSERT(isfinite(u1), "u1 %f is not finite at level %d nl_ijk %d %d %d axis %d sgn %d\n", u1, info.mLevel, nl_ijk[0], nl_ijk[1], nl_ijk[2], axis, sgn);
 
-            //basically coeff is -h
-            //sum += (sgn == -1) ? u0 * coeff * h : -u1 * coeff * h;
-
             sum += (sgn == -1) ? -u0 * h * h : u1 * h * h;
-
-     //       {
-     //           auto g_ijk = acc.localToGlobalCoord(info, l_ijk);
-     //           if (info.mLevel==2&&g_ijk == Coord(30,21,7)) {
-					//auto ng_ijk = acc.localToGlobalCoord(ninfo, nl_ijk);
-     //               printf("AMGVolumeWeightedDivergenceWithoutCoeffOnLeafs g_ijk %d %d %d nb empty %d ng_ijk %d %d %d axis %d sgn %d pos inj vel %f pos div sum scaled %f\n", g_ijk[0], g_ijk[1], g_ijk[2], ninfo.empty(), ng_ijk[0], ng_ijk[1], ng_ijk[2], axis, sgn, -((sgn == -1) ? -u0 : u1), -sum / (h * h));
-     //           }
-     //       }
 			
         });
 
@@ -851,13 +820,6 @@ void AMGVolumeWeightedDivergenceOnLeafs(HADeviceGrid<Tile>& grid, int u_channel,
 
             //sum += (sgn == -1) ? -u0 * h * h : u1 * h * h;
 
-    //        {
-    //            //43,13,45
-				//auto g_ijk = acc.composeGlobalCoord(info.mTileCoord, l_ijk);
-    //            if (info.mLevel == 1 && g_ijk == Coord(7,8,10)) {
-    //                printf("g_ijk %d %d %d axis %d sgn %d u0 %f u1 %f term %f sum %f\n", g_ijk[0], g_ijk[1], g_ijk[2], axis, sgn, u0, u1, (sgn == -1) ? u0 * coeff * h : -u1 * coeff * h, sum);
-    //            }
-    //        }
         });
 
         //tile(x_channel, l_ijk) = sum;
