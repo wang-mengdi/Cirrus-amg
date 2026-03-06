@@ -338,12 +338,12 @@ void CreateAMGLaplacianSystemWithSolidCutOnNodeSDF(HADeviceGrid<Tile>& grid, con
 					//coeff = h * FaceFluidRatio(face_corner_sdf.x, face_corner_sdf.y, face_corner_sdf.z, face_corner_sdf.w);
 					coeff = h * FaceFluidRatio(face_corner_sdf);
 
-					{
-						auto g_ijk = acc.localToGlobalCoord(info, l_ijk);
-						if (g_ijk == Coord(147, 130, 127)) {
-							printf("tile %d, local %d %d %d, global %d %d %d, axis %d, sgn %d, coeff %f sdfs %f %f %f %f\n", info.mTileCoord.x(), l_ijk.x(), l_ijk.y(), l_ijk.z(), g_ijk.x(), g_ijk.y(), g_ijk.z(), axis, sgn, coeff, face_corner_sdf.x, face_corner_sdf.y, face_corner_sdf.z, face_corner_sdf.w);
-						}
-					}
+					//{
+					//	auto g_ijk = acc.localToGlobalCoord(info, l_ijk);
+					//	if (g_ijk == Coord(147, 130, 127)) {
+					//		printf("tile %d, local %d %d %d, global %d %d %d, axis %d, sgn %d, coeff %f sdfs %f %f %f %f\n", info.mTileCoord.x(), l_ijk.x(), l_ijk.y(), l_ijk.z(), g_ijk.x(), g_ijk.y(), g_ijk.z(), axis, sgn, coeff, face_corner_sdf.x, face_corner_sdf.y, face_corner_sdf.z, face_corner_sdf.w);
+					//	}
+					//}
 				}
 
 

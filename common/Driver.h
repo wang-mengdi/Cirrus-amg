@@ -38,7 +38,7 @@ namespace DriverFunc {	//will change timer
 		Info("Reading json file {}", json_path.string());
 		json j;
 		std::ifstream json_input(json_path.string());
-		ASSERT(json_input, "Failed to open json file {}", json_path.string());
+		ASSERT(json_input.is_open(), "Failed to open json file {}", json_path.string());
 		json_input >> j;
 		json_input.close();
 		Info("Driver::Initialize_And_Run parse json: \n{}", j.dump(2));
