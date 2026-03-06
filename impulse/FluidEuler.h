@@ -219,8 +219,17 @@ public:
 			//marker_particles_d = VerticesToMarkerParticles(mMeshSDFAccel->V_, mParams.meshToWorldTransform(0.), 0.);
 			auto h_acc = grid.deviceAccessor();
 			auto sample_r = mParams.mRelativeSampleRadius * h_acc.voxelSize(mParams.mFineLevel);
-			auto new_particles_d = SampleMarkerParticlesOutsideMesh(*mMeshSDFAccel, mParams.meshToWorldTransform(0.), mParams.mSampleParticleCount, sample_r, 0., mRamdonGenerator);
+			marker_particles_d = SampleMarkerParticlesOutsideMesh(*mMeshSDFAccel, mParams.meshToWorldTransform(0.), mParams.mSampleParticleCount, sample_r, 0., mRamdonGenerator);
 			RefineWithMarkerParticles(grid, marker_particles_d, mParams.mCoarseLevel, mParams.mFineLevel, BufChnls::counter, false);
+
+
+			//{
+			//	//show velocity on polyscope before proj
+			//	polyscope::init();
+			//	//IOFunc::AddPoissonGridCellCentersToPolyscopePointCloud(holder, { { -1,"type" }, { BufChnls::vor, "vorticity" } }, { { BufChnls::u, "velocity" } });
+			//	IOFunc::AddMarkerParticlesToPolyscope(marker_particles_d, "marker_particles");
+			//	polyscope::show();
+			//}
 		}
 		//SanityCheckTiles(grid);
 
@@ -274,8 +283,9 @@ public:
 		//	//show velocity on polyscope before proj
 		//	polyscope::init();
 		//	auto holder = grid.getHostTileHolderForLeafs();
-		//	//IOFunc::AddPoissonGridCellCentersToPolyscopePointCloud(holder, { { -1,"type" }, { BufChnls::vor, "vorticity" } }, { { BufChnls::u, "velocity" } });
-		//	IOFunc::AddLeveledPoissonGridCellCentersToPolyscopePointCloud(holder, { { -1,"type" }, { BufChnls::vor, "vorticity" } }, { { BufChnls::u, "velocity" } });
+		//	IOFunc::AddPoissonGridCellCentersToPolyscopePointCloud(holder, { { -1,"type" }, { BufChnls::vor, "vorticity" } }, { { BufChnls::u, "velocity" } });
+		//	//IOFunc::AddLeveledPoissonGridCellCentersToPolyscopePointCloud(holder, { { -1,"type" }, { BufChnls::vor, "vorticity" } }, { { BufChnls::u, "velocity" } });
+		//	IOFunc::AddMarkerParticlesToPolyscope(marker_particles_d, "marker_particles");
 		//	polyscope::show();
 		//}
 

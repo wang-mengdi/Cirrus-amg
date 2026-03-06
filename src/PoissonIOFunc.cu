@@ -623,12 +623,12 @@ namespace IOFunc {
                             auto g_ijk = acc.localToGlobalCoord(info, l_ijk);
                             //if (!(g_ijk[0] == 53 && 44 <= g_ijk[1] && g_ijk[2] <= 46)) continue;
                             
-                            {
-                                //if (info.mLevel != 5) continue;
-                                Coord diff = g_ijk - Coord(146,130,127);
-                                if (!(info.mLevel == 5 && abs(diff[0]) + abs(diff[1]) + abs(diff[2]) <= 5)) continue;
-								//Info("entering tile {} type {}", info.mTileCoord, info.mType);
-                            }
+        //                    {
+        //                        //if (info.mLevel != 5) continue;
+        //                        Coord diff = g_ijk - Coord(146,130,127);
+        //                        if (!(info.mLevel == 5 && abs(diff[0]) + abs(diff[1]) + abs(diff[2]) <= 5)) continue;
+								////Info("entering tile {} type {}", info.mTileCoord, info.mType);
+        //                    }
 
 
 

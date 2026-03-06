@@ -519,5 +519,7 @@ thrust::device_vector<MarkerParticle> SampleMarkerParticlesOutsideMesh(const Mes
 	ASSERT(static_cast<int>(h_particles.size()) >= N);
 	h_particles.resize(static_cast<size_t>(N));
 
+	Info("Sampled {} marker particles outside the mesh", N);
+
 	return thrust::device_vector<MarkerParticle>(h_particles.begin(), h_particles.end());
 }

@@ -219,8 +219,8 @@ __hostdev__ Eigen::Transform<T, 3, Eigen::Affine> FluidParams::meshToWorldTransf
 		// t = 1 -> (0.5, 0.5, 0.3)
 		const T x = 0.5;
 		const T y = 0.5;
-		const T z0 = 0.6;// 0.8;
-		const T z1 = 0.4;// 0.3;
+		const T z0 = 0.8;// 0.8;
+		const T z1 = 0.3;// 0.3;
 		const T z = (1 - t) * z0 + t * z1;
 
 		Eigen::Transform<T, 3, Eigen::Affine> transform =
