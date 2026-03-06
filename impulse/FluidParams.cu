@@ -111,10 +111,11 @@ __hostdev__ uint8_t FluidParams::wallCellType(const T current_time, const HATile
 
 		//int boundary_axis, boundary_off;
 		if (QueryBoundaryDirectionN1P1OnCoarseLevel(acc, mCoarseLevel, level, g_ijk, boundary_axis, boundary_off)) {
-			if (boundary_axis == 2 && boundary_off == 1) {
-				is_dirichlet = true;
-			}
-			else is_neumann = true;
+			//if (boundary_axis == 2 && boundary_off == 1) {
+			//	is_dirichlet = true;
+			//}
+			//else is_neumann = true;
+			is_neumann = true;
 		}
 
 		if (is_neumann) return NEUMANN;
@@ -219,8 +220,8 @@ __hostdev__ Eigen::Transform<T, 3, Eigen::Affine> FluidParams::meshToWorldTransf
 		// t = 1 -> (0.5, 0.5, 0.3)
 		const T x = 0.5;
 		const T y = 0.5;
-		const T z0 = 0.8;// 0.8;
-		const T z1 = 0.3;// 0.3;
+		const T z0 = 0.5;// 0.8;
+		const T z1 = 0.5;// 0.3;
 		const T z = (1 - t) * z0 + t * z1;
 
 		Eigen::Transform<T, 3, Eigen::Affine> transform =

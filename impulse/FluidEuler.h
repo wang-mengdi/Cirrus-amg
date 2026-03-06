@@ -189,6 +189,8 @@ public:
 
 		mParams = FluidParams(j);
 
+		if (metadata.first_frame != 0) return;
+
 		//level-resolution:
 		//0:8, 1:16, 2:32, 3:64, 4:128, 5:256, 6:512, 7:1024
 		double h = 1.0 / 8;
@@ -249,7 +251,7 @@ public:
 		//	polyscope::show();
 		//}
 
-		SanityCheckCoeffs(grid, LEAF | NONLEAF | GHOST);
+		//SanityCheckCoeffs(grid, LEAF | NONLEAF | GHOST);
 
 		//the velocity here is the composed velocity, which is weighted fluid + solid
 		//clear velocity variables to 0
@@ -400,11 +402,12 @@ public:
 			AMGVolumeWeightedDivergenceWithoutCoeffOnLeafs(grid, BufChnls::u, ProjChnls::b);
 
 
-
-			//Info("before proj div lensqr: {}", Dot(grid, ProjChnls::b, ProjChnls::b, LEAF));
+			
+			//Info("before proj div pointwise l2 norm: {}", sqrt(Dot(grid, ProjChnls::b, ProjChnls::b, LEAF)));
+			Info("before proj div pt linf: {}", NormSync(grid, -1, ProjChnls::b, false));
 			//Info("before proj div pt l2: {}", NormSync(grid, 2, ProjChnls::b, false));
 			//Info("cpu div pt l2: {}", CellPointRMSNormOnHostTiles(grid.getHostTileHolderForLeafs(), ProjChnls::b, -1, LEAF, 2));
-			//Info("div pt linf: {}", NormSync(grid, -1, ProjChnls::b, false));
+			
 			//Info("cpu div pt linf: {}", CellPointRMSNormOnHostTiles(grid.getHostTileHolderForLeafs(), ProjChnls::b, -1, LEAF, -1));
 
 
@@ -467,7 +470,7 @@ public:
 
 			CPUTimer timer;
 			timer.start();
-			auto [iters, err] = solver.solve(grid, false, 100, 1e-6, 2, 10, 1, mParams.mIsPureNeumann);
+			auto [iters, err] = solver.solve(grid, true, 100, 1e-7, 2, 10, 1, mParams.mIsPureNeumann);
 			cudaDeviceSynchronize();
 			double elapsed = timer.stop("AMGPCG");
 			double total_cells = grid.numTotalTiles() * Tile::SIZE;
@@ -489,7 +492,7 @@ public:
 			//for (int i : {0, 1, 2}) {
 			//	AccumulateToParents(grid, u_channel + i, u_channel + i, -1, LEAF, LAUNCH_SUBTREE, INTERIOR | DIRICHLET, 1.0 / 4.0, true);
 			//}
-			//Info("div pt linf: {}", NormSync(grid, -1, ProjChnls::b, false));
+			Info("after proj div pt linf: {}", NormSync(grid, -1, ProjChnls::b, false));
 			//Info("div pt l2: {}")
 			//Info("after proj div pointwise L2 norm: {}", sqrt(Dot(grid, ProjChnls::b, ProjChnls::b, LEAF)));
 		}
@@ -502,16 +505,28 @@ public:
 		//	SanityCheckChannelCellValues(grid, BufChnls::u + 2);
 		//}
 
-		//{
-		//	//show velocity on polyscope before proj
-		//	polyscope::init();
-		//	auto holder = grid.getHostTileHolderForLeafs();
-		//	IOFunc::AddPoissonGridCellCentersToPolyscopePointCloud(holder, { { -1,"type" },
-		//		{ BufChnls::vor, "vorticity" }, {ProjChnls::x, "pressure"},{ProjChnls::b, "div"},{ProjChnls::c0 + 3, "c3"} },
-		//		{ {BufChnls::u, "velocity"} });
-		//	//IOFunc::AddLeveledPoissonGridCellCentersToPolyscopePointCloud(holder, { { -1,"type" }, { BufChnls::vor, "vorticity" } }, { { BufChnls::u, "velocity" } });
-		//	polyscope::show();
-		//}
+		{
+			auto holder = grid.getHostTileHolder(LEAF);
+
+			Warn("after div");
+			int test_axis = 2;
+			int test_level = 3;
+			Coord test_g_ijk(61, 43, 17);
+			Info("level {} face {} axis {} velocity {}", test_level, test_g_ijk, test_axis, holder->cellValue(test_level, test_g_ijk, BufChnls::u + test_axis));
+			test_g_ijk = Coord(61, 43, 16);
+			Info("level {} face {} axis {} velocity {}", test_level, test_g_ijk, test_axis, holder->cellValue(test_level, test_g_ijk, BufChnls::u + test_axis));
+			test_g_ijk = Coord(61, 43, 18);
+			Info("level {} face {} axis {} velocity {}", test_level, test_g_ijk, test_axis, holder->cellValue(test_level, test_g_ijk, BufChnls::u + test_axis));
+
+
+			polyscope::init();
+			polyscope::removeAllStructures();
+			IOFunc::AddPoissonGridCellCentersToPolyscopePointCloud(holder, { { -1,"type" },
+				{ BufChnls::vor, "vorticity" }, {ProjChnls::x, "pressure"},{ProjChnls::b, "div"},{ProjChnls::c0 + 3, "c3"} },
+				{ {BufChnls::u, "velocity"} });
+			//IOFunc::AddLeveledPoissonGridCellCentersToPolyscopePointCloud(holder, { { -1,"type" }, { BufChnls::vor, "vorticity" } }, { { BufChnls::u, "velocity" } });
+			polyscope::show();
+		}
 	}
 
 	void adaptAndAdvect(DriverMetaData& metadata, std::vector<std::shared_ptr<HADeviceGrid<Tile>>> grid_ptrs) {
@@ -618,7 +633,7 @@ public:
 		//SanityCheckTiles(grid);
 		
 		buildTypesAndAMGCoeffs(grid, current_time);
-		SanityCheckCoeffs(grid, LEAF | NONLEAF | GHOST);
+		//SanityCheckCoeffs(grid, LEAF | NONLEAF | GHOST);
 
 		//for (int level = 0; level < grid.mNumLevels; level++) {
 		//	for (int i = 0; i < grid.hNumTiles[level]; i++) {
@@ -858,6 +873,7 @@ public:
 			amg_solver_open_visualization = 0;
 		}
 
+
 		//projection
 		project(grid);
 
@@ -870,6 +886,7 @@ public:
 		//{
 		//	//show velocity on polyscope before proj
 		//	polyscope::init();
+		//	polyscope::removeAllStructures();
 		//	auto holder = grid.getHostTileHolderForLeafs();
 		//	IOFunc::AddPoissonGridCellCentersToPolyscopePointCloud(holder, { { -1,"type" }, { BufChnls::vor, "vorticity" }, {ProjChnls::x, "pressure"}, { ProjChnls::b, "divergence" } }, { {BufChnls::u, "velocity"} });
 		//	//IOFunc::AddLeveledPoissonGridCellCentersToPolyscopePointCloud(holder, { { -1,"type" }, { BufChnls::vor, "vorticity" } }, { { BufChnls::u, "velocity" } });

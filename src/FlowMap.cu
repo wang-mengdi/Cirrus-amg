@@ -172,6 +172,13 @@ __device__ bool KernelIntpVelocityComponentAndGradientMAC2(const HATileAccessor<
 					auto& ntile = ninfo.tile();
 					auto n_u_i = ntile(u_channel + axis, nl_ijk);
 
+
+					//{
+					//	auto ng_ijk = acc.localToGlobalCoord(ninfo, nl_ijk);
+					//	printf("axis %d accessing level %d ng_ijk %d %d %d n_u_i %f\n", axis, level, ng_ijk[0], ng_ijk[1], ng_ijk[2], n_u_i);
+					//}
+
+
 					T w = wi * wj * wk;
 					Vec dw = Vec(dwi * wj * wk, wi * dwj * wk, wi * wj * dwk);
 
@@ -226,6 +233,8 @@ __device__ bool KernelIntpVelocityMAC2(const HATileAccessor<Tile>& acc, const in
 
 __device__ bool KernelIntpVelocityAndJacobianMAC2(const HATileAccessor<Tile>& acc, const int fine_level, const int coarse_level, const Vec& pos, const int u_channel, Vec& vel, Eigen::Matrix3<T>& jacobian) {
 	for (int i = fine_level; i >= coarse_level; i--) {
+		//printf("flowmap intp pos %f %f %f level %d\n", pos[0], pos[1], pos[2], i);
+
 		if (KernelIntpVelocityAndJacobianMAC2AtGivenLevel(acc, i, pos, u_channel, vel, jacobian)) {
 
 
@@ -846,14 +855,22 @@ void CalculateVelocityAndVorticityMagnitudeOnLeafCellCenters(HADeviceGrid<Tile>&
 		//	return;
 		//}
 		// 
-		//auto g_ijk = acc.localToGlobalCoord(info, l_ijk);
-		//if (!(g_ijk == Coord(127,130,89) && info.mLevel == 5)) return;
+		////{
+
+		//	//DBG
+		//	auto g_ijk = acc.localToGlobalCoord(info, l_ijk);
+		//	//if (!((g_ijk == Coord(2, 26, 36) || g_ijk == Coord(3, 26, 36)) && info.mLevel == 3)) {
+		//	if (!((g_ijk == Coord(2, 26, 36)) && info.mLevel == 3)) {
+		//		tile(vor_channel, l_ijk) = 0;
+		//		return;
+		//	}
+		////}
 
 		auto pos = acc.cellCenter(info, l_ijk);
 		//J[i][j] = du[i]/dx[j]
 		Vec vel;
 		Eigen::Matrix3<T> jacobian;
-		KernelIntpVelocityAndJacobianMAC2(acc, fine_level, coarse_level, pos, face_u_channel, vel, jacobian);
+		KernelIntpVelocityAndJacobianMAC2(acc, info.mLevel, coarse_level, pos, face_u_channel, vel, jacobian);
 		//VelocityJacobian(acc, info, l_ijk, pos, tmp_u_node_channel, h, jacobian);
 		//auto jacobian = VelocityJacobian(acc, pos, tmp_u_node_channel, h);
 
@@ -863,7 +880,10 @@ void CalculateVelocityAndVorticityMagnitudeOnLeafCellCenters(HADeviceGrid<Tile>&
 			jacobian(1, 0) - jacobian(0, 1)
 		);
 
-		tile(vor_channel, l_ijk) = omega.length();
+		tile(vor_channel, l_ijk) = (tile.type(l_ijk) & INTERIOR) ? omega.length() : 0.;
+
+			////DBG
+			//printf("vorticity at level %d coord %d %d %d %f %f %f %f\n", info.mLevel, g_ijk[0], g_ijk[1], g_ijk[2], pos[0], pos[1], pos[2], omega.length());
 
 		{
 			vel = InterpolateFaceValue(acc, pos, face_u_channel, node_u_channel);
