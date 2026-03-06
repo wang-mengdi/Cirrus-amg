@@ -34,10 +34,17 @@ namespace DriverFunc {	//will change timer
 	void Advance(Simulator& simulator, DriverMetaData& meta_data);
 
 	template<class Initializer, class TSimulator>
-	void Initialize_And_Run(json& j, Initializer& scene, TSimulator& simulator) {
+	void Initialize_And_Run(const fs::path& json_path, Initializer& scene, TSimulator& simulator) {
+		Info("Reading json file {}", json_path.string());
+		json j;
+		std::ifstream json_input(json_path.string());
+		ASSERT(json_input, "Failed to open json file {}", json_path.string());
+		json_input >> j;
+		json_input.close();
 		Info("Driver::Initialize_And_Run parse json: \n{}", j.dump(2));
+
 		DriverMetaData meta_data;
-		meta_data.Init(j.at("driver"));
+		meta_data.init(json_path, j.at("driver"));
 		scene.Apply(j, simulator, meta_data);
 		fs::create_directories(meta_data.output_base_dir);
 		//FileFunc::CreateDirectory(meta_data.output_base_dir);

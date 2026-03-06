@@ -12,10 +12,10 @@ double DriverMetaData::Time_At_Frame(int frame) {
 	return frame * time_per_frame;
 }
 
-void DriverMetaData::Init(json& j) {
+void DriverMetaData::init(const fs::path& json_path, json& j) {
 	output_base_dir = Json::Value(j, "output_base_dir", std::string("output"));
 	//base_path = fs::current_path() / fs::path(output_base_dir);
-	base_path = fs::path(output_base_dir);
+    base_path = fs::path(output_base_dir) / json_path.stem();
 
 	fps = Json::Value(j, "fps", 25);
 	cfl = Json::Value(j, "cfl", (double)1.0);

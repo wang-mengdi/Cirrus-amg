@@ -40,7 +40,7 @@ public:
 
 	~DriverMetaData();
 	double Time_At_Frame(int frame);
-	void Init(json& j);
+	void init(const fs::path& json_path, json& j);
 	void Append_Output_Thread(std::shared_ptr<std::thread> thread_ptr);
 
 	//path of an output .vts file at current frame, for example pressure, velocity

@@ -111,7 +111,10 @@ __hostdev__ uint8_t FluidParams::wallCellType(const T current_time, const HATile
 
 		//int boundary_axis, boundary_off;
 		if (QueryBoundaryDirectionN1P1OnCoarseLevel(acc, mCoarseLevel, level, g_ijk, boundary_axis, boundary_off)) {
-			is_neumann = true;
+			if (boundary_axis == 2 && boundary_off == 1) {
+				is_dirichlet = true;
+			}
+			else is_neumann = true;
 		}
 
 		if (is_neumann) return NEUMANN;

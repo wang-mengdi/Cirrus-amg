@@ -14,7 +14,7 @@ public:
 
 
 
-void Run_FluidEuler(json& j) {
+void Run_FluidEuler(const fs::path& json_path) {
 	FluidEuler fluid;
 	FluidEulerInitializer scene;
 	DriverFunc::Initialize_And_Run(j, scene, fluid);

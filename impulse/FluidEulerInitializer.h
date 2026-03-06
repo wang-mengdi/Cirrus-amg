@@ -12,4 +12,4 @@
 #include <sstream>
 
 
-void Run_FluidEuler(json& j);
+void Run_FluidEuler(const fs::path& json_path);
