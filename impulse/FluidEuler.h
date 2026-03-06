@@ -391,7 +391,7 @@ public:
 
 
 
-			Info("before proj div lensqr: {}", Dot(grid, ProjChnls::b, ProjChnls::b, LEAF));
+			//Info("before proj div lensqr: {}", Dot(grid, ProjChnls::b, ProjChnls::b, LEAF));
 			//Info("before proj div pt l2: {}", NormSync(grid, 2, ProjChnls::b, false));
 			//Info("cpu div pt l2: {}", CellPointRMSNormOnHostTiles(grid.getHostTileHolderForLeafs(), ProjChnls::b, -1, LEAF, 2));
 			//Info("div pt linf: {}", NormSync(grid, -1, ProjChnls::b, false));
@@ -457,7 +457,7 @@ public:
 
 			CPUTimer timer;
 			timer.start();
-			auto [iters, err] = solver.solve(grid, true, 100, 1e-6, 2, 10, 1, mParams.mIsPureNeumann);
+			auto [iters, err] = solver.solve(grid, false, 100, 1e-6, 2, 10, 1, mParams.mIsPureNeumann);
 			cudaDeviceSynchronize();
 			double elapsed = timer.stop("AMGPCG");
 			double total_cells = grid.numTotalTiles() * Tile::SIZE;
@@ -465,13 +465,13 @@ public:
 			Info("Total {:.5}M cells, AMGPCG speed {:.5} M cells /s at {} iters", total_cells / (1024.0 * 1024), cells_per_second / (1024.0 * 1024), iters);
 			projection_time = elapsed;
 
-			Info("pressure pt l2: {}", NormSync(grid, 2, ProjChnls::x, false));
+			//Info("pressure pt l2: {}", NormSync(grid, 2, ProjChnls::x, false));
 
 			AMGAddFaceWeightedGradientToFace(grid, -1, LEAF, ProjChnls::x, ProjChnls::c0, BufChnls::u);
 
 			AMGVolumeWeightedDivergenceWithoutCoeffOnLeafs(grid, BufChnls::u, ProjChnls::b);
 
-			Info("inflow: {}", mParams.mesh_motion_inflow);
+			//Info("inflow: {}", mParams.mesh_motion_inflow);
 
 			//applyVelocityBC(grid, metadata.current_time);
 
@@ -481,7 +481,7 @@ public:
 			//}
 			//Info("div pt linf: {}", NormSync(grid, -1, ProjChnls::b, false));
 			//Info("div pt l2: {}")
-			Info("after proj div lensqr: {}", Dot(grid, ProjChnls::b, ProjChnls::b, LEAF));
+			//Info("after proj div pointwise L2 norm: {}", sqrt(Dot(grid, ProjChnls::b, ProjChnls::b, LEAF)));
 		}
 
 
@@ -544,11 +544,11 @@ public:
 		//InterpolateFaceVelocitiesAtAllTiles(last_grid, BufChnls::u, BufChnls::u_node);
 		CheckCudaError("prepare last grid");
 
-		{
-			SanityCheckChannelNodeValues(last_grid, BufChnls::u_node);
-			SanityCheckChannelNodeValues(last_grid, BufChnls::u_node + 1);
-			SanityCheckChannelNodeValues(last_grid, BufChnls::u_node + 2);
-		}
+		//{
+		//	SanityCheckChannelNodeValues(last_grid, BufChnls::u_node);
+		//	SanityCheckChannelNodeValues(last_grid, BufChnls::u_node + 1);
+		//	SanityCheckChannelNodeValues(last_grid, BufChnls::u_node + 2);
+		//}
 
 		//{
 		//	for (int i = 0; i < n; i++) {
@@ -872,12 +872,12 @@ public:
 
 		//FillChannelsInGridWithValue(grid, NODATA, { 0,1,2,3,4,5,9,10,11,12,13,14 });
 
-		{
-			Warn("sanitizing at end of advance");
-			SanityCheckChannelCellValues(grid, BufChnls::u);
-			SanityCheckChannelCellValues(grid, BufChnls::u + 1);
-			SanityCheckChannelCellValues(grid, BufChnls::u + 2);
-		}
+		//{
+		//	Warn("sanitizing at end of advance");
+		//	SanityCheckChannelCellValues(grid, BufChnls::u);
+		//	SanityCheckChannelCellValues(grid, BufChnls::u + 1);
+		//	SanityCheckChannelCellValues(grid, BufChnls::u + 2);
+		//}
 
 		CheckCudaError("Advance");
 		time_step_counter++;
