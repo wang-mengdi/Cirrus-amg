@@ -48,7 +48,7 @@ __device__ void KernelScatterVelocityMAC2(const HATileAccessor<Tile>& acc, const
 void ParticleImpulseToGridMACIntp(HADeviceGrid<Tile>& grid, const thrust::device_vector<Particle>& particles, const int u_channel, const int uw_channel);
 
 
-void ResetParticleImpulse(HADeviceGrid<Tile>& grid, const int u_channel, const int node_u_channel, thrust::device_vector<Particle>& particles_d);
+//void ResetParticleImpulse(HADeviceGrid<Tile>& grid, const int u_channel, const int node_u_channel, thrust::device_vector<Particle>& particles_d);
 //void ResetParticlesGradM(HADeviceGrid<Tile>& grid, const int u_channel, const int node_u_channel, thrust::device_vector<Particle>& particles_d);
 //void AdvectParticlesRK4Forward(HADeviceGrid<Tile>& grid, const int u_channel, const int node_u_channel, const double dt, thrust::device_vector<Particle>& particles_d);
 //void AdvectParticlesAndSingleStepGradMRK4Forward(HADeviceGrid<Tile>& grid, const int u_channel, const int node_u_channel, const double dt, thrust::device_vector<Particle>& particles_d);

@@ -221,80 +221,80 @@ namespace FlowMapTests {
 
 
 
-    void TestParticleAdvectionWithNFMInterpolation(const int grid_case) {
-        double pi = CommonConstants::pi;
+  //  void TestParticleAdvectionWithNFMInterpolation(const int grid_case) {
+  //      double pi = CommonConstants::pi;
 
-        uint32_t scale = 8;
-        float h = 1.0 / scale;
+  //      uint32_t scale = 8;
+  //      float h = 1.0 / scale;
 
-        //0:8, 1:16, 2:32, 3:64, 4:128, 5:256, 6:512, 7:1024
-        HADeviceGrid<Tile> grid(h, { 16,16,16,16,16,16,16,16,16,16 });
+  //      //0:8, 1:16, 2:32, 3:64, 4:128, 5:256, 6:512, 7:1024
+  //      HADeviceGrid<Tile> grid(h, { 16,16,16,16,16,16,16,16,16,16 });
 
-        grid.setTileHost(0, nanovdb::Coord(0, 0, 0), Tile(), LEAF);
-        grid.compressHost();
-        grid.syncHostAndDevice();
-        grid.spawnGhostTiles();
+  //      grid.setTileHost(0, nanovdb::Coord(0, 0, 0), Tile(), LEAF);
+  //      grid.compressHost();
+  //      grid.syncHostAndDevice();
+  //      grid.spawnGhostTiles();
 
-		grid.iterativeRefine([=]__device__(const HATileAccessor<Tile>&acc, HATileInfo<Tile>&info) { return FlowMapTestsLevelTarget(acc, info, grid_case); }, false);
-        grid.launchVoxelFunc(
-            [=] __device__(HATileAccessor<Tile>&acc, HATileInfo<Tile>&info, const Coord & l_ijk) {
-            auto& tile = info.tile();
-            tile.type(l_ijk) = INTERIOR;
-        }, -1, LEAF, LAUNCH_SUBTREE
-        );
-        CalcCellTypesFromLeafs(grid);
+		//grid.iterativeRefine([=]__device__(const HATileAccessor<Tile>&acc, HATileInfo<Tile>&info) { return FlowMapTestsLevelTarget(acc, info, grid_case); }, false);
+  //      grid.launchVoxelFunc(
+  //          [=] __device__(HATileAccessor<Tile>&acc, HATileInfo<Tile>&info, const Coord & l_ijk) {
+  //          auto& tile = info.tile();
+  //          tile.type(l_ijk) = INTERIOR;
+  //      }, -1, LEAF, LAUNCH_SUBTREE
+  //      );
+  //      CalcCellTypesFromLeafs(grid);
 
-        //we use the 3D deformation test from: Unstructured un-split geometrical Volume-of-Fluid methods ¨C A review
+  //      //we use the 3D deformation test from: Unstructured un-split geometrical Volume-of-Fluid methods ¨C A review
 
-        Deformation3D vel_func;
-        auto particles_h = vel_func.sampleParticles(0.0);//time 0
+  //      Deformation3D vel_func;
+  //      auto particles_h = vel_func.sampleParticles(0.0);//time 0
 
-        auto base_dir = fs::current_path() / "data" / fmt::format("particles_nfm_advection_test{}", grid_case);
-        fs::create_directories(base_dir);
-        auto holder = grid.getHostTileHolderForLeafs();
-        IOFunc::OutputTilesAsVTU(holder, base_dir / "tiles.vtu");
+  //      auto base_dir = fs::current_path() / "data" / fmt::format("particles_nfm_advection_test{}", grid_case);
+  //      fs::create_directories(base_dir);
+  //      auto holder = grid.getHostTileHolderForLeafs();
+  //      IOFunc::OutputTilesAsVTU(holder, base_dir / "tiles.vtu");
 
-        int u_channel = 6;
-        int node_u_channel = 0;
+  //      int u_channel = 6;
+  //      int node_u_channel = 0;
 
-        double cfl = 2.0;//max vel=1
-        double dt = h / (1 << grid.mMaxLevel) * cfl;
-        int N = ceil(vel_func.T0 / dt);
-        double t = 0;
-        thrust::device_vector<Particle> particles_d = particles_h;
-        for (int i = 0; i <= N; i++) {
-            Info("frame {}/{}", i, N);
-            grid.launchVoxelFuncOnAllTiles(
-                [=] __device__(HATileAccessor<Tile>&acc, HATileInfo<Tile>&info, const Coord & l_ijk) {
-                auto& tile = info.tile();
-                for (int axis = 0; axis < 3; axis++) {
-                    auto face_ctr = acc.faceCenter(axis, info, l_ijk);
-                    tile(u_channel + axis, l_ijk) = vel_func(face_ctr, t)[axis];
-                }
-            }, LEAF, 4);
+  //      double cfl = 2.0;//max vel=1
+  //      double dt = h / (1 << grid.mMaxLevel) * cfl;
+  //      int N = ceil(vel_func.T0 / dt);
+  //      double t = 0;
+  //      thrust::device_vector<Particle> particles_d = particles_h;
+  //      for (int i = 0; i <= N; i++) {
+  //          Info("frame {}/{}", i, N);
+  //          grid.launchVoxelFuncOnAllTiles(
+  //              [=] __device__(HATileAccessor<Tile>&acc, HATileInfo<Tile>&info, const Coord & l_ijk) {
+  //              auto& tile = info.tile();
+  //              for (int axis = 0; axis < 3; axis++) {
+  //                  auto face_ctr = acc.faceCenter(axis, info, l_ijk);
+  //                  tile(u_channel + axis, l_ijk) = vel_func(face_ctr, t)[axis];
+  //              }
+  //          }, LEAF, 4);
 
-            InterpolateFaceVelocitiesAtAllTiles(grid, u_channel, node_u_channel);
+  //          InterpolateFaceVelocitiesAtAllTiles(grid, u_channel, node_u_channel);
 
-            auto acc = grid.deviceAccessor();
-            auto particles_d_ptr = thrust::raw_pointer_cast(particles_d.data());
-            int fine_level = grid.mMaxLevel;
-            int coarse_level = 0;
+  //          auto acc = grid.deviceAccessor();
+  //          auto particles_d_ptr = thrust::raw_pointer_cast(particles_d.data());
+  //          int fine_level = grid.mMaxLevel;
+  //          int coarse_level = 0;
 
-            LaunchIndexFunc([=]__device__(int idx) {
-                auto& p = particles_d_ptr[idx];
-                RK4ForwardPositionAndT(acc, fine_level, coarse_level, dt, u_channel, node_u_channel, p.pos, p.matT);
+  //          LaunchIndexFunc([=]__device__(int idx) {
+  //              auto& p = particles_d_ptr[idx];
+  //              RK4ForwardPositionAndT(acc, fine_level, coarse_level, dt, u_channel, node_u_channel, p.pos, p.matT);
 
-            }, particles_d.size());
+  //          }, particles_d.size());
 
-            ////IOFunc::Output
-            //auto particles_h_ptr = std::make_shared<thrust::host_vector<Particle>>(particles_d);
-            //IOFunc::OutputParticleSystemAsVTU(particles_h_ptr, base_dir / fmt::format("particles_{:04d}.vtu", i));
+  //          ////IOFunc::Output
+  //          //auto particles_h_ptr = std::make_shared<thrust::host_vector<Particle>>(particles_d);
+  //          //IOFunc::OutputParticleSystemAsVTU(particles_h_ptr, base_dir / fmt::format("particles_{:04d}.vtu", i));
 
 
-            t += dt;
+  //          t += dt;
 
-        }
-    }
+  //      }
+  //  }
 
     double LinfErrorBetweenPointCloud(const thrust::host_vector<Vec>& pc1, const thrust::host_vector<Vec>& pc2) {
         ASSERT(pc1.size() == pc2.size(), "Two point clouds should have the same size.");
@@ -379,153 +379,153 @@ namespace FlowMapTests {
         return pos + c1 * vel1 + c2 * vel2 + c3 * vel3 + c4 * vel4;
     }
 
-    void TestFlowMapAdvection(const std::string grid_name, const int min_level, const int max_level) {
-        Info("TestFlowMapAdvection on grid {}, min level {} max level {}", grid_name, min_level, max_level);
-        int test_flowmap_stride = 5; // x dt
+  //  void TestFlowMapAdvection(const std::string grid_name, const int min_level, const int max_level) {
+  //      Info("TestFlowMapAdvection on grid {}, min level {} max level {}", grid_name, min_level, max_level);
+  //      int test_flowmap_stride = 5; // x dt
 
-        std::vector<std::shared_ptr<HADeviceGrid<Tile>>> grid_ptrs;
-        std::vector<double> time_steps;
+  //      std::vector<std::shared_ptr<HADeviceGrid<Tile>>> grid_ptrs;
+  //      std::vector<double> time_steps;
 
-        float h = 1.0 / Tile::DIM;
-        for (int i = 0; i <= test_flowmap_stride; i++) {
-            //0:8, 1:16, 2:32, 3:64, 4:128, 5:256, 6:512, 7:1024
-            auto ptr = CreateTestGrid(grid_name, min_level, max_level);
-            grid_ptrs.push_back(ptr);
-        }
-        thrust::host_vector<HATileAccessor<Tile>> accs_h;
-        for (int i = 0; i <= test_flowmap_stride; i++) {
-            accs_h.push_back(grid_ptrs[i]->deviceAccessor());
-        }
-        thrust::device_vector<HATileAccessor<Tile>> accs_d = accs_h;
-        auto accs_d_ptr = thrust::raw_pointer_cast(accs_d.data());
+  //      float h = 1.0 / Tile::DIM;
+  //      for (int i = 0; i <= test_flowmap_stride; i++) {
+  //          //0:8, 1:16, 2:32, 3:64, 4:128, 5:256, 6:512, 7:1024
+  //          auto ptr = CreateTestGrid(grid_name, min_level, max_level);
+  //          grid_ptrs.push_back(ptr);
+  //      }
+  //      thrust::host_vector<HATileAccessor<Tile>> accs_h;
+  //      for (int i = 0; i <= test_flowmap_stride; i++) {
+  //          accs_h.push_back(grid_ptrs[i]->deviceAccessor());
+  //      }
+  //      thrust::device_vector<HATileAccessor<Tile>> accs_d = accs_h;
+  //      auto accs_d_ptr = thrust::raw_pointer_cast(accs_d.data());
 
-        Deformation3D vel_func;
+  //      Deformation3D vel_func;
 
-        double cfl = 1.0;//max vel=1
-        double dt = 1.0 / 1024 * cfl;
-        //double dt = h / (1 << (grid_ptrs[0]->mMaxLevel)) * cfl;
-        //double dt = h / (1 << 4) * cfl;//assume that finest level is 4
-        int u_channel = 6;
-        int node_u_channel = 0;
+  //      double cfl = 1.0;//max vel=1
+  //      double dt = 1.0 / 1024 * cfl;
+  //      //double dt = h / (1 << (grid_ptrs[0]->mMaxLevel)) * cfl;
+  //      //double dt = h / (1 << 4) * cfl;//assume that finest level is 4
+  //      int u_channel = 6;
+  //      int node_u_channel = 0;
 
-        //fill velocity fields
-        for (int i = 0; i <= test_flowmap_stride; i++) {
-            double time = i * dt;
+  //      //fill velocity fields
+  //      for (int i = 0; i <= test_flowmap_stride; i++) {
+  //          double time = i * dt;
 
-            auto& grid = *grid_ptrs[i];
-            grid.launchVoxelFunc(
-                [=] __device__(HATileAccessor<Tile>&acc, HATileInfo<Tile>&info, const Coord & l_ijk) {
-                auto& tile = info.tile();
-                for (int axis = 0; axis < 3; axis++) {
-                    auto face_ctr = acc.faceCenter(axis, info, l_ijk);
-                    tile(u_channel + axis, l_ijk) = vel_func(face_ctr, time)[axis];
-                }
-            }, -1, LEAF, LAUNCH_SUBTREE
-            );
-			InterpolateFaceVelocitiesAtAllTiles(grid, u_channel, node_u_channel);
+  //          auto& grid = *grid_ptrs[i];
+  //          grid.launchVoxelFunc(
+  //              [=] __device__(HATileAccessor<Tile>&acc, HATileInfo<Tile>&info, const Coord & l_ijk) {
+  //              auto& tile = info.tile();
+  //              for (int axis = 0; axis < 3; axis++) {
+  //                  auto face_ctr = acc.faceCenter(axis, info, l_ijk);
+  //                  tile(u_channel + axis, l_ijk) = vel_func(face_ctr, time)[axis];
+  //              }
+  //          }, -1, LEAF, LAUNCH_SUBTREE
+  //          );
+		//	InterpolateFaceVelocitiesAtAllTiles(grid, u_channel, node_u_channel);
 
-            time_steps.push_back(dt);
-        }
+  //          time_steps.push_back(dt);
+  //      }
 
-        auto rk4_phi_analytical = [=]__hostdev__(Vec pos, int step_begin, int step_end) {
-            for (int i = step_begin; i < step_end; i++) {
-                pos = RK4ForwardAdvectWithAnalyticalVelocity(vel_func, pos, i * dt, dt);
-            }
-            return pos;
-        };
-        auto rk4_psi_analytical = [=]__hostdev__(Vec pos, int step_end, int step_begin) {
-            for (int i = step_end; i > step_begin; i--) {
-                pos = RK4ForwardAdvectWithAnalyticalVelocity(vel_func, pos, i * dt, -dt);
-            }
-            return pos;
-        };
-
-
-        RandomGenerator rng;
-        //thrust::host_vector<Vec> points(100000);
-        thrust::host_vector<Vec> points(1*1024*1024);
-        //double lo = 1.0 / 16, hi = 1 - lo;
-        //double lo = 1.0 / 8, hi = 1 - lo;
-		double lo = 0.0, hi = 1.0;
-		//double lo = 2.0 / 8 / (1 << min_level), hi = 1 - lo;
-        for (auto& p : points) {
-            p = Vec(rng.uniform(lo, hi), rng.uniform(lo, hi), rng.uniform(lo, hi));
-        }
-        //points[0] = Vec(0.37287432, 0.2518963, 0.7224257);
-        //points.resize(1);
-
-        //points[0] = points[867923];
-        //points[0] = Vec(0.4559023, 0.2541084, 0.74300975);
-        //points.resize(1);
-
-        thrust::device_vector<Vec> points_d = points;
+  //      auto rk4_phi_analytical = [=]__hostdev__(Vec pos, int step_begin, int step_end) {
+  //          for (int i = step_begin; i < step_end; i++) {
+  //              pos = RK4ForwardAdvectWithAnalyticalVelocity(vel_func, pos, i * dt, dt);
+  //          }
+  //          return pos;
+  //      };
+  //      auto rk4_psi_analytical = [=]__hostdev__(Vec pos, int step_end, int step_begin) {
+  //          for (int i = step_end; i > step_begin; i--) {
+  //              pos = RK4ForwardAdvectWithAnalyticalVelocity(vel_func, pos, i * dt, -dt);
+  //          }
+  //          return pos;
+  //      };
 
 
-        {
-            //test if F@T=I
-            thrust::host_vector<Vec> psi_analytical(points.size());
-            thrust::host_vector<Vec> phi_of_psi_analytical(points.size());
-            tbb::parallel_for(0, static_cast<int>(points.size()), [&](int i) {
-                psi_analytical[i] = rk4_psi_analytical(points[i], test_flowmap_stride, 0);
-                phi_of_psi_analytical[i] = rk4_phi_analytical(psi_analytical[i], 0, test_flowmap_stride);
-                }
-            );
+  //      RandomGenerator rng;
+  //      //thrust::host_vector<Vec> points(100000);
+  //      thrust::host_vector<Vec> points(1*1024*1024);
+  //      //double lo = 1.0 / 16, hi = 1 - lo;
+  //      //double lo = 1.0 / 8, hi = 1 - lo;
+		//double lo = 0.0, hi = 1.0;
+		////double lo = 2.0 / 8 / (1 << min_level), hi = 1 - lo;
+  //      for (auto& p : points) {
+  //          p = Vec(rng.uniform(lo, hi), rng.uniform(lo, hi), rng.uniform(lo, hi));
+  //      }
+  //      //points[0] = Vec(0.37287432, 0.2518963, 0.7224257);
+  //      //points.resize(1);
 
-            thrust::device_vector<Vec> psi_flowmap_d = points_d;
-            thrust::device_vector<Vec> phi_of_psi_flowmap_d = points_d;
+  //      //points[0] = points[867923];
+  //      //points[0] = Vec(0.4559023, 0.2541084, 0.74300975);
+  //      //points.resize(1);
 
-            //F_forward is F
-            //T_forward is T
-            //F_back should be T
-            //T_back should be F
-            thrust::device_vector<Eigen::Matrix3<T>> F_flowmap_back_d(points.size());
-            thrust::device_vector<Eigen::Matrix3<T>> T_flowmap_forward_d(points.size());
-
-            int fine_level = grid_ptrs[0]->mMaxLevel;
-            int coarse_level = 0;
-            auto points_d_ptr = thrust::raw_pointer_cast(points_d.data());
-			auto psi_flowmap_d_ptr = thrust::raw_pointer_cast(psi_flowmap_d.data());
-            auto phi_of_psi_flowmap_d_ptr = thrust::raw_pointer_cast(phi_of_psi_flowmap_d.data());
-            auto F_flowmap_back_d_ptr = thrust::raw_pointer_cast(F_flowmap_back_d.data());
-            auto T_flowmap_forward_d_ptr = thrust::raw_pointer_cast(T_flowmap_forward_d.data());
-            LaunchIndexFunc([=]__device__(int i) {
-                bool success = true;
-                Vec psi = points_d_ptr[i]; Eigen::Matrix3<T> F_back = Eigen::Matrix3<T>::Identity();
-
-                HATileInfo<Tile> info; Coord l_ijk; Vec frac;
-                accs_d_ptr[test_flowmap_stride - 1].findLeafVoxelAndFrac(psi, info, l_ijk, frac);
-                if (info.empty()) return;
-                int reference_level = info.mLevel;
-
-                for (int i = test_flowmap_stride - 1; i >= 0; i--) {
-                    success = success && RK4ForwardPositionAndF(accs_d_ptr[i], fine_level, coarse_level, -dt, u_channel, node_u_channel, psi, F_back);
-                }
-                F_flowmap_back_d_ptr[i] = F_back;
-				psi_flowmap_d_ptr[i] = psi;
-
-                Vec phi1 = psi; Eigen::Matrix3<T> T_forward = Eigen::Matrix3<T>::Identity();
-                for (int i = 0; i < test_flowmap_stride; i++) {
-                    success = success && RK4ForwardPositionAndT(accs_d_ptr[i], fine_level, coarse_level, dt, u_channel, node_u_channel, phi1, T_forward);
-                }
-                phi_of_psi_flowmap_d_ptr[i] = phi1;
-                T_flowmap_forward_d_ptr[i] = T_forward;
-
-                if (!success) {
-                    phi_of_psi_flowmap_d_ptr[i] = Vec(NODATA, NODATA, NODATA);
-					F_flowmap_back_d_ptr[i] = Eigen::Matrix3<T>::Zero();
-					T_flowmap_forward_d_ptr[i] = Eigen::Matrix3<T>::Zero();
-				}
-
-            }, points.size(), 128
-                );
+  //      thrust::device_vector<Vec> points_d = points;
 
 
-            Info("Test flowmap advection on {} points", points.size());
-            Info("Linf error between analytical phi(psi) and original points: {:.3e}", LinfErrorBetweenPointCloud(phi_of_psi_analytical, points));
-            Info("Linf error between flowmap advected phi(psi) and original points: {:.3e}", LinfErrorBetweenPointCloud(phi_of_psi_flowmap_d, points));
-            Info("Linf error between T_forward and F_back: {:.3e}", LinfErrorBetweenMatrixForbenius2(T_flowmap_forward_d, F_flowmap_back_d));
-            fmt::print("\n");
-        }
-    }
+  //      {
+  //          //test if F@T=I
+  //          thrust::host_vector<Vec> psi_analytical(points.size());
+  //          thrust::host_vector<Vec> phi_of_psi_analytical(points.size());
+  //          tbb::parallel_for(0, static_cast<int>(points.size()), [&](int i) {
+  //              psi_analytical[i] = rk4_psi_analytical(points[i], test_flowmap_stride, 0);
+  //              phi_of_psi_analytical[i] = rk4_phi_analytical(psi_analytical[i], 0, test_flowmap_stride);
+  //              }
+  //          );
+
+  //          thrust::device_vector<Vec> psi_flowmap_d = points_d;
+  //          thrust::device_vector<Vec> phi_of_psi_flowmap_d = points_d;
+
+  //          //F_forward is F
+  //          //T_forward is T
+  //          //F_back should be T
+  //          //T_back should be F
+  //          thrust::device_vector<Eigen::Matrix3<T>> F_flowmap_back_d(points.size());
+  //          thrust::device_vector<Eigen::Matrix3<T>> T_flowmap_forward_d(points.size());
+
+  //          int fine_level = grid_ptrs[0]->mMaxLevel;
+  //          int coarse_level = 0;
+  //          auto points_d_ptr = thrust::raw_pointer_cast(points_d.data());
+		//	auto psi_flowmap_d_ptr = thrust::raw_pointer_cast(psi_flowmap_d.data());
+  //          auto phi_of_psi_flowmap_d_ptr = thrust::raw_pointer_cast(phi_of_psi_flowmap_d.data());
+  //          auto F_flowmap_back_d_ptr = thrust::raw_pointer_cast(F_flowmap_back_d.data());
+  //          auto T_flowmap_forward_d_ptr = thrust::raw_pointer_cast(T_flowmap_forward_d.data());
+  //          LaunchIndexFunc([=]__device__(int i) {
+  //              bool success = true;
+  //              Vec psi = points_d_ptr[i]; Eigen::Matrix3<T> F_back = Eigen::Matrix3<T>::Identity();
+
+  //              HATileInfo<Tile> info; Coord l_ijk; Vec frac;
+  //              accs_d_ptr[test_flowmap_stride - 1].findLeafVoxelAndFrac(psi, info, l_ijk, frac);
+  //              if (info.empty()) return;
+  //              int reference_level = info.mLevel;
+
+  //              for (int i = test_flowmap_stride - 1; i >= 0; i--) {
+  //                  success = success && RK4ForwardPositionAndF(accs_d_ptr[i], fine_level, coarse_level, -dt, u_channel, node_u_channel, psi, F_back);
+  //              }
+  //              F_flowmap_back_d_ptr[i] = F_back;
+		//		psi_flowmap_d_ptr[i] = psi;
+
+  //              Vec phi1 = psi; Eigen::Matrix3<T> T_forward = Eigen::Matrix3<T>::Identity();
+  //              for (int i = 0; i < test_flowmap_stride; i++) {
+  //                  success = success && RK4ForwardPositionAndT(accs_d_ptr[i], fine_level, coarse_level, dt, u_channel, node_u_channel, phi1, T_forward);
+  //              }
+  //              phi_of_psi_flowmap_d_ptr[i] = phi1;
+  //              T_flowmap_forward_d_ptr[i] = T_forward;
+
+  //              if (!success) {
+  //                  phi_of_psi_flowmap_d_ptr[i] = Vec(NODATA, NODATA, NODATA);
+		//			F_flowmap_back_d_ptr[i] = Eigen::Matrix3<T>::Zero();
+		//			T_flowmap_forward_d_ptr[i] = Eigen::Matrix3<T>::Zero();
+		//		}
+
+  //          }, points.size(), 128
+  //              );
+
+
+  //          Info("Test flowmap advection on {} points", points.size());
+  //          Info("Linf error between analytical phi(psi) and original points: {:.3e}", LinfErrorBetweenPointCloud(phi_of_psi_analytical, points));
+  //          Info("Linf error between flowmap advected phi(psi) and original points: {:.3e}", LinfErrorBetweenPointCloud(phi_of_psi_flowmap_d, points));
+  //          Info("Linf error between T_forward and F_back: {:.3e}", LinfErrorBetweenMatrixForbenius2(T_flowmap_forward_d, F_flowmap_back_d));
+  //          fmt::print("\n");
+  //      }
+  //  }
     
 }

@@ -459,22 +459,22 @@ __hostdev__ Vec MatrixTimesVec(const Eigen::Matrix3<T>& A, const Vec& b) {
 	);
 }
 
-void InterpolateFaceVelocitiesAtAllTiles(HADeviceGrid<Tile>& grid, const int face_u_channel, const int leaf_node_u_channel)
-{
-
-	CalcLeafNodeValuesFromFaceCenters(grid, face_u_channel, leaf_node_u_channel);
-
-	grid.launchVoxelFuncOnAllTiles(
-		[=] __device__(HATileAccessor<Tile>&acc, HATileInfo<Tile>&info, const Coord & l_ijk) {
-		auto& tile = info.tile();
-		for (int axis : {0, 1, 2}) {
-			auto fpos = acc.faceCenter(axis, info, l_ijk);
-			auto vel = InterpolateFaceValue(acc, fpos, face_u_channel, leaf_node_u_channel);
-			tile(face_u_channel + axis, l_ijk) = vel[axis];
-		}
-	}, NONLEAF | GHOST, 4
-	);
-}
+//void InterpolateFaceVelocitiesAtAllTiles(HADeviceGrid<Tile>& grid, const int face_u_channel, const int leaf_node_u_channel)
+//{
+//
+//	CalcLeafNodeValuesFromFaceCenters(grid, face_u_channel, leaf_node_u_channel);
+//
+//	grid.launchVoxelFuncOnAllTiles(
+//		[=] __device__(HATileAccessor<Tile>&acc, HATileInfo<Tile>&info, const Coord & l_ijk) {
+//		auto& tile = info.tile();
+//		for (int axis : {0, 1, 2}) {
+//			auto fpos = acc.faceCenter(axis, info, l_ijk);
+//			auto vel = InterpolateFaceValue(acc, fpos, face_u_channel, leaf_node_u_channel);
+//			tile(face_u_channel + axis, l_ijk) = vel[axis];
+//		}
+//	}, NONLEAF | GHOST, 4
+//	);
+//}
 
 __device__ bool RK4ForwardPosition(const HATileAccessor<Tile>& acc, const int fine_level, const int coarse_level, const T dt, const int u_channel, Vec& phi) {
 	Vec u1;
@@ -515,7 +515,7 @@ __device__ bool RK4ForwardPosition(const HATileAccessor<Tile>& acc, const int fi
 //	F = F + dt * dFdt2;
 //}
 
-__device__ bool RK4ForwardPositionAndF(const HATileAccessor<Tile>& acc, const int fine_level, const int coarse_level, const T dt, const int u_channel, const int node_u_channel, Vec& phi, Eigen::Matrix3<T>& F) {
+__device__ bool RK4ForwardPositionAndF(const HATileAccessor<Tile>& acc, const int fine_level, const int coarse_level, const T dt, const int u_channel, Vec& phi, Eigen::Matrix3<T>& F) {
 	bool success = true;
 
 	Vec u1; Eigen::Matrix3<T> gradu1;
@@ -661,7 +661,7 @@ __device__ bool RK4ForwardPositionAndF(const HATileAccessor<Tile>& acc, const in
 //	matT = matT + dt * dTdt2;
 //}
 
-__device__ bool RK4ForwardPositionAndT(const HATileAccessor<Tile>& acc, const int fine_level, const int coarse_level, const T dt, const int u_channel, const int node_u_channel, Vec& phi, Eigen::Matrix3<T>& matT) {
+__device__ bool RK4ForwardPositionAndT(const HATileAccessor<Tile>& acc, const int fine_level, const int coarse_level, const T dt, const int u_channel, Vec& phi, Eigen::Matrix3<T>& matT) {
 	bool success = true;
 
 	Vec u1; Eigen::Matrix3<T> gradu1;
@@ -714,7 +714,7 @@ __device__ bool RK4ForwardPositionAndT(const HATileAccessor<Tile>& acc, const in
 }
 
 
-__device__ bool RK4ForwardPositionAndTAtGivenLevel(const HATileAccessor<Tile>& acc, const int level, const T dt, const int u_channel, const int node_u_channel, Vec& phi, Eigen::Matrix3<T>& matT) {
+__device__ bool RK4ForwardPositionAndTAtGivenLevel(const HATileAccessor<Tile>& acc, const int level, const T dt, const int u_channel, Vec& phi, Eigen::Matrix3<T>& matT) {
 	Vec u1; Eigen::Matrix3<T> gradu1;
 	if (!KernelIntpVelocityAndJacobianMAC2AtGivenLevel(acc, level, phi, u_channel, u1, gradu1)) return false;
 
@@ -748,11 +748,11 @@ __device__ bool RK4ForwardPositionAndTAtGivenLevel(const HATileAccessor<Tile>& a
 	return true;
 }
 
-__device__ void NFMBackMarchPsiAndT(const HATileAccessor<Tile>* accs_d_ptr, const int fine_level, const int coarse_level, const double* time_steps_d_ptr, const int u_channel, const int node_u_channel, const int start_step, const int end_step, Vec& psi, Eigen::Matrix3<T>& matT) {
+__device__ void NFMBackMarchPsiAndT(const HATileAccessor<Tile>* accs_d_ptr, const int fine_level, const int coarse_level, const double* time_steps_d_ptr, const int u_channel, const int start_step, const int end_step, Vec& psi, Eigen::Matrix3<T>& matT) {
 	matT = Eigen::Matrix3<T>::Identity();
 	for (int i = end_step - 1; i >= start_step; i--) {
 		const auto& acc = accs_d_ptr[i];
-		RK4ForwardPositionAndF(acc, fine_level, coarse_level, -time_steps_d_ptr[i], u_channel, node_u_channel, psi, matT);
+		RK4ForwardPositionAndF(acc, fine_level, coarse_level, -time_steps_d_ptr[i], u_channel, psi, matT);
 
 		// iterate over 3*3 and ASSERT matT elements are finite
 		for (int ii = 0; ii < 3; ii++) {
@@ -764,64 +764,67 @@ __device__ void NFMBackMarchPsiAndT(const HATileAccessor<Tile>* accs_d_ptr, cons
 	}
 }
 
-__device__ void NFMBackQueryImpulseAndT(const HATileAccessor<Tile>* accs_d_ptr, const int fine_level, const int coarse_level, const double* time_steps_d_ptr, const int u_channel, const int node_u_channel, const int start_step, const int end_step, Vec& psi, Vec& impulse, Eigen::Matrix3<T>& matT) {
-	matT = Eigen::Matrix3<T>::Identity();
-	for (int i = end_step - 1; i >= start_step; i--) {
-		const auto& acc = accs_d_ptr[i];
-		RK4ForwardPositionAndF(acc, fine_level, coarse_level, -time_steps_d_ptr[i], u_channel, node_u_channel, psi, matT);
-	}
+//__device__ void NFMBackQueryImpulseAndT(const HATileAccessor<Tile>* accs_d_ptr, const int fine_level, const int coarse_level, const double* time_steps_d_ptr, const int u_channel, const int node_u_channel, const int start_step, const int end_step, Vec& psi, Vec& impulse, Eigen::Matrix3<T>& matT) {
+//	matT = Eigen::Matrix3<T>::Identity();
+//	for (int i = end_step - 1; i >= start_step; i--) {
+//		const auto& acc = accs_d_ptr[i];
+//		RK4ForwardPositionAndF(acc, fine_level, coarse_level, -time_steps_d_ptr[i], u_channel, node_u_channel, psi, matT);
+//	}
+//
+//	impulse = InterpolateFaceValue(accs_d_ptr[start_step], psi, u_channel, node_u_channel);
+//}
 
-	impulse = InterpolateFaceValue(accs_d_ptr[start_step], psi, u_channel, node_u_channel);
-}
+//void CalculateVorticityMagnitudeOnLeafs(HADeviceGrid<Tile>& grid, const int fine_level, const int coarse_level, const int u_channel, const int tmp_u_node_channel, const int vor_channel) {
+//	////prepare u node
+//	//for (int axis : {0, 1, 2}) {
+//	//    PropagateToChildren(grid, Tile::u_channel + axis, Tile::u_channel + axis, -1, GHOST, LAUNCH_SUBTREE, INTERIOR | DIRICHLET | NEUMANN);
+//	//}
+//	//CalcLeafNodeValuesFromFaceCenters(grid, Tile::u_channel, tmp_u_node_channel);
+//	InterpolateFaceVelocitiesAtAllTiles(grid, u_channel, tmp_u_node_channel);
+//
+//	grid.launchVoxelFuncOnAllTiles(
+//		[=] __device__(HATileAccessor<Tile>&acc, HATileInfo<Tile>&info, const Coord & l_ijk) {
+//		auto& tile = info.tile();
+//		auto h = acc.voxelSize(info);
+//		//if (!tile.isInterior(l_ijk)) {
+//		//	tile(vor_channel, l_ijk) = 0;
+//		//	return;
+//		//}
+//		// 
+//		//auto g_ijk = acc.localToGlobalCoord(info, l_ijk);
+//		//if (!(g_ijk == Coord(127,130,89) && info.mLevel == 5)) return;
+//
+//		auto pos = acc.cellCenter(info, l_ijk);
+//		//J[i][j] = du[i]/dx[j]
+//		Vec vel;
+//		Eigen::Matrix3<T> jacobian;
+//		KernelIntpVelocityAndJacobianMAC2(acc, fine_level, coarse_level, pos, u_channel, vel, jacobian);
+//		//VelocityJacobian(acc, info, l_ijk, pos, tmp_u_node_channel, h, jacobian);
+//		//auto jacobian = VelocityJacobian(acc, pos, tmp_u_node_channel, h);
+//
+//		Vec omega(
+//			jacobian(2, 1) - jacobian(1, 2),
+//			jacobian(0, 2) - jacobian(2, 0),
+//			jacobian(1, 0) - jacobian(0, 1)
+//		);
+//
+//		tile(vor_channel, l_ijk) = omega.length();
+//
+//		//printf("vorticity at level %d coord %d %d %d %f %f %f %f\n", info.mLevel, g_ijk[0], g_ijk[1], g_ijk[2], pos[0], pos[1], pos[2], tile(vor_channel, l_ijk));
+//	}, LEAF, 8
+//	);
+//}
 
-void CalculateVorticityMagnitudeOnLeafs(HADeviceGrid<Tile>& grid, const int fine_level, const int coarse_level, const int u_channel, const int tmp_u_node_channel, const int vor_channel) {
+void CalculateVelocityAndVorticityMagnitudeOnLeafCellCenters(HADeviceGrid<Tile>& grid, const int fine_level, const int coarse_level, const int face_u_channel, const int cell_u_channel, const int vor_channel) {
 	////prepare u node
 	//for (int axis : {0, 1, 2}) {
 	//    PropagateToChildren(grid, Tile::u_channel + axis, Tile::u_channel + axis, -1, GHOST, LAUNCH_SUBTREE, INTERIOR | DIRICHLET | NEUMANN);
 	//}
 	//CalcLeafNodeValuesFromFaceCenters(grid, Tile::u_channel, tmp_u_node_channel);
-	InterpolateFaceVelocitiesAtAllTiles(grid, u_channel, tmp_u_node_channel);
-
-	grid.launchVoxelFuncOnAllTiles(
-		[=] __device__(HATileAccessor<Tile>&acc, HATileInfo<Tile>&info, const Coord & l_ijk) {
-		auto& tile = info.tile();
-		auto h = acc.voxelSize(info);
-		//if (!tile.isInterior(l_ijk)) {
-		//	tile(vor_channel, l_ijk) = 0;
-		//	return;
-		//}
-		// 
-		//auto g_ijk = acc.localToGlobalCoord(info, l_ijk);
-		//if (!(g_ijk == Coord(127,130,89) && info.mLevel == 5)) return;
-
-		auto pos = acc.cellCenter(info, l_ijk);
-		//J[i][j] = du[i]/dx[j]
-		Vec vel;
-		Eigen::Matrix3<T> jacobian;
-		KernelIntpVelocityAndJacobianMAC2(acc, fine_level, coarse_level, pos, u_channel, vel, jacobian);
-		//VelocityJacobian(acc, info, l_ijk, pos, tmp_u_node_channel, h, jacobian);
-		//auto jacobian = VelocityJacobian(acc, pos, tmp_u_node_channel, h);
-
-		Vec omega(
-			jacobian(2, 1) - jacobian(1, 2),
-			jacobian(0, 2) - jacobian(2, 0),
-			jacobian(1, 0) - jacobian(0, 1)
-		);
-
-		tile(vor_channel, l_ijk) = omega.length();
-
-		//printf("vorticity at level %d coord %d %d %d %f %f %f %f\n", info.mLevel, g_ijk[0], g_ijk[1], g_ijk[2], pos[0], pos[1], pos[2], tile(vor_channel, l_ijk));
-	}, LEAF, 8
-	);
-}
-
-void CalculateVelocityAndVorticityMagnitudeOnLeafCellCenters(HADeviceGrid<Tile>& grid, const int fine_level, const int coarse_level, const int face_u_channel, const int node_u_channel, const int cell_u_channel, const int vor_channel) {
-	////prepare u node
-	//for (int axis : {0, 1, 2}) {
-	//    PropagateToChildren(grid, Tile::u_channel + axis, Tile::u_channel + axis, -1, GHOST, LAUNCH_SUBTREE, INTERIOR | DIRICHLET | NEUMANN);
-	//}
-	//CalcLeafNodeValuesFromFaceCenters(grid, Tile::u_channel, tmp_u_node_channel);
-	InterpolateFaceVelocitiesAtAllTiles(grid, face_u_channel, node_u_channel);
+	//InterpolateFaceVelocitiesAtAllTiles(grid, face_u_channel, node_u_channel);
+	 
+	// acquire interpolated, conservative velocities at NONLEAF cells
+	AccumulateFacesFromLeafsToAllNonLeafs(grid, face_u_channel, 1. / 4, false, INTERIOR | DIRICHLET | NEUMANN);
 
 	//Warn("CalculateVelocityAndVorticityMagnitudeOnLeafCellCenters after InterpolateFaceVelocitiesAtAllTiles");
 	//{
@@ -886,7 +889,8 @@ void CalculateVelocityAndVorticityMagnitudeOnLeafCellCenters(HADeviceGrid<Tile>&
 			//printf("vorticity at level %d coord %d %d %d %f %f %f %f\n", info.mLevel, g_ijk[0], g_ijk[1], g_ijk[2], pos[0], pos[1], pos[2], omega.length());
 
 		{
-			vel = InterpolateFaceValue(acc, pos, face_u_channel, node_u_channel);
+			//vel = InterpolateFaceValue(acc, pos, face_u_channel, node_u_channel);
+			//KernelIntpVelocityAndJacobianMAC2
 
 			{
 				auto g_ijk = acc.localToGlobalCoord(info, l_ijk);

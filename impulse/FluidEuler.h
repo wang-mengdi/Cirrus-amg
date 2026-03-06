@@ -49,7 +49,6 @@ void SanityCheckCoeffs(HADeviceGrid<Tile>&grid, uint8_t launch_types);
 
 void SanityCheckTiles(HADeviceGrid<Tile>&grid);
 
-void FillChannelsInGridWithValue(HADeviceGrid<Tile>&grid, T value, std::initializer_list<int> channels = {});
 
 double CellPointRMSNormOnHostTiles(
 	const std::shared_ptr<HAHostTileHolder<Tile>>&holder_ptr,
@@ -235,7 +234,7 @@ public:
 		}
 		//SanityCheckTiles(grid);
 
-		FillChannelsInGridWithValue(grid, std::numeric_limits<T>::quiet_NaN(), {});
+		FillChannelsInGridWithValue(grid, std::numeric_limits<T>::quiet_NaN(), LEAF | NONLEAF | GHOST, {});
 
 		buildTypesAndAMGCoeffs(grid, 0.);
 
@@ -255,7 +254,7 @@ public:
 
 		//the velocity here is the composed velocity, which is weighted fluid + solid
 		//clear velocity variables to 0
-		FillChannelsInGridWithValue(grid, 0.0, { BufChnls::u, BufChnls::u + 1, BufChnls::u + 2 });
+		FillChannelsInGridWithValue(grid, 0.0, LEAF | NONLEAF | GHOST, { BufChnls::u, BufChnls::u + 1, BufChnls::u + 2 });
 		//add solid velocity to velocity variables
 		//Info("metadata current time: {} dt: {} fps {}", metadata.current_time, metadata.dt, metadata.fps);
 		addSolidVelocityWithFractionsToFaces(grid, 0.0, 1e-3);//t=0, dt=1e-3
@@ -278,7 +277,7 @@ public:
 
 		//CalculateVorticityMagnitudeOnLeafs(grid, mParams.mFineLevel, mParams.mCoarseLevel, BufChnls::u, BufChnls::u_node, BufChnls::vor);
 
-		CalculateVelocityAndVorticityMagnitudeOnLeafCellCenters(grid, mParams.mFineLevel, mParams.mCoarseLevel, BufChnls::u, BufChnls::u_node, BufChnls::u_cell, BufChnls::vor);
+		CalculateVelocityAndVorticityMagnitudeOnLeafCellCenters(grid, mParams.mFineLevel, mParams.mCoarseLevel, BufChnls::u, BufChnls::u_cell, BufChnls::vor);
 
 
 		//{
@@ -505,28 +504,28 @@ public:
 		//	SanityCheckChannelCellValues(grid, BufChnls::u + 2);
 		//}
 
-		{
-			auto holder = grid.getHostTileHolder(LEAF);
+		//{
+		//	auto holder = grid.getHostTileHolder(LEAF);
 
-			Warn("after div");
-			int test_axis = 2;
-			int test_level = 3;
-			Coord test_g_ijk(61, 43, 17);
-			Info("level {} face {} axis {} velocity {}", test_level, test_g_ijk, test_axis, holder->cellValue(test_level, test_g_ijk, BufChnls::u + test_axis));
-			test_g_ijk = Coord(61, 43, 16);
-			Info("level {} face {} axis {} velocity {}", test_level, test_g_ijk, test_axis, holder->cellValue(test_level, test_g_ijk, BufChnls::u + test_axis));
-			test_g_ijk = Coord(61, 43, 18);
-			Info("level {} face {} axis {} velocity {}", test_level, test_g_ijk, test_axis, holder->cellValue(test_level, test_g_ijk, BufChnls::u + test_axis));
+		//	Warn("after div");
+		//	int test_axis = 2;
+		//	int test_level = 3;
+		//	Coord test_g_ijk(61, 43, 17);
+		//	Info("level {} face {} axis {} velocity {}", test_level, test_g_ijk, test_axis, holder->cellValue(test_level, test_g_ijk, BufChnls::u + test_axis));
+		//	test_g_ijk = Coord(61, 43, 16);
+		//	Info("level {} face {} axis {} velocity {}", test_level, test_g_ijk, test_axis, holder->cellValue(test_level, test_g_ijk, BufChnls::u + test_axis));
+		//	test_g_ijk = Coord(61, 43, 18);
+		//	Info("level {} face {} axis {} velocity {}", test_level, test_g_ijk, test_axis, holder->cellValue(test_level, test_g_ijk, BufChnls::u + test_axis));
 
 
-			polyscope::init();
-			polyscope::removeAllStructures();
-			IOFunc::AddPoissonGridCellCentersToPolyscopePointCloud(holder, { { -1,"type" },
-				{ BufChnls::vor, "vorticity" }, {ProjChnls::x, "pressure"},{ProjChnls::b, "div"},{ProjChnls::c0 + 3, "c3"} },
-				{ {BufChnls::u, "velocity"} });
-			//IOFunc::AddLeveledPoissonGridCellCentersToPolyscopePointCloud(holder, { { -1,"type" }, { BufChnls::vor, "vorticity" } }, { { BufChnls::u, "velocity" } });
-			polyscope::show();
-		}
+		//	polyscope::init();
+		//	polyscope::removeAllStructures();
+		//	IOFunc::AddPoissonGridCellCentersToPolyscopePointCloud(holder, { { -1,"type" },
+		//		{ BufChnls::vor, "vorticity" }, {ProjChnls::x, "pressure"},{ProjChnls::b, "div"},{ProjChnls::c0 + 3, "c3"} },
+		//		{ {BufChnls::u, "velocity"} });
+		//	//IOFunc::AddLeveledPoissonGridCellCentersToPolyscopePointCloud(holder, { { -1,"type" }, { BufChnls::vor, "vorticity" } }, { { BufChnls::u, "velocity" } });
+		//	polyscope::show();
+		//}
 	}
 
 	void adaptAndAdvect(DriverMetaData& metadata, std::vector<std::shared_ptr<HADeviceGrid<Tile>>> grid_ptrs) {
@@ -659,7 +658,7 @@ public:
 		CheckCudaError("prepare pointers");
 		Info("prepare pointers");
 
-		FillChannelsInGridWithValue(grid, 0., { BufChnls::u, BufChnls::u + 1, BufChnls::u + 2 });
+		FillChannelsInGridWithValue(grid, 0., LEAF | NONLEAF | GHOST, { BufChnls::u, BufChnls::u + 1, BufChnls::u + 2 });
 
 		//add solid velocity to velocity field
 		addSolidVelocityWithFractionsToFaces(grid, current_time, dt);
@@ -691,14 +690,20 @@ public:
 						{
 							//Vec psi = acc.faceCenter(axis, info, l_ijk);
 							Vec psi = NFMErodedAdvectionPoint(axis, acc, info, l_ijk);
-							Vec m0; Eigen::Matrix3<T> matT;
+							Eigen::Matrix3<T> matT;
 
 							//NFMBackQueryImpulseAndT(accs_d_ptr, info.mLevel, coarse_level, time_steps_d_ptr, u_channel, last_u_node_channel, nfm_start_idx, n, psi, m0, matT);
 							//NFMBackQueryImpulseAndT(accs_d_ptr, fine_level, coarse_level, time_steps_d_ptr, u_channel, last_u_node_channel, nfm_start_idx, n, psi, m0, matT);
 
-							NFMBackMarchPsiAndT(accs_d_ptr, fine_level, coarse_level, time_steps_d_ptr, BufChnls::u, BufChnls::u_node, nfm_start_idx, n, psi, matT);
+							NFMBackMarchPsiAndT(accs_d_ptr, fine_level, coarse_level, time_steps_d_ptr, BufChnls::u, nfm_start_idx, n, psi, matT);
 							//m0 = InterpolateFaceValue(accs_d_ptr[nfm_start_idx], psi, u_channel, last_u_node_channel);
-							m0 = InterpolateFaceValue(nfm_query_acc, psi, BufChnls::u, BufChnls::u_node);
+							//m0 = InterpolateFaceValue(nfm_query_acc, psi, BufChnls::u, BufChnls::u_node);
+
+
+							Vec m0; Eigen::Matrix3<T> _T;
+							KernelIntpVelocityAndJacobianMAC2(acc, fine_level, coarse_level, psi, BufChnls::u, m0, _T);
+
+
 							{
 								auto g_ijk = acc.localToGlobalCoord(info, l_ijk);
 								CUDA_ASSERT(isfinite(m0[0]), "level %d global %d %d %d axis %d m00 value %f", info.mLevel, g_ijk[0], g_ijk[1], g_ijk[2], axis, m0[0]);
@@ -881,7 +886,7 @@ public:
 
 
 
-		CalculateVelocityAndVorticityMagnitudeOnLeafCellCenters(grid, mParams.mFineLevel, mParams.mCoarseLevel, BufChnls::u, BufChnls::u_node, BufChnls::u_cell, BufChnls::vor);
+		CalculateVelocityAndVorticityMagnitudeOnLeafCellCenters(grid, mParams.mFineLevel, mParams.mCoarseLevel, BufChnls::u, BufChnls::u_cell, BufChnls::vor);
 
 		//{
 		//	//show velocity on polyscope before proj
@@ -897,7 +902,6 @@ public:
 		//	Info("end of advance u l2 {} v l2 {} w l2 {}", NormSync(grid, 2, BufChnls::u, false), NormSync(grid, 2, BufChnls::u + 1, false), NormSync(grid, 2, BufChnls::u + 2, false));
 		//}
 
-		//FillChannelsInGridWithValue(grid, NODATA, { 0,1,2,3,4,5,9,10,11,12,13,14 });
 
 		//{
 		//	Warn("sanitizing at end of advance");

@@ -22,6 +22,44 @@ void SanityCheckChannelNodeValues(HADeviceGrid<Tile>& grid, const int channel, u
     );
 }
 
+void FillChannelsInGridWithValue(HADeviceGrid<Tile>& grid, T value, uint8_t tile_types, std::initializer_list<int> channels)
+{
+    static_assert(Tile::num_channels <= 32, "channel mask only supports <=32 channels");
+
+    uint32_t mask = 0;
+
+    if (channels.size() == 0) {
+        mask = (Tile::num_channels == 32)
+            ? 0xffffffffu
+            : ((1u << Tile::num_channels) - 1u);
+    }
+    else {
+        for (int c : channels) {
+            ASSERT(c >= 0 && c < Tile::num_channels, "channel index out of range");
+            mask |= (1u << c);
+        }
+    }
+
+    Warn("Filling {} tiles with value {} mask {}", tile_types, value, mask);
+
+    grid.launchTileFunc(
+        [=] __device__(HATileAccessor<Tile> acc, const int _, HATileInfo<Tile>&info)
+    {
+        if (!(info.mType & tile_types)) return;
+        auto& tile = info.tile();
+
+        for (int c = 0; c < Tile::num_channels; c++) {
+
+            if (!(mask & (1u << c)))
+                continue;
+
+            for (int i = 0; i < Tile::CHNLSIZE; i++) {
+                tile.mData[c][i] = value;
+            }
+        }
+
+    }, -1, LEAF | GHOST | NONLEAF, LAUNCH_SUBTREE);
+}
 
 
 template<class T>
@@ -481,7 +519,7 @@ __global__ void AccumulateFacesToParentsOneStepKernel(HATileAccessor<Tile> acc, 
 }
 
 void AccumulateFacesToParentsOneStep(HADeviceGrid<Tile>& grid, const int fine_u_channel, const int coarse_u_channel, const uint8_t fine_tile_types, const Tile::T coeff, bool additive, uint8_t cell_types) {
-	ASSERT(fine_tile_types == GHOST || fine_tile_types == LEAF, "AccumulateFacesToParentsOneStep can only be carried out on GHOST or LEAF tiles");
+    ASSERT(!(fine_tile_types & GHOST), "AccumulateFacesToParentsOneStep cannot be carried on fine GHOST cells");
 
 	int num_fine_tiles = grid.dAllTiles.size();
     AccumulateFacesToParentsOneStepKernel << <num_fine_tiles, 128 >> > (
@@ -489,6 +527,20 @@ void AccumulateFacesToParentsOneStep(HADeviceGrid<Tile>& grid, const int fine_u_
         thrust::raw_pointer_cast(grid.dAllTiles.data()),
         -1, fine_tile_types, fine_u_channel, coarse_u_channel, coeff, additive, cell_types
         );
+}
+
+void AccumulateFacesFromLeafsToAllNonLeafs(HADeviceGrid<Tile>& grid, const int u_channel, const Tile::T coeff, bool additive, uint8_t cell_types) {
+    FillChannelsInGridWithValue(grid, std::numeric_limits<T>::quiet_NaN(), GHOST, { u_channel, u_channel + 1, u_channel + 2 });
+
+    for (int level = grid.mMaxLevel; level > 0; level--) {
+        int num_fine_tiles = grid.hNumTiles[level];
+        if (num_fine_tiles == 0) continue;
+        AccumulateFacesToParentsOneStepKernel << <num_fine_tiles, 128 >> > (
+            grid.deviceAccessor(),
+            thrust::raw_pointer_cast(grid.dTileArrays[level].data()),
+            -1, LEAF|NONLEAF, u_channel, u_channel, coeff, additive, cell_types
+            );
+    }
 }
 
 void AccumulateToParents(HADeviceGrid<Tile>& grid, const int fine_channel, const int coarse_channel, const int target_subtree_level, const uint8_t target_tile_types, const LaunchMode mode, const uint8_t cell_types, const Tile::T coeff, bool additive) {
@@ -707,76 +759,76 @@ void CalcLeafNodeValuesFromCellCenters(HADeviceGrid<Tile>& grid, const int cell_
 }
 
 
-__device__ Tile::T InterpolateCellValue(const HATileAccessor<Tile>& acc, const Vec& pos, const int cell_channel, const int node_channel) {
-    HATileInfo<Tile> info; Coord l_ijk; Vec frac;
-    if (acc.findLeafVoxelAndFrac(pos, info, l_ijk, frac)) {
-        auto b_ijk = info.mTileCoord;
-        auto g_ijk = acc.localToGlobalCoord(info, l_ijk);
-        // printf("find leaf at level %d g_ijk %d %d %d l_ijk %d %d %d frac %f %f %f\n", info.mLevel, g_ijk[0], g_ijk[1], g_ijk[2], l_ijk[0], l_ijk[1], l_ijk[2], frac[0], frac[1], frac[2]);
-        auto& tile = info.tile();
-        return tile.cellInterp(cell_channel, node_channel, l_ijk, frac);
-    }
-    else return Tile::BACKGROUND_VALUE;
-}
-
-__device__ Vec InterpolateFaceValue(const HATileAccessor<Tile>& acc, const Vec& pos, const int u_channel, const int node_u_channel) {
-    Vec vec;
-
-    HATileInfo<Tile> info; Coord l_ijk; Vec frac;
-    if (acc.findLeafVoxelAndFrac(pos, info, l_ijk, frac)) {
-        for (int axis = 0; axis < 3; axis++) {
-            //printf("=============================interpolate face value at axis=%d\n", axis);
-            //printf("pos: %f %f %f\n", pos[0], pos[1], pos[2]);
-            //printf("pos0*12800: %lf\n", pos[0] * 12800);
-
-            Tile::T v0, v1, w;
-            w = frac[axis];
-            if (!info.empty()) {
-                //for (int i = 0; i < 3; i++) {
-                //    CUDA_ASSERT(frac[i] >= 0 && frac[i] <= 1, "invalid frac %f at axis %d", frac[i], axis);
-                //}
-
-                auto& tile = info.tile();
-                v0 = tile.faceInterp(u_channel, node_u_channel, axis, l_ijk, frac);
-
-                {
-					auto g_ijk = acc.localToGlobalCoord(info, l_ijk);
-                    CUDA_ASSERT(isfinite(v0), "v0=%f at level %d g_ijk %d %d %d l_ijk %d %d %d frac %f %f %f pos %f %f %f axis %d u_channel %d node_u_channel %d", v0, info.mLevel, g_ijk[0], g_ijk[1], g_ijk[2], l_ijk[0], l_ijk[1], l_ijk[2], frac[0], frac[1], frac[2], pos[0], pos[1], pos[2], axis, u_channel, node_u_channel);
-                }
-            }
-            else v0 = 0;
-
-
-            auto cell_ctr = acc.cellCenter(info, l_ijk);
-            auto n_pos = pos; n_pos[axis] += (1 - frac[axis]) * acc.voxelSize(info);
-
-            HATileInfo<Tile> n_info; Coord n_l_ijk; Vec n_frac;
-            acc.findPlusFaceIntpVoxel(pos, axis, info, l_ijk, n_info, n_l_ijk, n_frac);
-            if (!n_info.empty()) {
-     //           for (int i = 0; i < 3; i++) {
-					//CUDA_ASSERT(n_frac[i] >= 0 && n_frac[i] <= 1, "invalid n_frac %f at axis %d", n_frac[i], axis);
-     //           }
-
-                auto& n_tile = n_info.tile();
-
-                v1 = n_tile.faceInterp(u_channel, node_u_channel, axis, n_l_ijk, n_frac);
-                //CUDA_ASSERT(isfinite(v1), "v1=%f", v1);
-
-            }
-            else v1 = 0;
-
-
-            //printf("calc: %lf\n", (1 - w) * 10300 + w * 10350);
-            vec[axis] = (1 - w) * v0 + w * v1;
-
-            CUDA_ASSERT(isfinite(vec[axis]), "vec[%d]=%f", axis, vec[axis]);
-        }
-        return vec;
-    }
-    else {
-        return Vec(0, 0, 0);
-    }
-}
+//__device__ Tile::T InterpolateCellValue(const HATileAccessor<Tile>& acc, const Vec& pos, const int cell_channel, const int node_channel) {
+//    HATileInfo<Tile> info; Coord l_ijk; Vec frac;
+//    if (acc.findLeafVoxelAndFrac(pos, info, l_ijk, frac)) {
+//        auto b_ijk = info.mTileCoord;
+//        auto g_ijk = acc.localToGlobalCoord(info, l_ijk);
+//        // printf("find leaf at level %d g_ijk %d %d %d l_ijk %d %d %d frac %f %f %f\n", info.mLevel, g_ijk[0], g_ijk[1], g_ijk[2], l_ijk[0], l_ijk[1], l_ijk[2], frac[0], frac[1], frac[2]);
+//        auto& tile = info.tile();
+//        return tile.cellInterp(cell_channel, node_channel, l_ijk, frac);
+//    }
+//    else return Tile::BACKGROUND_VALUE;
+//}
+//
+//__device__ Vec InterpolateFaceValue(const HATileAccessor<Tile>& acc, const Vec& pos, const int u_channel, const int node_u_channel) {
+//    Vec vec;
+//
+//    HATileInfo<Tile> info; Coord l_ijk; Vec frac;
+//    if (acc.findLeafVoxelAndFrac(pos, info, l_ijk, frac)) {
+//        for (int axis = 0; axis < 3; axis++) {
+//            //printf("=============================interpolate face value at axis=%d\n", axis);
+//            //printf("pos: %f %f %f\n", pos[0], pos[1], pos[2]);
+//            //printf("pos0*12800: %lf\n", pos[0] * 12800);
+//
+//            Tile::T v0, v1, w;
+//            w = frac[axis];
+//            if (!info.empty()) {
+//                //for (int i = 0; i < 3; i++) {
+//                //    CUDA_ASSERT(frac[i] >= 0 && frac[i] <= 1, "invalid frac %f at axis %d", frac[i], axis);
+//                //}
+//
+//                auto& tile = info.tile();
+//                v0 = tile.faceInterp(u_channel, node_u_channel, axis, l_ijk, frac);
+//
+//                {
+//					auto g_ijk = acc.localToGlobalCoord(info, l_ijk);
+//                    CUDA_ASSERT(isfinite(v0), "v0=%f at level %d g_ijk %d %d %d l_ijk %d %d %d frac %f %f %f pos %f %f %f axis %d u_channel %d node_u_channel %d", v0, info.mLevel, g_ijk[0], g_ijk[1], g_ijk[2], l_ijk[0], l_ijk[1], l_ijk[2], frac[0], frac[1], frac[2], pos[0], pos[1], pos[2], axis, u_channel, node_u_channel);
+//                }
+//            }
+//            else v0 = 0;
+//
+//
+//            auto cell_ctr = acc.cellCenter(info, l_ijk);
+//            auto n_pos = pos; n_pos[axis] += (1 - frac[axis]) * acc.voxelSize(info);
+//
+//            HATileInfo<Tile> n_info; Coord n_l_ijk; Vec n_frac;
+//            acc.findPlusFaceIntpVoxel(pos, axis, info, l_ijk, n_info, n_l_ijk, n_frac);
+//            if (!n_info.empty()) {
+//     //           for (int i = 0; i < 3; i++) {
+//					//CUDA_ASSERT(n_frac[i] >= 0 && n_frac[i] <= 1, "invalid n_frac %f at axis %d", n_frac[i], axis);
+//     //           }
+//
+//                auto& n_tile = n_info.tile();
+//
+//                v1 = n_tile.faceInterp(u_channel, node_u_channel, axis, n_l_ijk, n_frac);
+//                //CUDA_ASSERT(isfinite(v1), "v1=%f", v1);
+//
+//            }
+//            else v1 = 0;
+//
+//
+//            //printf("calc: %lf\n", (1 - w) * 10300 + w * 10350);
+//            vec[axis] = (1 - w) * v0 + w * v1;
+//
+//            CUDA_ASSERT(isfinite(vec[axis]), "vec[%d]=%f", axis, vec[axis]);
+//        }
+//        return vec;
+//    }
+//    else {
+//        return Vec(0, 0, 0);
+//    }
+//}
 
 void ReCenterLeafCells(HADeviceGrid<Tile>& grid, const int channel, DeviceReducer<double>& cnt_reducer, double* d_mean, double* d_count) {
     int num_tiles = grid.dAllTiles.size();

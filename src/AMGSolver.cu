@@ -748,24 +748,24 @@ void AMGVolumeWeightedDivergenceWithoutCoeffOnLeafs(HADeviceGrid<Tile>& grid, in
     }
     AccumulateFacesToParentsOneStep(grid, u_channel, u_channel, LEAF, 1. / 4, false, INTERIOR | DIRICHLET | NEUMANN);
 
-    {
-        Warn("before div after accumulation");
-        auto holder = grid.getHostTileHolder(LEAF | GHOST);
-        int test_axis = 2;
-        int test_level = 3;
-		Coord test_g_ijk(61, 43, 17);
-        Info("level {} face {} axis {} velocity {}", test_level, test_g_ijk, test_axis, holder->cellValue(test_level, test_g_ijk, u_channel + test_axis));
-        test_g_ijk = Coord(61, 43, 16);
-        Info("level {} face {} axis {} velocity {}", test_level, test_g_ijk, test_axis, holder->cellValue(test_level, test_g_ijk, u_channel + test_axis));
-        test_g_ijk = Coord(61, 43, 18);
-        Info("level {} face {} axis {} velocity {}", test_level, test_g_ijk, test_axis, holder->cellValue(test_level, test_g_ijk, u_channel + test_axis));
+  //  {
+  //      Warn("before div after accumulation");
+  //      auto holder = grid.getHostTileHolder(LEAF | GHOST);
+  //      int test_axis = 2;
+  //      int test_level = 3;
+		//Coord test_g_ijk(61, 43, 17);
+  //      Info("level {} face {} axis {} velocity {}", test_level, test_g_ijk, test_axis, holder->cellValue(test_level, test_g_ijk, u_channel + test_axis));
+  //      test_g_ijk = Coord(61, 43, 16);
+  //      Info("level {} face {} axis {} velocity {}", test_level, test_g_ijk, test_axis, holder->cellValue(test_level, test_g_ijk, u_channel + test_axis));
+  //      test_g_ijk = Coord(61, 43, 18);
+  //      Info("level {} face {} axis {} velocity {}", test_level, test_g_ijk, test_axis, holder->cellValue(test_level, test_g_ijk, u_channel + test_axis));
 
-        test_level = 2;
-        test_g_ijk = Coord(30, 21, 7);
-		Info("level {} face {} axis {} velocity {}", test_level, test_g_ijk, test_axis, holder->cellValue(test_level, test_g_ijk, u_channel + test_axis));
-        test_g_ijk = Coord(30, 21, 8);
-        Info("level {} face {} axis {} velocity {}", test_level, test_g_ijk, test_axis, holder->cellValue(test_level, test_g_ijk, u_channel + test_axis));
-    }
+  //      test_level = 2;
+  //      test_g_ijk = Coord(30, 21, 7);
+		//Info("level {} face {} axis {} velocity {}", test_level, test_g_ijk, test_axis, holder->cellValue(test_level, test_g_ijk, u_channel + test_axis));
+  //      test_g_ijk = Coord(30, 21, 8);
+  //      Info("level {} face {} axis {} velocity {}", test_level, test_g_ijk, test_axis, holder->cellValue(test_level, test_g_ijk, u_channel + test_axis));
+  //  }
 
     grid.launchVoxelFuncOnAllTiles(
         [=] __device__(HATileAccessor<Tile>&acc, HATileInfo<Tile>&info, const Coord & l_ijk) {
@@ -796,13 +796,13 @@ void AMGVolumeWeightedDivergenceWithoutCoeffOnLeafs(HADeviceGrid<Tile>& grid, in
 
             sum += (sgn == -1) ? -u0 * h * h : u1 * h * h;
 
-            {
-                auto g_ijk = acc.localToGlobalCoord(info, l_ijk);
-                if (info.mLevel==2&&g_ijk == Coord(30,21,7)) {
-					auto ng_ijk = acc.localToGlobalCoord(ninfo, nl_ijk);
-                    printf("AMGVolumeWeightedDivergenceWithoutCoeffOnLeafs g_ijk %d %d %d nb empty %d ng_ijk %d %d %d axis %d sgn %d pos inj vel %f pos div sum scaled %f\n", g_ijk[0], g_ijk[1], g_ijk[2], ninfo.empty(), ng_ijk[0], ng_ijk[1], ng_ijk[2], axis, sgn, -((sgn == -1) ? -u0 : u1), -sum / (h * h));
-                }
-            }
+     //       {
+     //           auto g_ijk = acc.localToGlobalCoord(info, l_ijk);
+     //           if (info.mLevel==2&&g_ijk == Coord(30,21,7)) {
+					//auto ng_ijk = acc.localToGlobalCoord(ninfo, nl_ijk);
+     //               printf("AMGVolumeWeightedDivergenceWithoutCoeffOnLeafs g_ijk %d %d %d nb empty %d ng_ijk %d %d %d axis %d sgn %d pos inj vel %f pos div sum scaled %f\n", g_ijk[0], g_ijk[1], g_ijk[2], ninfo.empty(), ng_ijk[0], ng_ijk[1], ng_ijk[2], axis, sgn, -((sgn == -1) ? -u0 : u1), -sum / (h * h));
+     //           }
+     //       }
 			
         });
 

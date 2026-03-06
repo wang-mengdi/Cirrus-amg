@@ -9,6 +9,8 @@
 void SanityCheckChannelCellValues(HADeviceGrid<Tile>& grid, const int channel, uint8_t launch_types = LEAF);
 void SanityCheckChannelNodeValues(HADeviceGrid<Tile>& grid, const int channel, uint8_t launch_types = LEAF);
 
+void FillChannelsInGridWithValue(HADeviceGrid<Tile>& grid, T value, uint8_t tile_types, std::initializer_list<int> channels);
+
 //All these operators will only perform on interior cells
 
 //apply c[i]=f(a[i],b[i]) on all interior voxels
@@ -68,6 +70,7 @@ void AccumulateToParentsOneStep(HADeviceGrid<Tile>& grid, const int fine_channel
 
 __global__ void AccumulateFacesToParentsOneStepKernel(HATileAccessor<Tile> acc, HATileInfo<Tile>* fine_tiles, int fine_subtree_level, uint8_t fine_tile_types, int fine_u_channel, int coarse_u_channel, Tile::T coeff, bool additive, uint8_t cell_types);
 void AccumulateFacesToParentsOneStep(HADeviceGrid<Tile>& grid, const int fine_u_channel, const int coarse_u_channel, const uint8_t fine_tile_types, const Tile::T coeff, bool additive, uint8_t cell_types);
+void AccumulateFacesFromLeafsToAllNonLeafs(HADeviceGrid<Tile>& grid, const int u_channel, const Tile::T coeff, bool additive, uint8_t cell_types);
 
 //tricky thing: there are two possibilities: (1) ghost tiles do not contain valid data, (2) ghost-leaf faces contain valid data
 //for (1), you need to (a) propagate faces before calculating velocity nodes, (b) use findNodeNeighborLeaf in CalcLeafNodeValuesFromFaceCenters
@@ -76,8 +79,8 @@ void AccumulateFacesToParentsOneStep(HADeviceGrid<Tile>& grid, const int fine_u_
 void CalcLeafNodeValuesFromFaceCenters(HADeviceGrid<Tile>& grid, const int u_channel, const int node_u_channel);
 void CalcLeafNodeValuesFromCellCenters(HADeviceGrid<Tile>& grid, const int cell_channel, const int node_channel);
 
-__device__ Tile::T InterpolateCellValue(const HATileAccessor<Tile>& acc, const Vec& pos, const int cell_channel, const int node_channel);
-__device__ Vec InterpolateFaceValue(const HATileAccessor<Tile>& acc, const Vec& pos, const int u_channel, const int node_u_channel);
+//__device__ Tile::T InterpolateCellValue(const HATileAccessor<Tile>& acc, const Vec& pos, const int cell_channel, const int node_channel);
+//__device__ Vec InterpolateFaceValue(const HATileAccessor<Tile>& acc, const Vec& pos, const int u_channel, const int node_u_channel);
 
 void ReCenterLeafCells(HADeviceGrid<Tile>& grid, const int channel, DeviceReducer<double>& cnt_reducer, double* d_mean, double* d_count);
 

@@ -513,56 +513,56 @@ void ParticleImpulseToGridMACIntp(HADeviceGrid<Tile>& grid, const thrust::device
 
 
 
-//must calculate node velocities first
-void ResetParticleImpulse(HADeviceGrid<Tile>& grid, const int u_channel, const int node_u_channel, thrust::device_vector<Particle>& particles_d) {
-	auto particles_ptr = thrust::raw_pointer_cast(particles_d.data());
-	auto acc = grid.deviceAccessor();
-	LaunchIndexFunc([=] __device__(int idx) {
-		auto& p = particles_ptr[idx];
-		p.impulse = InterpolateFaceValue(acc, p.pos, u_channel, node_u_channel);
+////must calculate node velocities first
+//void ResetParticleImpulse(HADeviceGrid<Tile>& grid, const int u_channel, const int node_u_channel, thrust::device_vector<Particle>& particles_d) {
+//	auto particles_ptr = thrust::raw_pointer_cast(particles_d.data());
+//	auto acc = grid.deviceAccessor();
+//	LaunchIndexFunc([=] __device__(int idx) {
+//		auto& p = particles_ptr[idx];
+//		p.impulse = InterpolateFaceValue(acc, p.pos, u_channel, node_u_channel);
+//
+//		p.matT = Eigen::Matrix3<T>::Identity();
+//	}, particles_d.size());
+//}
 
-		p.matT = Eigen::Matrix3<T>::Identity();
-	}, particles_d.size());
-}
-
-void AdvectParticlesAndSingleStepGradMRK4ForwardAtGivenLevel(HADeviceGrid<Tile>& grid, const int level, const int u_channel, const int node_u_channel, const double dt, thrust::device_vector<Particle>& particles_d, const bool erase_invalid) {
-	//advect particles
-	auto particles_ptr = thrust::raw_pointer_cast(particles_d.data());
-	auto acc = grid.deviceAccessor();
-	LaunchIndexFunc([=] __device__(int idx) {
-		auto& p = particles_ptr[idx];
-		Vec phi = p.pos;
-
-		bool valid = true;
-		//reset gradm one step
-		{
-			Vec m0;
-			if (!KernelIntpVelocityAndJacobianMAC2AtGivenLevel(acc, level, p.pos, u_channel, m0, p.gradm)) valid = false;
-		}
-		//return;
-
-		//advect forward T
-		{
-			Eigen::Matrix3<T> T_short = Eigen::Matrix3<T>::Identity();
-			if (RK4ForwardPositionAndTAtGivenLevel(acc, level, dt, u_channel, node_u_channel, p.pos, T_short)) {
-				p.matT = p.matT * T_short;
-				p.gradm = T_short.transpose() * p.gradm * T_short;
-			}
-			else {
-				valid = false;
-			}
-		}
-		if (!valid) {
-			p.pos = Vec(NODATA, NODATA, NODATA);
-		}
-	}, particles_d.size(), 512, 4);
-	Info("AdvectParticlesAndSingleStepGradMRK4ForwardAtGivenLevel after advection {} particles erase_invalid {}", particles_d.size(), erase_invalid);
-
-	if (erase_invalid) EraseInvalidParticles(particles_d);
-
-	Info("AdvectParticlesAndSingleStepGradMRK4ForwardAtGivenLevel after erasing {} particles", particles_d.size());
-	//thrust::remove_if(particles_d.begin(), particles_d.end(), []__hostdev__(const Particle& p) { return p.pos == Vec(NODATA, NODATA, NODATA); });
-}
+//void AdvectParticlesAndSingleStepGradMRK4ForwardAtGivenLevel(HADeviceGrid<Tile>& grid, const int level, const int u_channel, const int node_u_channel, const double dt, thrust::device_vector<Particle>& particles_d, const bool erase_invalid) {
+//	//advect particles
+//	auto particles_ptr = thrust::raw_pointer_cast(particles_d.data());
+//	auto acc = grid.deviceAccessor();
+//	LaunchIndexFunc([=] __device__(int idx) {
+//		auto& p = particles_ptr[idx];
+//		Vec phi = p.pos;
+//
+//		bool valid = true;
+//		//reset gradm one step
+//		{
+//			Vec m0;
+//			if (!KernelIntpVelocityAndJacobianMAC2AtGivenLevel(acc, level, p.pos, u_channel, m0, p.gradm)) valid = false;
+//		}
+//		//return;
+//
+//		//advect forward T
+//		{
+//			Eigen::Matrix3<T> T_short = Eigen::Matrix3<T>::Identity();
+//			if (RK4ForwardPositionAndTAtGivenLevel(acc, level, dt, u_channel, node_u_channel, p.pos, T_short)) {
+//				p.matT = p.matT * T_short;
+//				p.gradm = T_short.transpose() * p.gradm * T_short;
+//			}
+//			else {
+//				valid = false;
+//			}
+//		}
+//		if (!valid) {
+//			p.pos = Vec(NODATA, NODATA, NODATA);
+//		}
+//	}, particles_d.size(), 512, 4);
+//	Info("AdvectParticlesAndSingleStepGradMRK4ForwardAtGivenLevel after advection {} particles erase_invalid {}", particles_d.size(), erase_invalid);
+//
+//	if (erase_invalid) EraseInvalidParticles(particles_d);
+//
+//	Info("AdvectParticlesAndSingleStepGradMRK4ForwardAtGivenLevel after erasing {} particles", particles_d.size());
+//	//thrust::remove_if(particles_d.begin(), particles_d.end(), []__hostdev__(const Particle& p) { return p.pos == Vec(NODATA, NODATA, NODATA); });
+//}
 
 void CountParticleNumberAtGivenLevelAndRecordToParticles(HADeviceGrid<Tile>& grid, const int level, const int counter_channel, thrust::device_vector<Particle>& particles) {
 	// Reset the particle count in each cell to zero

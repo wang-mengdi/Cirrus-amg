@@ -11,7 +11,7 @@
 
 namespace BufChnls {
 	constexpr int u = 6;
-	constexpr int u_node = 0;
+	//constexpr int u_node = 0;
 	constexpr int u_cell = 3;
 	constexpr int tmp = 3;
 	constexpr int counter = 4;
@@ -40,9 +40,9 @@ namespace ProjChnls {
 
 ////Channel allocations
 //      Buffer						Projection		
-// 0    node u						x				
-// 1    node v						b/r				
-// 2	node w						p				
+// 0    							x				
+// 1    							b/r				
+// 2								p				
 // 3	tmp/cell u					Ap				
 // 4	counter/cell v				z				
 // 5	cell w											
