@@ -207,6 +207,15 @@ public:
 		//add solid velocity to velocity variables
 		//Info("metadata current time: {} dt: {} fps {}", metadata.current_time, metadata.dt, metadata.fps);
 		addSolidVelocityWithFractionsToFaces(grid, 0.0, 1e-3);//t=0, dt=1e-3
+		{
+			//set initial velocity
+			auto params = mParams;
+			grid.launchVoxelFuncOnAllTiles(
+				[params] __device__(HATileAccessor<Tile>&acc, HATileInfo<Tile>&info, const Coord & l_ijk) {
+				params.addInitialVelocityToFaceCenter(acc, info, l_ijk);
+			}, LEAF
+			);
+		}
 		project(grid);
 
 		CalculateVelocityAndVorticityMagnitudeOnLeafCellCenters(grid, mParams.mFineLevel, mParams.mCoarseLevel, BufChnls::u, BufChnls::u_cell, BufChnls::vor);
