@@ -3,7 +3,7 @@
         "cfl": 0.5,
         "first_frame": 0,
         "fps": 400,
-        "last_frame": 400,
+        "last_frame": 1,
         "min_step_frame_fraction": 0.0,
         "output_base_dir": "./output/",
         "queue_size": 4,
@@ -14,10 +14,12 @@
         "fine_level": 7,
         "flowmap_stride": 1,
         "gravity": 0.0,
-        "particle_life": 2.5,
-        "test": "meshmotion",
+        "inflow_velocity": 1.0,
+        "marker_particles_per_step": 65536,
         "mesh_file": "./scenes/sphere.obj",
-        "inflow_velocity": 1.0
+        "particle_life": 2.5,
+        "relative_sample_radius": 5.0,
+        "test": "meshmotion"
     },
     "simulator": "euler"
 }

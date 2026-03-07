@@ -164,7 +164,7 @@ public:
 		//level-resolution:
 		//0:8, 1:16, 2:32, 3:64, 4:128, 5:256, 6:512, 7:1024
 		double h = 1.0 / 8;
-		auto grid_ptr = std::make_shared<HADeviceGrid<Tile> >(h, std::initializer_list<uint32_t>({ 16, 16, 16, 16, 16, 16, 18, 16, 16, 16 }));
+		auto grid_ptr = std::make_shared<HADeviceGrid<Tile> >(h, std::initializer_list<uint32_t>({ 16, 16, 16, 16, 16, 16, 20, 16, 16, 16 }));
 		grid_ptrs.clear();
 		grid_ptrs.push_back(grid_ptr);
 		auto& grid = *grid_ptr;
@@ -306,6 +306,8 @@ public:
 			AMGVolumeWeightedDivergenceWithoutCoeffOnLeafs(grid, BufChnls::u, ProjChnls::b);
 
 
+
+
 			//Info("before proj div pt linf: {}", NormSync(grid, -1, ProjChnls::b, false));
 
 			AMGSolver solver(ProjChnls::c0, 0.5, 1, 1);
@@ -327,9 +329,23 @@ public:
 
 			AMGVolumeWeightedDivergenceWithoutCoeffOnLeafs(grid, BufChnls::u, ProjChnls::b);
 			Info("after proj div pt linf: {}", NormSync(grid, -1, ProjChnls::b, false));
+
+			{
+				Warn("after proj umax = {}, vmax = {}, wmax = {}", NormSync(grid, -1, BufChnls::u, false), NormSync(grid, -1, BufChnls::u + 1, false), NormSync(grid, -1, BufChnls::u + 2, false));
+			}
 		}
 
-
+		//{
+		//	//show velocity on polyscope before proj
+		//	polyscope::init();
+		//	polyscope::removeAllStructures();
+		//	auto holder = grid.getHostTileHolderForLeafs();
+		//	//AddLeveledPoissonGridCellCentersToPolyscopePointCloud
+		//	//AddPoissonGridCellCentersToPolyscopePointCloud
+		//	IOFunc::AddLeveledPoissonGridCellCentersToPolyscopePointCloud(holder, { { -1,"type" }, { ProjChnls::c0 + 3, "c3" }, {ProjChnls::x, "pressure"}, { ProjChnls::b, "divergence" } }, { {BufChnls::u, "velocity"} });
+		//	//IOFunc::AddLeveledPoissonGridCellCentersToPolyscopePointCloud(holder, { { -1,"type" }, { BufChnls::vor, "vorticity" } }, { { BufChnls::u, "velocity" } });
+		//	polyscope::show();
+		//}
 	}
 
 	void adaptAndAdvect(DriverMetaData& metadata, std::vector<std::shared_ptr<HADeviceGrid<Tile>>> grid_ptrs) {

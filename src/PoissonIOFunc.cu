@@ -610,6 +610,7 @@ namespace IOFunc {
 
             std::vector<std::vector<float>> scalar_data(scalar_channels.size());
             std::vector<std::vector<Vec>> vec_data(vec_channels.size());
+			std::vector<std::vector<float>> vec_length(vec_channels.size());
 
             for (auto& info : holder.mHostLevels[level]) {
                 if (!(info.mType & tile_types)) continue;
@@ -622,13 +623,19 @@ namespace IOFunc {
 
                             auto g_ijk = acc.localToGlobalCoord(info, l_ijk);
                             //if (!(g_ijk[0] == 53 && 44 <= g_ijk[1] && g_ijk[2] <= 46)) continue;
+                            auto pos = acc.cellCenter(info, l_ijk); // 使用cellCenter代替cellCorner
+
                             
-        //                    {
+                            {
+                                auto ref_center = acc.cellCenterGlobal(6, Coord(232, 238, 368));
+                                if ((pos - ref_center).length() > 0.01) continue;
+
+
         //                        //if (info.mLevel != 5) continue;
-        //                        Coord diff = g_ijk - Coord(146,130,127);
-        //                        if (!(info.mLevel == 5 && abs(diff[0]) + abs(diff[1]) + abs(diff[2]) <= 5)) continue;
+        //                        Coord diff = g_ijk - Coord(232, 238, 368);
+        //                        if (!(info.mLevel == 6 && abs(diff[0]) + abs(diff[1]) + abs(diff[2]) <= 5)) continue;
 								////Info("entering tile {} type {}", info.mTileCoord, info.mType);
-        //                    }
+                            }
 
 
 
@@ -636,7 +643,6 @@ namespace IOFunc {
 
                             
 
-                            auto pos = acc.cellCenter(info, l_ijk); // 使用cellCenter代替cellCorner
                             points.push_back(pos);
                             levels.push_back(level);
                             ttypes.push_back(info.mType);
@@ -656,6 +662,17 @@ namespace IOFunc {
                                 auto v = tile(u_channel + 1, l_ijk);
                                 auto w = tile(u_channel + 2, l_ijk);
                                 vec_data[t].push_back({ u, v, w });
+
+								auto len = std::sqrt(u * u + v * v + w * w);
+                                if (!isfinite(len) || len > invalid_value) {
+                                    Info("Non-finite or large vector length at level {}, g_ijk {}: ({}, {}, {})", level, g_ijk, u, v, w);
+                                    len = invalid_value;
+                                }
+								vec_length[t].push_back(len);
+
+                                if (len > 5) {
+									Info("Large vector magnitude at level {}, g_ijk {}: ({}, {}, {}), len {}", level, g_ijk, u, v, w, len);
+                                }
                             }
                         }
                     }
@@ -675,6 +692,7 @@ namespace IOFunc {
 
             for (int v = 0; v < vec_channels.size(); v++) {
                 ps->addVectorQuantity(vec_channels[v].second, vec_data[v]);
+				ps->addScalarQuantity(vec_channels[v].second + "_len", vec_length[v]);
             }
             };
 
@@ -737,6 +755,10 @@ namespace IOFunc {
                                         len = invalid_value;
                                     }
                                     vec_length[t].push_back(len);
+
+                                    //if (len > 5) {
+                                    //    Info("Large vector magnitude at level {}, g_ijk {}: ({}, {}, {}), len {}", level, g_ijk, u, v, w, len);
+                                    //}
 
           //                          if (g_ijk == Coord(5, 0, 1)) {
 										//Info("building polyscope level {} g_ijk {} uvw ({}, {}, {}), len {}", level, g_ijk, u, v, w, len);
