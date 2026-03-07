@@ -233,6 +233,16 @@ void MarkOldParticlesAsInvalid(thrust::device_vector<Particle>& particles, const
 	}, particles.size(), 128);
 }
 
+__device__ Vec SemiLagrangianBackwardPosition(const HATileAccessor<Tile>& acc, const int fine_level, const int coarse_level, const Vec& pos, const T dt, const int u_channel) {
+	Vec v0;
+	auto success1 = KernelIntpVelocityMAC2(acc, fine_level, coarse_level, pos, u_channel, v0);
+	auto pos1 = pos - 0.5 * dt * v0;
+	Vec v1;
+	auto success2 = KernelIntpVelocityMAC2(acc, fine_level, coarse_level, pos1, u_channel, v1);
+	auto pos2 = pos - dt * v1;
+	return pos2;
+}
+
 // Sample N marker particles outside the mesh.
 // For each candidate:
 // 1. Randomly pick one mesh vertex.

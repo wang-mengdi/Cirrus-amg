@@ -10,3 +10,8 @@ Running args: `.\scenes\smokesphere.json`
 
     $ xmake -v
     $ xmake r cirrus tests
+
+
+### sl_cutcell
+cutcell，合成速度场对流，有点类似于IB。
+用semi-lagrangian每步对流。

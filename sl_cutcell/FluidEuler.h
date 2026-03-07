@@ -72,7 +72,7 @@ __device__ Vec NFMErodedAdvectionPoint(const int axis, const HATileAccessor<Tile
 void MarkOldParticlesAsInvalid(thrust::device_vector<Particle>& particles, const T current_time, const T particle_life);
 
 
-__device__ Vec SemiLagrangianBackwardPosition(const HATileAccessor<Tile>& acc, const Vec& pos, const T dt, const int u_channel, const int node_u_channel);
+__device__ Vec SemiLagrangianBackwardPosition(const HATileAccessor<Tile>&acc, const int fine_level, const int coarse_level, const Vec & pos, const T dt, const int u_channel);
 
 
 thrust::device_vector<MarkerParticle> SampleMarkerParticlesOutsideMesh(const MeshSDFAccel & mesh_sdf, const Eigen::Transform<T, 3, Eigen::Affine>&mesh_to_world, int N, T r, T birth_time, RandomGenerator & rng, int batch_size = 4096);
@@ -157,6 +157,7 @@ public:
 		}
 
 		mParams = FluidParams(j);
+		ASSERT(mParams.mFlowMapStride == 1, "SL only supports 1-step advection");
 
 		if (metadata.first_frame != 0) return;
 
@@ -423,43 +424,52 @@ public:
 					//grid velocity advection
 					for (int axis : {0, 1, 2}) {
 						{
-							//Vec psi = acc.faceCenter(axis, info, l_ijk);
-							Vec psi = NFMErodedAdvectionPoint(axis, acc, info, l_ijk);
-							Eigen::Matrix3<T> matT;
-
-
-							NFMBackMarchPsiAndT(accs_d_ptr, fine_level, coarse_level, time_steps_d_ptr, BufChnls::u, nfm_start_idx, n, psi, matT);
-
-
-							Vec m0; Eigen::Matrix3<T> _T;
-							KernelIntpVelocityAndJacobianMAC2(acc, fine_level, coarse_level, psi, BufChnls::u, m0, _T);
-
-
-							{
-								auto g_ijk = acc.localToGlobalCoord(info, l_ijk);
-								CUDA_ASSERT(isfinite(m0[0]), "level %d global %d %d %d axis %d m00 value %f", info.mLevel, g_ijk[0], g_ijk[1], g_ijk[2], axis, m0[0]);
-								CUDA_ASSERT(isfinite(m0[1]), "level %d global %d %d %d axis %d m01 value %f", info.mLevel, g_ijk[0], g_ijk[1], g_ijk[2], axis, m0[1]);
-								CUDA_ASSERT(isfinite(m0[2]), "level %d global %d %d %d axis %d m02 value %f", info.mLevel, g_ijk[0], g_ijk[1], g_ijk[2], axis, m0[2]);
-
-								//ASSERT 3*3 values in matT are finite
-								for(int i=0; i<3; i++) {
-									for(int j=0; j<3; j++) {
-										CUDA_ASSERT(isfinite(matT(i,j)), "level %d global %d %d %d axis %d matT value %f at %d %d", info.mLevel, g_ijk[0], g_ijk[1], g_ijk[2], axis, matT(i,j), i, j);
-									}
-								}
-							}
-
-							Vec m1 = MatrixTimesVec(matT.transpose(), m0);
-
-
+							Vec pos = acc.faceCenter(axis, info, l_ijk);
+							Vec back_pos = SemiLagrangianBackwardPosition(acc, fine_level, coarse_level, pos, dt, BufChnls::u + axis);
+							Vec back_vel;
+							KernelIntpVelocityMAC2(acc, fine_level, coarse_level, back_pos, BufChnls::u, back_vel);
 							auto fluid_ratio = -tile(ProjChnls::c0 + axis, l_ijk) / acc.voxelSize(info);
-							tile(BufChnls::u + axis, l_ijk) += fluid_ratio * m1[axis];
+							tile(BufChnls::u + axis, l_ijk) += fluid_ratio * back_vel[axis];
 
 
-							{
-								auto g_ijk = acc.localToGlobalCoord(info, l_ijk);
-								CUDA_ASSERT(isfinite(m1[axis]), "level %d global %d %d %d axis %d m1 value %f", info.mLevel, g_ijk[0], g_ijk[1], g_ijk[2], axis, m1[axis]);
-							}
+
+							////Vec psi = acc.faceCenter(axis, info, l_ijk);
+							//Vec psi = NFMErodedAdvectionPoint(axis, acc, info, l_ijk);
+							//Eigen::Matrix3<T> matT;
+
+
+							//NFMBackMarchPsiAndT(accs_d_ptr, fine_level, coarse_level, time_steps_d_ptr, BufChnls::u, nfm_start_idx, n, psi, matT);
+
+
+							//Vec m0; Eigen::Matrix3<T> _T;
+							//KernelIntpVelocityAndJacobianMAC2(acc, fine_level, coarse_level, psi, BufChnls::u, m0, _T);
+
+
+							//{
+							//	auto g_ijk = acc.localToGlobalCoord(info, l_ijk);
+							//	CUDA_ASSERT(isfinite(m0[0]), "level %d global %d %d %d axis %d m00 value %f", info.mLevel, g_ijk[0], g_ijk[1], g_ijk[2], axis, m0[0]);
+							//	CUDA_ASSERT(isfinite(m0[1]), "level %d global %d %d %d axis %d m01 value %f", info.mLevel, g_ijk[0], g_ijk[1], g_ijk[2], axis, m0[1]);
+							//	CUDA_ASSERT(isfinite(m0[2]), "level %d global %d %d %d axis %d m02 value %f", info.mLevel, g_ijk[0], g_ijk[1], g_ijk[2], axis, m0[2]);
+
+							//	//ASSERT 3*3 values in matT are finite
+							//	for(int i=0; i<3; i++) {
+							//		for(int j=0; j<3; j++) {
+							//			CUDA_ASSERT(isfinite(matT(i,j)), "level %d global %d %d %d axis %d matT value %f at %d %d", info.mLevel, g_ijk[0], g_ijk[1], g_ijk[2], axis, matT(i,j), i, j);
+							//		}
+							//	}
+							//}
+
+							//Vec m1 = MatrixTimesVec(matT.transpose(), m0);
+
+
+							//auto fluid_ratio = -tile(ProjChnls::c0 + axis, l_ijk) / acc.voxelSize(info);
+							//tile(BufChnls::u + axis, l_ijk) += fluid_ratio * m1[axis];
+
+
+							//{
+							//	auto g_ijk = acc.localToGlobalCoord(info, l_ijk);
+							//	CUDA_ASSERT(isfinite(m1[axis]), "level %d global %d %d %d axis %d m1 value %f", info.mLevel, g_ijk[0], g_ijk[1], g_ijk[2], axis, m1[axis]);
+							//}
 						}
 					}
 				}
