@@ -150,7 +150,7 @@ __hostdev__ Eigen::Transform<T, 3, Eigen::Affine> FluidParams::meshToWorldTransf
 		double jitter = 2.9e-4;//to avoid the mesh sdf exactly on the grid points, which can cause issues for some of the boundary condition implementations
 		const T x = 0.5 + jitter;
 		const T y = 0.5 + jitter;
-		const T z0 = 0.3 + jitter;// 0.8;
+		const T z0 = 0.8 + jitter;// 0.8;
 		const T z1 = 0.3 + jitter;// 0.3;
 		const T z = (1 - t) * z0 + t * z1;
 
