@@ -63,6 +63,8 @@ FluidParams::FluidParams(json& j)
 
 	mSampleNumPerTile = Json::Value<int>(j, "sample_num_per_tile", 128);
 	mRelativeSampleBandwidth = Json::Value<double>(j, "relative_sample_bandwidth", 5.0);
+
+	mExtrapolationIters = Json::Value<int>(j, "extrapolation_iters", 5);
 }
 
 

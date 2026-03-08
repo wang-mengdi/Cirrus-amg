@@ -77,6 +77,8 @@ public:
 	int mSampleNumPerTile;//number of sampled points per finest tile
 	T mRelativeSampleBandwidth;//k*dx, where dx is the finest level
 
+	int mExtrapolationIters;
+
 	//MaskGridAccessor mMaskGridAccessor;
 	//SDFGridAccessor mSDFGridAccessor;
 

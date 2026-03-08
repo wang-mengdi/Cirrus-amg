@@ -122,18 +122,21 @@ public:
 
 	void extrapolateFluidVelocityForAdvection(HADeviceGrid<Tile>& grid, const int iteration_times, const int u_fluid_channel, const int coeff_channel);
 
-	void buildTypesAndAMGCoeffs(HADeviceGrid<Tile>& grid, const T current_time) {
+	void iterativeNodeSDFAndRefineNarrowBand(HADeviceGrid<Tile>& grid, const T current_time, const T solid_relative_bandwidth, const T fluid_relative_bandwidth);
+
+	void buildTypesAndAMGCoeffsFromNodeSDFs(HADeviceGrid<Tile>& grid, const T current_time) {
 		//Info("building types and AMG coeffs at time {}", current_time);
 
 		//prepare the Poisson system along with cell types
 		if (mMeshSDFAccel != nullptr) {
-			auto params = mParams;
-			auto xform = params.meshToWorldTransform(current_time);
+			
+			//auto xform = params.meshToWorldTransform(current_time);
 
-			CalculateSDFOnNodes(grid, BufChnls::sdf, *mMeshSDFAccel, LEAF | GHOST, xform);
+			//CalculateSDFOnNodes(grid, BufChnls::sdf, *mMeshSDFAccel, LEAF | GHOST, xform);
 
 
 			//set wall types
+			auto params = mParams;
 			grid.launchVoxelFuncOnAllTiles(
 				[=] __device__(HATileAccessor<Tile>&acc, HATileInfo<Tile>&info, const Coord & l_ijk) {
 				params.setWallCellType(current_time, acc, info, l_ijk);
@@ -198,9 +201,10 @@ public:
 
 		}
 
+		T current_time = 0.0, dt = 1e-5;
 		FillChannelsInGridWithValue(grid, std::numeric_limits<T>::quiet_NaN(), LEAF | NONLEAF | GHOST, {});
-
-		buildTypesAndAMGCoeffs(grid, 0.);
+		iterativeNodeSDFAndRefineNarrowBand(grid, current_time, mParams.mRelativeSampleBandwidth, mParams.mRelativeSampleBandwidth);
+		buildTypesAndAMGCoeffsFromNodeSDFs(grid, current_time);
 
 
 
@@ -221,9 +225,9 @@ public:
 		//	}, LEAF
 		//	);
 		//}
-		project(grid, 0.0, 1e-5);
+		project(grid, current_time, dt);
 		CalculateVelocityAndVorticityMagnitudeOnLeafCellCenters(grid, mParams.mFineLevel, mParams.mCoarseLevel, BufChnls::u, BufChnls::u_cell, BufChnls::vor);
-		extrapolateFluidVelocityForAdvection(grid, 5, BufChnls::u, ProjChnls::c0);
+		extrapolateFluidVelocityForAdvection(grid, mParams.mExtrapolationIters, BufChnls::u, ProjChnls::c0);
 
 	}
 

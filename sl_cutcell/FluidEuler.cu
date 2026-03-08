@@ -458,6 +458,47 @@ void FluidEuler::extrapolateFluidVelocityForAdvection(HADeviceGrid<Tile>& grid, 
 
 }
 
+void FluidEuler::iterativeNodeSDFAndRefineNarrowBand(HADeviceGrid<Tile>& grid, const T current_time, const T solid_relative_bandwidth, const T fluid_relative_bandwidth)
+{
+	auto params = mParams;
+	auto xform = params.meshToWorldTransform(current_time);
+	while (true) {
+		CalculateSDFOnNodes(grid, BufChnls::sdf, *mMeshSDFAccel, LEAF | GHOST, xform);
+		auto levelTarget = [=]__device__(const HATileAccessor<Tile> &acc, const HATileInfo<Tile> &info) ->int {
+			auto h = acc.voxelSize(params.mFineLevel);
+
+			//calculate the min and max value of node sdf in the tile
+			T min_sdf = std::numeric_limits<T>::infinity();
+			T max_sdf = -std::numeric_limits<T>::infinity();
+			auto& tile = info.tile();
+			for (int i = 0; i <= 8; i++) {
+				for (int j = 0; j <= 8; j++) {
+					for (int k = 0; k <= 8; k++) {
+						auto phi = tile.node(BufChnls::sdf, Coord(i, j, k));
+						max_sdf = max(max_sdf, phi);
+						min_sdf = min(min_sdf, phi);
+					}
+				}
+			}
+			//if sdf range is completely larger than h * fluid_relative_bandwidth (positive, outside of solid),
+			//or completely smaller than -h * solid_relative_bandwidth (negative, inside of fluid)
+			//then keep the target level
+			//otherwise we refine it to finest level
+			if ((min_sdf > h * fluid_relative_bandwidth) || (max_sdf < -h * solid_relative_bandwidth)) {
+				return info.mLevel;
+			}
+			else {
+				return params.mFineLevel;
+			}
+		};
+
+		auto refine_cnts = grid.refineStep(levelTarget, false);
+		grid.spawnGhostTiles(false);
+		auto cnt = std::accumulate(refine_cnts.begin(), refine_cnts.end(), 0);
+		if (cnt == 0) break;
+	}
+}
+
 void FluidEuler::project(HADeviceGrid<Tile>& grid, const T current_time, const T dt) {
 	//at the end we have corrected fluid velocity and mix velocity
 
@@ -517,23 +558,23 @@ void FluidEuler::project(HADeviceGrid<Tile>& grid, const T current_time, const T
 		}
 	}
 
-	{
-		//show velocity on polyscope before proj
-		polyscope::init();
-		polyscope::removeAllStructures();
-		auto holder = grid.getHostTileHolderForLeafs();
-		//AddLeveledPoissonGridCellCentersToPolyscopePointCloud
-		//AddPoissonGridCellCentersToPolyscopePointCloud
-		IOFunc::AddLeveledPoissonGridCellCentersToPolyscopePointCloud(holder, { { -1,"type" }, { ProjChnls::c0 + 3, "c3" }, {ProjChnls::x, "pressure"}, { ProjChnls::b, "divergence" } }, { {BufChnls::u, "velocity"}, {ProjChnls::u_mix, "u_mix"} });
-		//IOFunc::AddLeveledPoissonGridCellCentersToPolyscopePointCloud(holder, { { -1,"type" }, { BufChnls::vor, "vorticity" } }, { { BufChnls::u, "velocity" } });
-		IOFunc::AddMarkerParticlesToPolyscope(marker_particles_d, "marker_particles");
-		IOFunc::AddTilesToPolyscopeVolumetricMesh(grid, LEAF, "leaf_tiles");
-		auto xform = mParams.meshToWorldTransform(current_time);
-		Eigen::Matrix<T, -1, 3> V_world =
-			(xform * mMeshSDFAccel->V_.transpose()).transpose();
-		auto* psMesh = polyscope::registerSurfaceMesh("mesh", V_world, mMeshSDFAccel->F_);
-		polyscope::show();
-	}
+	//{
+	//	//show velocity on polyscope before proj
+	//	polyscope::init();
+	//	polyscope::removeAllStructures();
+	//	auto holder = grid.getHostTileHolderForLeafs();
+	//	//AddLeveledPoissonGridCellCentersToPolyscopePointCloud
+	//	//AddPoissonGridCellCentersToPolyscopePointCloud
+	//	IOFunc::AddLeveledPoissonGridCellCentersToPolyscopePointCloud(holder, { { -1,"type" }, { ProjChnls::c0 + 3, "c3" }, {ProjChnls::x, "pressure"}, { ProjChnls::b, "divergence" } }, { {BufChnls::u, "velocity"}, {ProjChnls::u_mix, "u_mix"} });
+	//	//IOFunc::AddLeveledPoissonGridCellCentersToPolyscopePointCloud(holder, { { -1,"type" }, { BufChnls::vor, "vorticity" } }, { { BufChnls::u, "velocity" } });
+	//	IOFunc::AddMarkerParticlesToPolyscope(marker_particles_d, "marker_particles");
+	//	IOFunc::AddTilesToPolyscopeVolumetricMesh(grid, LEAF, "leaf_tiles");
+	//	auto xform = mParams.meshToWorldTransform(current_time);
+	//	Eigen::Matrix<T, -1, 3> V_world =
+	//		(xform * mMeshSDFAccel->V_.transpose()).transpose();
+	//	auto* psMesh = polyscope::registerSurfaceMesh("mesh", V_world, mMeshSDFAccel->F_);
+	//	polyscope::show();
+	//}
 }
 
 void FluidEuler::adaptAndAdvect(DriverMetaData& metadata, std::vector<std::shared_ptr<HADeviceGrid<Tile>>> grid_ptrs) {
@@ -584,8 +625,8 @@ void FluidEuler::adaptAndAdvect(DriverMetaData& metadata, std::vector<std::share
 	CoarsenWithMarkerParticles(grid, marker_particles_d, mParams.mCoarseLevel, mParams.mFineLevel, BufChnls::counter, false);
 	cudaDeviceSynchronize(); adaptive_time = timer.stop("adapt with particles"); timer.start();
 	CheckCudaError("adapt with particles");
-
-	buildTypesAndAMGCoeffs(grid, current_time);
+	iterativeNodeSDFAndRefineNarrowBand(grid, current_time, mParams.mRelativeSampleBandwidth, mParams.mRelativeSampleBandwidth);
+	buildTypesAndAMGCoeffsFromNodeSDFs(grid, current_time);
 
 	Info("time step counter: {}", time_step_counter);
 	auto nfm_query_grid_ptr = grid_ptrs[n - 1 - (time_step_counter % mParams.mFlowMapStride)];
@@ -713,7 +754,7 @@ void FluidEuler::Advance(DriverMetaData& metadata) {
 	//	polyscope::show();
 	//}
 
-	extrapolateFluidVelocityForAdvection(grid, 5, BufChnls::u, ProjChnls::c0);
+	extrapolateFluidVelocityForAdvection(grid, mParams.mExtrapolationIters, BufChnls::u, ProjChnls::c0);
 
 	CheckCudaError("Advance");
 	time_step_counter++;
