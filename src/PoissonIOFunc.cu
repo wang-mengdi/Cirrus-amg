@@ -627,8 +627,8 @@ namespace IOFunc {
 
                             
                             {
-                                auto ref_center = acc.cellCenterGlobal(6, Coord(232, 238, 368));
-                                if ((pos - ref_center).length() > 0.01) continue;
+                                //auto ref_center = acc.cellCenterGlobal(6, Coord(232, 238, 368));
+                                //if ((pos - ref_center).length() > 0.01) continue;
 
 
         //                        //if (info.mLevel != 5) continue;
@@ -670,7 +670,7 @@ namespace IOFunc {
                                 }
 								vec_length[t].push_back(len);
 
-                                if (len > 5) {
+                                if (len > 100) {
 									Info("Large vector magnitude at level {}, g_ijk {}: ({}, {}, {}), len {}", level, g_ijk, u, v, w, len);
                                 }
                             }

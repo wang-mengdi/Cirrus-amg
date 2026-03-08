@@ -70,25 +70,25 @@ __hostdev__ int FluidParams::initialLevelTarget(const HATileAccessor<Tile>& acc,
 	return mCoarseLevel;
 }
 
-__device__ void FluidParams::addInitialVelocityToFaceCenter(HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const Coord& l_ijk) const {
-
-	if (mTestCase == MESHMOTION) {
-
-
-		Vec initial_vel = Vec(0, 0, mesh_motion_inflow);
-
-		Tile& tile = info.tile();
-		for (int axis : {0, 1, 2}) {
-			cuda_vec4_t<T> sdfs = FaceCornerSDFs(BufChnls::sdf, acc, info, l_ijk, axis);
-
-			auto alpha = FaceFluidRatio(sdfs);
-
-			tile(BufChnls::u + axis, l_ijk) = alpha * initial_vel[axis];
-		}
-		//int boundary_axis, boundary_off;
-		//tile.type(l_ijk) = cellType(current_time, acc, info, l_ijk, boundary_axis, boundary_off);
-	}
-}
+//__device__ void FluidParams::addInitialVelocityToFaceCenter(HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const Coord& l_ijk) const {
+//
+//	if (mTestCase == MESHMOTION) {
+//
+//
+//		Vec initial_vel = Vec(0, 0, mesh_motion_inflow);
+//
+//		Tile& tile = info.tile();
+//		for (int axis : {0, 1, 2}) {
+//			cuda_vec4_t<T> sdfs = FaceCornerSDFs(BufChnls::sdf, acc, info, l_ijk, axis);
+//
+//			auto alpha = FaceFluidRatio(sdfs);
+//
+//			tile(BufChnls::u + axis, l_ijk) = alpha * initial_vel[axis];
+//		}
+//		//int boundary_axis, boundary_off;
+//		//tile.type(l_ijk) = cellType(current_time, acc, info, l_ijk, boundary_axis, boundary_off);
+//	}
+//}
 
 
 __hostdev__ uint8_t FluidParams::wallCellType(const T current_time, const HATileAccessor<Tile>& acc, const int level, const Coord& g_ijk) const
@@ -104,10 +104,13 @@ __hostdev__ uint8_t FluidParams::wallCellType(const T current_time, const HATile
 
 		//int boundary_axis, boundary_off;
 		if (QueryBoundaryDirectionN1P1OnCoarseLevel(acc, mCoarseLevel, level, g_ijk, boundary_axis, boundary_off)) {
+			////z+ dirichlet and other neumann
 			//if (boundary_axis == 2 && boundary_off == 1) {
 			//	is_dirichlet = true;
 			//}
 			//else is_neumann = true;
+
+			//pure neumann
 			is_neumann = true;
 		}
 
@@ -145,7 +148,7 @@ __hostdev__ Eigen::Transform<T, 3, Eigen::Affine> FluidParams::meshToWorldTransf
 		double jitter = 2.9e-4;//to avoid the mesh sdf exactly on the grid points, which can cause issues for some of the boundary condition implementations
 		const T x = 0.5 + jitter;
 		const T y = 0.5 + jitter;
-		const T z0 = 0.8 + jitter;// 0.8;
+		const T z0 = 0.3 + jitter;// 0.8;
 		const T z1 = 0.3 + jitter;// 0.3;
 		const T z = (1 - t) * z0 + t * z1;
 

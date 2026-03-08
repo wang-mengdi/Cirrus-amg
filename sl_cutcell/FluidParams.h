@@ -12,7 +12,7 @@
 namespace BufChnls {
 	constexpr int u = 6;
 	//constexpr int u_node = 0;
-	constexpr int u_cell = 3;
+	constexpr int u_cell = 0;
 	constexpr int tmp = 3;
 	constexpr int counter = 4;
 	constexpr int vor = 9;
@@ -41,12 +41,12 @@ namespace ProjChnls {
 
 ////Channel allocations
 //      Buffer						Projection		
-// 0    							x				
-// 1    							b/r				
-// 2								p				
-// 3	tmp/cell u					Ap/mix u
-// 4	counter/cell v				z/mix v		
-// 5	cell w						mix w			
+// 0    cell u 						x				
+// 1    cell v						b/r				
+// 2    cell w						p				
+// 3	tmp							Ap/mix u
+// 4	counter						z/mix v		
+// 5								mix w			
 // 6	u							u				
 // 7	v							v				
 // 8	w							w				
@@ -108,7 +108,7 @@ public:
 
 	//initialization
 	__hostdev__ int initialLevelTarget(const HATileAccessor<Tile>& acc, HATileInfo<Tile>& info) const;
-	__device__ void addInitialVelocityToFaceCenter(HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const Coord& l_ijk) const;
+	//__device__ void addInitialVelocityToFaceCenter(HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const Coord& l_ijk) const;
 	//set type, velocity, smoke
 	//__hostdev__ void setInitialVelocity(HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const Coord& l_ijk)const;
 	//includes the outer walls of the computational field, but not including the movable mesh inside

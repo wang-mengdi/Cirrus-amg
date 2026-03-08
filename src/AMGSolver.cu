@@ -657,7 +657,11 @@ __global__ void AMGAddGradientToFace128Kernel(const HATileAccessor<Tile> acc, HA
 			T pu = shared_data.xValueT(l_ijk);
 			T pd = shared_data.xValueT(dl_ijk);
             //tile(u_channel + axis, l_ijk) -= (pu - pd) * shared_data.offDiagValueT(axis, l_ijk) / (h * h);
-            tile(u_channel + axis, l_ijk) += (pu - pd) / h;
+            
+			auto fluid_ratio = -shared_data.offDiagValueT(axis, l_ijk) / h;
+            if (fluid_ratio > 0) {
+                tile(u_channel + axis, l_ijk) += (pu - pd) / h;
+            }
 
     //        {
 				//auto g_ijk = acc.composeGlobalCoord(info.mTileCoord, l_ijk);
@@ -674,6 +678,8 @@ __global__ void AMGAddGradientToFace128Kernel(const HATileAccessor<Tile> acc, HA
 }
 
 void AMGAddGradientToFace(HADeviceGrid<Tile>& grid, int subtree_level, uint8_t launch_tile_types, int x_channel, int coeff_channel, int u_channel) {
+    //will ignore faces with that fluid ratio is 0
+
     //first calculate GHOST and NONLEAF values
     PropagateToChildren(grid, x_channel, x_channel, -1, GHOST, LAUNCH_SUBTREE, INTERIOR | DIRICHLET | NEUMANN);
     AccumulateToParentsOneStep(grid, x_channel, x_channel, LEAF, 1. / 8, false, INTERIOR | DIRICHLET | NEUMANN);

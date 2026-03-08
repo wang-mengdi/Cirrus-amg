@@ -464,6 +464,61 @@ void AccumulateToParentsOneStep(HADeviceGrid<Tile>& grid, const int fine_channel
 }
 
 //will be called on fine tiles
+__global__ void AverageFaceVelocitiesToParentsOneStepKernel(HATileAccessor<Tile> acc, HATileInfo<Tile>* fine_tiles, int fine_subtree_level, uint8_t fine_tile_types, int u_channel, uint8_t cell_types) {
+    __shared__ T data[3][8 * 8 * 8];
+    int bi = blockIdx.x, ti = threadIdx.x;
+    auto& finfo = fine_tiles[bi];
+
+    if (!(finfo.subtreeType(fine_subtree_level) & fine_tile_types)) {
+        return;
+    }
+    auto& ftile = finfo.tile();
+
+    for (int axis : {0, 1, 2}) {
+        for (int i = 0; i < 4; i++) {
+            int vi = i * 128 + ti;
+            uint8_t ctype = ftile.type(vi);
+            data[axis][vi] = (ctype & cell_types) ? ftile(u_channel + axis, vi) : 0;
+
+        }
+    }
+    __syncthreads();
+
+    if (ti < 64) {
+        Coord fl_ijk(ti / 16 * 2, (ti / 4) % 4 * 2, ti % 4 * 2);
+        Coord fg_ijk = acc.localToGlobalCoord(finfo, fl_ijk);
+        Coord cg_ijk = acc.parentCoord(fg_ijk);
+        HATileInfo<Tile> cinfo; Coord cl_ijk;//coarse tile and local coord
+        acc.findVoxel(finfo.mLevel - 1, cg_ijk, cinfo, cl_ijk);
+        if (!cinfo.empty()) {
+            auto& ctile = cinfo.tile();
+            for (int axis : {0, 1, 2}) {
+                T sum = 0;
+                int valid_cnt = 0;
+                for (int jj : {0, 1}) {
+                    for (int kk : {0, 1}) {
+                        Coord fl1_ijk = fl_ijk + acc.rotateCoord(axis, Coord(0, jj, kk));
+                        int vi1 = acc.localCoordToOffset(fl1_ijk);
+                        if (data[axis][vi1] != NODATA) {
+                            sum += data[axis][vi1];
+                            valid_cnt++;
+                        }
+                        
+
+                        //if (cg_ijk == Coord(8, 8, 10) && cinfo.mLevel == 1) {
+                        //    printf("axis %d l_ijk %d %d %d vi1 %d data %f sum %f\n", axis, fl1_ijk[0], fl1_ijk[1], fl1_ijk[2], vi1, data[axis][vi1], sum);
+                        //}
+
+                    }
+                }
+                ctile(u_channel + axis, cl_ijk) = (valid_cnt > 0) ? (sum / valid_cnt) : NODATA;
+            }
+        }
+
+    }
+}
+
+//will be called on fine tiles
 __global__ void AccumulateFacesToParentsOneStepKernel(HATileAccessor<Tile> acc, HATileInfo<Tile>* fine_tiles, int fine_subtree_level, uint8_t fine_tile_types, int fine_u_channel, int coarse_u_channel, Tile::T coeff, bool additive, uint8_t cell_types) {
     __shared__ T data[3][8 * 8 * 8];
     int bi = blockIdx.x, ti = threadIdx.x;

@@ -120,6 +120,8 @@ public:
 
 	void mixFluidAndSolidVelocityOnFaces(HADeviceGrid<Tile>& grid, const double current_time, const double dt, const int coeff_channel, const int u_fluid_channel, const int u_mix_channel);
 
+	void extrapolateFluidVelocityForAdvection(HADeviceGrid<Tile>& grid, const int iteration_times, const int u_fluid_channel, const int coeff_channel);
+
 	void buildTypesAndAMGCoeffs(HADeviceGrid<Tile>& grid, const T current_time) {
 		//Info("building types and AMG coeffs at time {}", current_time);
 
@@ -209,21 +211,19 @@ public:
 		FillChannelsInGridWithValue(grid, 0.0, LEAF | NONLEAF | GHOST, { BufChnls::u, BufChnls::u + 1, BufChnls::u + 2 });
 		//add solid velocity to velocity variables
 		//Info("metadata current time: {} dt: {} fps {}", metadata.current_time, metadata.dt, metadata.fps);
-		addSolidVelocityWithFractionsToFaces(grid, 0.0, 1e-3);//t=0, dt=1e-3
-		{
-			//set initial velocity
-			auto params = mParams;
-			grid.launchVoxelFuncOnAllTiles(
-				[params] __device__(HATileAccessor<Tile>&acc, HATileInfo<Tile>&info, const Coord & l_ijk) {
-				params.addInitialVelocityToFaceCenter(acc, info, l_ijk);
-			}, LEAF
-			);
-		}
-		project(grid);
-
+		// addSolidVelocityWithFractionsToFaces(grid, 0.0, 1e-3);//t=0, dt=1e-3
+		//{
+		//	//set initial velocity
+		//	auto params = mParams;
+		//	grid.launchVoxelFuncOnAllTiles(
+		//		[params] __device__(HATileAccessor<Tile>&acc, HATileInfo<Tile>&info, const Coord & l_ijk) {
+		//		params.addInitialVelocityToFaceCenter(acc, info, l_ijk);
+		//	}, LEAF
+		//	);
+		//}
+		project(grid, 0.0, 1e-5);
 		CalculateVelocityAndVorticityMagnitudeOnLeafCellCenters(grid, mParams.mFineLevel, mParams.mCoarseLevel, BufChnls::u, BufChnls::u_cell, BufChnls::vor);
-
-
+		extrapolateFluidVelocityForAdvection(grid, 5, BufChnls::u, ProjChnls::c0);
 
 	}
 
@@ -289,156 +289,7 @@ public:
 	//current_time and dt for calculating solid velocity and doing time interpolation
 	void project(HADeviceGrid<Tile>& grid, const T current_time, const T dt);
 
-	void adaptAndAdvect(DriverMetaData& metadata, std::vector<std::shared_ptr<HADeviceGrid<Tile>>> grid_ptrs) {
-		const double dt = metadata.dt;
-		const double current_time = metadata.current_time;
-
-
-		CPUTimer timer; timer.start();
-
-		//1. advect particles with last_grid
-		//2. refine grid with particles
-		//3. calculate type, advect dye_density and velocity on grid
-
-		//012: temporary node velocity
-		//3: temporary node dye density
-
-		//shared by two grids
-		//int u_channel = AdvChnls::u;//6
-
-		
-		//saved intermediate velocities
-		int n = grid_ptrs.size() - 1;
-		//we only need to prepare the last grid at this time
-		auto& last_grid = *grid_ptrs[n - 1];
-		CheckCudaError("prepare last grid");
-
-
-		AdvectMarkerParticlesRK4ForwardAndMarkInvalid(
-			last_grid, mParams.mFineLevel, mParams.mCoarseLevel,
-			BufChnls::u, dt, current_time - mParams.mParticleLife,
-			marker_particles_d
-		);
-		EraseInvalidParticles(marker_particles_d);
-		cudaDeviceSynchronize(); particle_advection_time = timer.stop("Advect particles"); timer.start();
-		CheckCudaError("adv particle");
-
-		auto h_acc = last_grid.deviceAccessor();
-		auto new_particles_d = SampleMarkerParticlesOutsideMeshBand(*mMeshSDFAccel, mParams.meshToWorldTransform(current_time), h_acc.voxelSize(mParams.mFineLevel), mParams.mRelativeSampleBandwidth, mParams.mSampleNumPerTile, current_time, mRamdonGenerator);
-		marker_particles_d.insert(marker_particles_d.end(), new_particles_d.begin(), new_particles_d.end());
-		cudaDeviceSynchronize(); reseeding_time = timer.stop("reseeding and remove particles in solid"); timer.start();
-		Info("total {:.5f}M particles, time step counter {}", marker_particles_d.size() / (1024 * 1024 + 0.f), time_step_counter);
-		CheckCudaError("reseeding particles");
-
-
-
-		auto& grid = *grid_ptrs[n];
-		RefineWithMarkerParticles(grid, marker_particles_d, mParams.mCoarseLevel, mParams.mFineLevel, BufChnls::counter, false);
-		CoarsenWithMarkerParticles(grid, marker_particles_d, mParams.mCoarseLevel, mParams.mFineLevel, BufChnls::counter, false);
-		cudaDeviceSynchronize(); adaptive_time = timer.stop("adapt with particles"); timer.start();
-		CheckCudaError("adapt with particles");
-		
-		buildTypesAndAMGCoeffs(grid, current_time);
-
-		Info("time step counter: {}", time_step_counter);
-		auto nfm_query_grid_ptr = grid_ptrs[n - 1 - (time_step_counter % mParams.mFlowMapStride)];
-
-		//prepare pointers for previous grids
-		thrust::host_vector<HATileAccessor<Tile>> accs_h;
-		for (int i = 0; i < n; i++) accs_h.push_back(grid_ptrs[i]->deviceAccessor());
-		thrust::device_vector<HATileAccessor<Tile>> accs_d = accs_h;
-		auto accs_d_ptr = thrust::raw_pointer_cast(accs_d.data());
-		thrust::device_vector<double> time_steps_d = time_steps;
-		auto time_steps_d_ptr = thrust::raw_pointer_cast(time_steps_d.data());
-		CheckCudaError("prepare pointers");
-		Info("prepare pointers");
-
-		FillChannelsInGridWithValue(grid, 0., LEAF | NONLEAF | GHOST, { BufChnls::u, BufChnls::u + 1, BufChnls::u + 2 });
-
-		//add solid velocity to velocity field
-		addSolidVelocityWithFractionsToFaces(grid, current_time, dt);
-
-		//add advected NFM velocity to velocity field
-		{
-			auto last_acc = last_grid.deviceAccessor();
-			auto nfm_query_acc = nfm_query_grid_ptr->deviceAccessor();
-			auto params = mParams;
-			
-			int fine_level = mParams.mFineLevel;
-			int coarse_level = mParams.mCoarseLevel;
-
-			int back_traced_steps = time_step_counter % mParams.mFlowMapStride;
-			int nfm_start_idx = n - back_traced_steps - 1;
-			Info("nfm start idx: {}, back traced steps: {}, accs_d size {}", nfm_start_idx, back_traced_steps, accs_d.size());
-			
-			grid.launchVoxelFuncOnAllTiles(
-				[=] __device__(HATileAccessor<Tile>&acc, HATileInfo<Tile>&info, const Coord & l_ijk) {
-				auto& tile = info.tile();
-
-
-				{
-					//grid velocity advection
-					for (int axis : {0, 1, 2}) {
-						{
-							Vec pos = acc.faceCenter(axis, info, l_ijk);
-							Vec back_pos = SemiLagrangianBackwardPosition(acc, fine_level, coarse_level, pos, dt, BufChnls::u + axis);
-							Vec back_vel;
-							KernelIntpVelocityMAC2(acc, fine_level, coarse_level, back_pos, BufChnls::u, back_vel);
-							auto fluid_ratio = -tile(ProjChnls::c0 + axis, l_ijk) / acc.voxelSize(info);
-							tile(BufChnls::u + axis, l_ijk) += fluid_ratio * back_vel[axis];
-
-
-
-							////Vec psi = acc.faceCenter(axis, info, l_ijk);
-							//Vec psi = NFMErodedAdvectionPoint(axis, acc, info, l_ijk);
-							//Eigen::Matrix3<T> matT;
-
-
-							//NFMBackMarchPsiAndT(accs_d_ptr, fine_level, coarse_level, time_steps_d_ptr, BufChnls::u, nfm_start_idx, n, psi, matT);
-
-
-							//Vec m0; Eigen::Matrix3<T> _T;
-							//KernelIntpVelocityAndJacobianMAC2(acc, fine_level, coarse_level, psi, BufChnls::u, m0, _T);
-
-
-							//{
-							//	auto g_ijk = acc.localToGlobalCoord(info, l_ijk);
-							//	CUDA_ASSERT(isfinite(m0[0]), "level %d global %d %d %d axis %d m00 value %f", info.mLevel, g_ijk[0], g_ijk[1], g_ijk[2], axis, m0[0]);
-							//	CUDA_ASSERT(isfinite(m0[1]), "level %d global %d %d %d axis %d m01 value %f", info.mLevel, g_ijk[0], g_ijk[1], g_ijk[2], axis, m0[1]);
-							//	CUDA_ASSERT(isfinite(m0[2]), "level %d global %d %d %d axis %d m02 value %f", info.mLevel, g_ijk[0], g_ijk[1], g_ijk[2], axis, m0[2]);
-
-							//	//ASSERT 3*3 values in matT are finite
-							//	for(int i=0; i<3; i++) {
-							//		for(int j=0; j<3; j++) {
-							//			CUDA_ASSERT(isfinite(matT(i,j)), "level %d global %d %d %d axis %d matT value %f at %d %d", info.mLevel, g_ijk[0], g_ijk[1], g_ijk[2], axis, matT(i,j), i, j);
-							//		}
-							//	}
-							//}
-
-							//Vec m1 = MatrixTimesVec(matT.transpose(), m0);
-
-
-							//auto fluid_ratio = -tile(ProjChnls::c0 + axis, l_ijk) / acc.voxelSize(info);
-							//tile(BufChnls::u + axis, l_ijk) += fluid_ratio * m1[axis];
-
-
-							//{
-							//	auto g_ijk = acc.localToGlobalCoord(info, l_ijk);
-							//	CUDA_ASSERT(isfinite(m1[axis]), "level %d global %d %d %d axis %d m1 value %f", info.mLevel, g_ijk[0], g_ijk[1], g_ijk[2], axis, m1[axis]);
-							//}
-						}
-					}
-				}
-			}, LEAF, 4
-			);
-
-			CheckCudaError("launch nfm");
-
-		}
-
-		cudaDeviceSynchronize(); nfm_advection_time = timer.stop("NFM advection"); timer.start();
-		CheckCudaError("nfm advection");
-	}
+	void adaptAndAdvect(DriverMetaData& metadata, std::vector<std::shared_ptr<HADeviceGrid<Tile>>> grid_ptrs);
 
 	void applyExternalForce(HADeviceGrid<Tile>& grid, const double dt) {
 		const nanovdb::Vec3R gravity = mParams.mGravity;
@@ -468,79 +319,7 @@ public:
 
 
 
-	virtual void Advance(DriverMetaData& metadata) {
-
-		CPUTimer timer;
-		timer.start();
-
-		//Info("before advance"); PrintMemoryInfo();
-
-		if (grid_ptrs.size() < mParams.mFlowMapStride + 1) {
-			//create a new grid
-			auto nxt_ptr = grid_ptrs.back()->deepCopy();
-			grid_ptrs.push_back(nxt_ptr);
-			time_steps.push_back(metadata.dt);
-		}
-		else {
-			auto nxt_ptr = grid_ptrs[0];
-			grid_ptrs.erase(grid_ptrs.begin());
-			grid_ptrs.push_back(nxt_ptr);
-			time_steps.erase(time_steps.begin());
-			time_steps.push_back(metadata.dt);
-		}
-
-		auto& grid = *grid_ptrs.back();
-		auto& last_grid = *grid_ptrs[grid_ptrs.size() - 2];
-		double dt = metadata.dt;
-
-		fmt::print("\n");
-		Pass("Advance frame {} current time {} dt {} step counter {}", metadata.current_frame, metadata.current_time, dt, time_step_counter);
-		ASSERT(dt > 0, "dt should be positive");
-
-
-		adaptAndAdvect(metadata, grid_ptrs);
-
-
-		applyExternalForce(grid, dt);
-
-
-
-		if (time_step_counter == 65) {
-			amg_solver_open_visualization = 1;
-		}
-		else {
-			amg_solver_open_visualization = 0;
-		}
-
-
-		//projection
-		project(grid);
-
-
-
-
-
-		CalculateVelocityAndVorticityMagnitudeOnLeafCellCenters(grid, mParams.mFineLevel, mParams.mCoarseLevel, BufChnls::u, BufChnls::u_cell, BufChnls::vor);
-
-		//{
-		//	//show velocity on polyscope before proj
-		//	polyscope::init();
-		//	polyscope::removeAllStructures();
-		//	auto holder = grid.getHostTileHolderForLeafs();
-		//	IOFunc::AddPoissonGridCellCentersToPolyscopePointCloud(holder, { { -1,"type" }, { BufChnls::vor, "vorticity" }, {ProjChnls::x, "pressure"}, { ProjChnls::b, "divergence" } }, { {BufChnls::u, "velocity"} });
-		//	//IOFunc::AddLeveledPoissonGridCellCentersToPolyscopePointCloud(holder, { { -1,"type" }, { BufChnls::vor, "vorticity" } }, { { BufChnls::u, "velocity" } });
-		//	polyscope::show();
-		//}
-
-
-		CheckCudaError("Advance");
-		time_step_counter++;
-
-
-		PrintMemoryInfo();
-
-		cudaDeviceSynchronize(); advance_time = timer.stop();
-	}
+	virtual void Advance(DriverMetaData& metadata);
 
 	void WriteStatToFile(DriverMetaData& metadata) {
 		fs::path output_path = metadata.base_path / "logs";

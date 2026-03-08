@@ -13,7 +13,7 @@
 class DriverMetaData
 {
 public:
-	std::string output_base_dir;
+	//std::string output_base_dir;
 	fs::path base_path;
 	//std::ofstream data_output;
 

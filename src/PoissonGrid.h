@@ -68,6 +68,7 @@ void PropagateToChildren(HADeviceGrid<Tile>& grid, const int coarse_channel, con
 __global__ void AccumulateToParentsOneStepKernel(HATileAccessor<Tile> acc, HATileInfo<Tile>* fine_tiles, int fine_subtree_level, uint8_t fine_tile_types, int fine_channel, int coarse_channel, Tile::T coeff, bool additive, uint8_t cell_types);
 void AccumulateToParentsOneStep(HADeviceGrid<Tile>& grid, const int fine_channel, const int coarse_channel, const uint8_t fine_tile_types, const Tile::T coeff, bool additive, uint8_t cell_types);
 
+__global__ void AverageFaceVelocitiesToParentsOneStepKernel(HATileAccessor<Tile> acc, HATileInfo<Tile>* fine_tiles, int fine_subtree_level, uint8_t fine_tile_types, int u_channel, uint8_t cell_types);
 __global__ void AccumulateFacesToParentsOneStepKernel(HATileAccessor<Tile> acc, HATileInfo<Tile>* fine_tiles, int fine_subtree_level, uint8_t fine_tile_types, int fine_u_channel, int coarse_u_channel, Tile::T coeff, bool additive, uint8_t cell_types);
 void AccumulateFacesToParentsOneStep(HADeviceGrid<Tile>& grid, const int fine_u_channel, const int coarse_u_channel, const uint8_t fine_tile_types, const Tile::T coeff, bool additive, uint8_t cell_types);
 void AccumulateFacesFromLeafsToAllNonLeafs(HADeviceGrid<Tile>& grid, const int u_channel, const Tile::T coeff, bool additive, uint8_t cell_types);

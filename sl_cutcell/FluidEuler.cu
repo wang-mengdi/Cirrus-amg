@@ -362,9 +362,9 @@ void FluidEuler::mixFluidAndSolidVelocityOnFaces(HADeviceGrid<Tile>& grid, const
 		auto& tile = info.tile();
 		auto h = acc.voxelSize(info);
 		for (int axis : {0, 1, 2}) {
-			T fluid_ratio = tile(coeff_channel + axis, l_ijk);
+			T fluid_ratio = -tile(coeff_channel + axis, l_ijk) / h;
 			T solid_ratio = 1 - fluid_ratio;
-			T mix_vel;
+			T mix_vel = 0;
 			if (fluid_ratio > 0) {
 				mix_vel += fluid_ratio * tile(u_fluid_channel + axis, l_ijk);
 			}
@@ -378,7 +378,89 @@ void FluidEuler::mixFluidAndSolidVelocityOnFaces(HADeviceGrid<Tile>& grid, const
 	);
 }
 
+void FluidEuler::extrapolateFluidVelocityForAdvection(HADeviceGrid<Tile>& grid, const int iteration_times, const int u_fluid_channel, const int coeff_channel)
+{
+	//at the beginning we have correct velocities at LEAF tiles
+	 
+	//fill GHOST tiles with NaN to expose bugs
+	FillChannelsInGridWithValue(grid, std::numeric_limits<T>::quiet_NaN(), GHOST, { u_fluid_channel, u_fluid_channel + 1, u_fluid_channel + 2 });
+
+
+	//mark faces that has no fluid contribution as invalid
+	grid.launchVoxelFuncOnAllTiles(
+		[=] __device__(HATileAccessor<Tile>&acc, HATileInfo<Tile>&info, const Coord & l_ijk) {
+		auto& tile = info.tile();
+		auto h = acc.voxelSize(info);
+		for (int axis : {0, 1, 2}) {
+			T fluid_ratio = -tile(coeff_channel + axis, l_ijk) / h;
+			if (fluid_ratio <= 0) {
+				tile(u_fluid_channel + axis, l_ijk) = NODATA;
+			}
+		}
+	}, LEAF | NONLEAF | GHOST
+	);
+
+	//iterate from finest level to corasest level
+	for (int level = grid.mMaxLevel; level >= 0; level--) {
+		//iteratively extrapolate
+		for (int i = 0; i < iteration_times; i++) {
+			//for each invalid face node on LEAF/NONLEAF tiles, check its 6 same-level neighbors
+			grid.launchVoxelFunc(
+				[=] __device__(HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const Coord& l_ijk) {
+				auto& tile = info.tile();
+				for (int axis : {0, 1, 2}) {
+					if (tile(u_fluid_channel + axis, l_ijk) == NODATA) {
+						T nb_valid_sum = 0; int nb_valid_cnt = 0;
+						acc.iterateSameLevelNeighborVoxels(info, l_ijk,
+							[&]__device__(const HATileInfo<Tile>&ninfo, const Coord & nl_ijk, const int axis, const int sgn) {
+							if (!ninfo.empty()) {
+								if (ninfo.mType & (LEAF | NONLEAF)) {
+									auto ntile = ninfo.tile();
+									if (ntile(u_fluid_channel + axis, nl_ijk) != NODATA) {
+										nb_valid_sum += ntile(u_fluid_channel + axis, nl_ijk);
+										nb_valid_cnt++;
+									}
+								}
+							}
+						});
+						if (nb_valid_cnt > 1) {
+							tile(u_fluid_channel + axis, l_ijk) = nb_valid_sum / nb_valid_cnt;
+						}
+					}
+				}
+			}, level, LEAF | NONLEAF, LAUNCH_LEVEL
+			);
+		}
+
+		int num_fine_tiles = grid.hNumTiles[level];
+		if (num_fine_tiles == 0) continue;
+		AverageFaceVelocitiesToParentsOneStepKernel << <num_fine_tiles, 128 >> > (
+			grid.deviceAccessor(),
+			thrust::raw_pointer_cast(grid.dTileArrays[level].data()),
+			-1, LEAF | NONLEAF, u_fluid_channel, INTERIOR | DIRICHLET | NEUMANN
+			);
+	}
+
+	//set all NODATA velocities to 0 to avoid issues in advection stencils
+		//mark faces that has no fluid contribution as invalid
+	grid.launchVoxelFuncOnAllTiles(
+		[=] __device__(HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const Coord& l_ijk) {
+		auto& tile = info.tile();
+		auto h = acc.voxelSize(info);
+		for (int axis : {0, 1, 2}) {
+			if (tile(u_fluid_channel + axis, l_ijk) == NODATA) {
+				tile(u_fluid_channel + axis, l_ijk) = 0;
+			}
+		}
+	}, LEAF | NONLEAF | GHOST
+	);
+
+}
+
 void FluidEuler::project(HADeviceGrid<Tile>& grid, const T current_time, const T dt) {
+	//at the end we have corrected fluid velocity and mix velocity
+
+
 	//auto c0_channel = ProjChnls::c0;
 
 	{
@@ -424,7 +506,9 @@ void FluidEuler::project(HADeviceGrid<Tile>& grid, const T current_time, const T
 
 		//mix and calculate divergence again for validation
 		mixFluidAndSolidVelocityOnFaces(grid, current_time, dt, ProjChnls::c0, BufChnls::u, ProjChnls::u_mix);
-		AMGVolumeWeightedDivergenceWithoutCoeffOnLeafs(grid, BufChnls::u, ProjChnls::b);
+
+
+		AMGVolumeWeightedDivergenceWithoutCoeffOnLeafs(grid, ProjChnls::u_mix, ProjChnls::b);
 		Info("after proj div pt linf: {}", NormSync(grid, -1, ProjChnls::b, false));
 
 		{
@@ -439,8 +523,196 @@ void FluidEuler::project(HADeviceGrid<Tile>& grid, const T current_time, const T
 	//	auto holder = grid.getHostTileHolderForLeafs();
 	//	//AddLeveledPoissonGridCellCentersToPolyscopePointCloud
 	//	//AddPoissonGridCellCentersToPolyscopePointCloud
-	//	IOFunc::AddLeveledPoissonGridCellCentersToPolyscopePointCloud(holder, { { -1,"type" }, { ProjChnls::c0 + 3, "c3" }, {ProjChnls::x, "pressure"}, { ProjChnls::b, "divergence" } }, { {BufChnls::u, "velocity"} });
+	//	IOFunc::AddPoissonGridCellCentersToPolyscopePointCloud(holder, { { -1,"type" }, { ProjChnls::c0 + 3, "c3" }, {ProjChnls::x, "pressure"}, { ProjChnls::b, "divergence" } }, { {BufChnls::u, "velocity"}, {ProjChnls::u_mix, "u_mix"} });
 	//	//IOFunc::AddLeveledPoissonGridCellCentersToPolyscopePointCloud(holder, { { -1,"type" }, { BufChnls::vor, "vorticity" } }, { { BufChnls::u, "velocity" } });
 	//	polyscope::show();
 	//}
+}
+
+void FluidEuler::adaptAndAdvect(DriverMetaData& metadata, std::vector<std::shared_ptr<HADeviceGrid<Tile>>> grid_ptrs) {
+	const double dt = metadata.dt;
+	const double current_time = metadata.current_time;
+
+
+	CPUTimer timer; timer.start();
+
+	//1. advect particles with last_grid
+	//2. refine grid with particles
+	//3. calculate type, advect dye_density and velocity on grid
+
+	//012: temporary node velocity
+	//3: temporary node dye density
+
+	//shared by two grids
+	//int u_channel = AdvChnls::u;//6
+
+
+	//saved intermediate velocities
+	int n = grid_ptrs.size() - 1;
+	//we only need to prepare the last grid at this time
+	auto& last_grid = *grid_ptrs[n - 1];
+	CheckCudaError("prepare last grid");
+
+
+	AdvectMarkerParticlesRK4ForwardAndMarkInvalid(
+		last_grid, mParams.mFineLevel, mParams.mCoarseLevel,
+		BufChnls::u, dt, current_time - mParams.mParticleLife,
+		marker_particles_d
+	);
+	EraseInvalidParticles(marker_particles_d);
+	cudaDeviceSynchronize(); particle_advection_time = timer.stop("Advect particles"); timer.start();
+	CheckCudaError("adv particle");
+
+	auto h_acc = last_grid.deviceAccessor();
+	auto new_particles_d = SampleMarkerParticlesOutsideMeshBand(*mMeshSDFAccel, mParams.meshToWorldTransform(current_time), h_acc.voxelSize(mParams.mFineLevel), mParams.mRelativeSampleBandwidth, mParams.mSampleNumPerTile, current_time, mRamdonGenerator);
+	marker_particles_d.insert(marker_particles_d.end(), new_particles_d.begin(), new_particles_d.end());
+	cudaDeviceSynchronize(); reseeding_time = timer.stop("reseeding and remove particles in solid"); timer.start();
+	Info("total {:.5f}M particles, time step counter {}", marker_particles_d.size() / (1024 * 1024 + 0.f), time_step_counter);
+	CheckCudaError("reseeding particles");
+
+
+
+	auto& grid = *grid_ptrs[n];
+	RefineWithMarkerParticles(grid, marker_particles_d, mParams.mCoarseLevel, mParams.mFineLevel, BufChnls::counter, false);
+	CoarsenWithMarkerParticles(grid, marker_particles_d, mParams.mCoarseLevel, mParams.mFineLevel, BufChnls::counter, false);
+	cudaDeviceSynchronize(); adaptive_time = timer.stop("adapt with particles"); timer.start();
+	CheckCudaError("adapt with particles");
+
+	buildTypesAndAMGCoeffs(grid, current_time);
+
+	Info("time step counter: {}", time_step_counter);
+	auto nfm_query_grid_ptr = grid_ptrs[n - 1 - (time_step_counter % mParams.mFlowMapStride)];
+
+	//prepare pointers for previous grids
+	thrust::host_vector<HATileAccessor<Tile>> accs_h;
+	for (int i = 0; i < n; i++) accs_h.push_back(grid_ptrs[i]->deviceAccessor());
+	thrust::device_vector<HATileAccessor<Tile>> accs_d = accs_h;
+	auto accs_d_ptr = thrust::raw_pointer_cast(accs_d.data());
+	thrust::device_vector<double> time_steps_d = time_steps;
+	auto time_steps_d_ptr = thrust::raw_pointer_cast(time_steps_d.data());
+	CheckCudaError("prepare pointers");
+	Info("prepare pointers");
+
+	FillChannelsInGridWithValue(grid, 0., LEAF | NONLEAF | GHOST, { BufChnls::u, BufChnls::u + 1, BufChnls::u + 2 });
+
+	//add advected NFM velocity to velocity field
+	{
+		auto last_acc = last_grid.deviceAccessor();
+		auto nfm_query_acc = nfm_query_grid_ptr->deviceAccessor();
+		auto params = mParams;
+
+		int fine_level = mParams.mFineLevel;
+		int coarse_level = mParams.mCoarseLevel;
+
+		int back_traced_steps = time_step_counter % mParams.mFlowMapStride;
+		int nfm_start_idx = n - back_traced_steps - 1;
+		Info("nfm start idx: {}, back traced steps: {}, accs_d size {}", nfm_start_idx, back_traced_steps, accs_d.size());
+
+		grid.launchVoxelFuncOnAllTiles(
+			[=] __device__(HATileAccessor<Tile>&acc, HATileInfo<Tile>&info, const Coord & l_ijk) {
+			auto& tile = info.tile();
+
+
+			{
+				//grid velocity advection
+				for (int axis : {0, 1, 2}) {
+					{
+						Vec pos = acc.faceCenter(axis, info, l_ijk);
+						Vec back_pos = SemiLagrangianBackwardPosition(acc, fine_level, coarse_level, pos, dt, BufChnls::u + axis);
+						Vec back_vel;
+						KernelIntpVelocityMAC2(acc, fine_level, coarse_level, back_pos, BufChnls::u, back_vel);
+						auto fluid_ratio = -tile(ProjChnls::c0 + axis, l_ijk) / acc.voxelSize(info);
+						if (fluid_ratio > 0) {
+							tile(BufChnls::u + axis, l_ijk) = fluid_ratio * back_vel[axis];
+						}
+						else {
+							tile(BufChnls::u + axis, l_ijk) = 0;
+						}
+					}
+				}
+			}
+		}, LEAF, 4
+		);
+
+		CheckCudaError("launch nfm");
+
+	}
+
+	cudaDeviceSynchronize(); nfm_advection_time = timer.stop("NFM advection"); timer.start();
+	CheckCudaError("nfm advection");
+}
+
+void FluidEuler::Advance(DriverMetaData& metadata) {
+
+	CPUTimer timer;
+	timer.start();
+
+	//Info("before advance"); PrintMemoryInfo();
+
+	if (grid_ptrs.size() < mParams.mFlowMapStride + 1) {
+		//create a new grid
+		auto nxt_ptr = grid_ptrs.back()->deepCopy();
+		grid_ptrs.push_back(nxt_ptr);
+		time_steps.push_back(metadata.dt);
+	}
+	else {
+		auto nxt_ptr = grid_ptrs[0];
+		grid_ptrs.erase(grid_ptrs.begin());
+		grid_ptrs.push_back(nxt_ptr);
+		time_steps.erase(time_steps.begin());
+		time_steps.push_back(metadata.dt);
+	}
+
+	auto& grid = *grid_ptrs.back();
+	auto& last_grid = *grid_ptrs[grid_ptrs.size() - 2];
+	//double dt = metadata.dt;
+
+	fmt::print("\n");
+	Pass("Advance frame {} current time {} dt {} step counter {}", metadata.current_frame, metadata.current_time, metadata.dt, time_step_counter);
+	ASSERT(metadata.dt > 0, "dt should be positive");
+
+
+	adaptAndAdvect(metadata, grid_ptrs);
+
+
+	applyExternalForce(grid, metadata.dt);
+
+
+
+	if (time_step_counter == 65) {
+		amg_solver_open_visualization = 1;
+	}
+	else {
+		amg_solver_open_visualization = 0;
+	}
+
+
+	//projection
+	project(grid, metadata.current_time, metadata.dt);
+
+
+
+
+
+	CalculateVelocityAndVorticityMagnitudeOnLeafCellCenters(grid, mParams.mFineLevel, mParams.mCoarseLevel, ProjChnls::u_mix, BufChnls::u_cell, BufChnls::vor);
+
+	//{
+	//	//show velocity on polyscope before proj
+	//	polyscope::init();
+	//	polyscope::removeAllStructures();
+	//	auto holder = grid.getHostTileHolderForLeafs();
+	//	IOFunc::AddPoissonGridCellCentersToPolyscopePointCloud(holder, { { -1,"type" }, { BufChnls::vor, "vorticity" }, {ProjChnls::x, "pressure"}, { ProjChnls::b, "divergence" } }, { {BufChnls::u, "velocity"} });
+	//	//IOFunc::AddLeveledPoissonGridCellCentersToPolyscopePointCloud(holder, { { -1,"type" }, { BufChnls::vor, "vorticity" } }, { { BufChnls::u, "velocity" } });
+	//	polyscope::show();
+	//}
+
+	extrapolateFluidVelocityForAdvection(grid, 5, BufChnls::u, ProjChnls::c0);
+
+	CheckCudaError("Advance");
+	time_step_counter++;
+
+
+	PrintMemoryInfo();
+
+	cudaDeviceSynchronize(); advance_time = timer.stop();
 }

@@ -13,7 +13,7 @@ double DriverMetaData::Time_At_Frame(int frame) {
 }
 
 void DriverMetaData::init(const fs::path& json_path, json& j) {
-	output_base_dir = Json::Value(j, "output_base_dir", std::string("output"));
+	std::string output_base_dir = Json::Value(j, "output_base_dir", std::string("output"));
 	//base_path = fs::current_path() / fs::path(output_base_dir);
     base_path = fs::path(output_base_dir) / json_path.stem();
 

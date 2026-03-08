@@ -46,9 +46,9 @@ namespace DriverFunc {	//will change timer
 		DriverMetaData meta_data;
 		meta_data.init(json_path, j.at("driver"));
 		scene.Apply(j, simulator, meta_data);
-		fs::create_directories(meta_data.output_base_dir);
+		fs::create_directories(meta_data.base_path);
 		//FileFunc::CreateDirectory(meta_data.output_base_dir);
-		fs::path dump_file = fs::path(meta_data.output_base_dir) / fs::path("config.json");
+		fs::path dump_file = meta_data.base_path / fs::path("config.json");
 		std::ofstream dump_output(dump_file.string());
 		dump_output << std::setw(4) << j;
 		dump_output.close();
