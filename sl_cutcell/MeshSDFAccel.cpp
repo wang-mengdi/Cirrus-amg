@@ -5,6 +5,9 @@
 #include <tbb/parallel_for.h>
 #include <tbb/blocked_range.h>
 
+#include <igl/per_face_normals.h>
+#include <igl/per_vertex_normals.h>
+
 void MeshSDFAccel::init(const fs::path& obj_path)
 {
 	//fmt::print("current working directory: {}\n", fs::current_path().string());
@@ -34,14 +37,23 @@ void MeshSDFAccel::build(const Eigen::Matrix<T, -1, 3>& V_in, const Eigen::Matri
     // Build AABB once (read-only after this).
     tree_.init(V_, F_);
 
-    // Precompute per-face unit normals.
-    FN_.resize(F_.rows(), 3);
-    for (int i = 0; i < F_.rows(); ++i) {
-        const Eigen::Matrix<T, 1, 3> a = V_.row(F_(i, 0));
-        const Eigen::Matrix<T, 1, 3> b = V_.row(F_(i, 1));
-        const Eigen::Matrix<T, 1, 3> c = V_.row(F_(i, 2));
-        FN_.row(i) = (b - a).cross(c - a).normalized();
-    }
+    // face normals
+    igl::per_face_normals(V_, F_, FN_);
+
+    // vertex normals
+    igl::per_vertex_normals(V_, F_, VN_);
+
+	//// Precompute per-vertex unit normals.
+ //   
+
+ //   // Precompute per-face unit normals.
+ //   FN_.resize(F_.rows(), 3);
+ //   for (int i = 0; i < F_.rows(); ++i) {
+ //       const Eigen::Matrix<T, 1, 3> a = V_.row(F_(i, 0));
+ //       const Eigen::Matrix<T, 1, 3> b = V_.row(F_(i, 1));
+ //       const Eigen::Matrix<T, 1, 3> c = V_.row(F_(i, 2));
+ //       FN_.row(i) = (b - a).cross(c - a).normalized();
+ //   }
 }
 
 std::vector<T> MeshSDFAccel::querySDF(const std::vector<Vec>& points, const Eigen::Transform<T, 3, Eigen::Affine>& xform) const
