@@ -5,6 +5,7 @@
 #include <cub/block/block_reduce.cuh>
 #include <thrust/execution_policy.h>
 #include <tbb/parallel_for.h>
+#include "polyscope/surface_mesh.h"
 
 
 #include <cmath>
@@ -516,17 +517,23 @@ void FluidEuler::project(HADeviceGrid<Tile>& grid, const T current_time, const T
 		}
 	}
 
-	//{
-	//	//show velocity on polyscope before proj
-	//	polyscope::init();
-	//	polyscope::removeAllStructures();
-	//	auto holder = grid.getHostTileHolderForLeafs();
-	//	//AddLeveledPoissonGridCellCentersToPolyscopePointCloud
-	//	//AddPoissonGridCellCentersToPolyscopePointCloud
-	//	IOFunc::AddPoissonGridCellCentersToPolyscopePointCloud(holder, { { -1,"type" }, { ProjChnls::c0 + 3, "c3" }, {ProjChnls::x, "pressure"}, { ProjChnls::b, "divergence" } }, { {BufChnls::u, "velocity"}, {ProjChnls::u_mix, "u_mix"} });
-	//	//IOFunc::AddLeveledPoissonGridCellCentersToPolyscopePointCloud(holder, { { -1,"type" }, { BufChnls::vor, "vorticity" } }, { { BufChnls::u, "velocity" } });
-	//	polyscope::show();
-	//}
+	{
+		//show velocity on polyscope before proj
+		polyscope::init();
+		polyscope::removeAllStructures();
+		auto holder = grid.getHostTileHolderForLeafs();
+		//AddLeveledPoissonGridCellCentersToPolyscopePointCloud
+		//AddPoissonGridCellCentersToPolyscopePointCloud
+		IOFunc::AddLeveledPoissonGridCellCentersToPolyscopePointCloud(holder, { { -1,"type" }, { ProjChnls::c0 + 3, "c3" }, {ProjChnls::x, "pressure"}, { ProjChnls::b, "divergence" } }, { {BufChnls::u, "velocity"}, {ProjChnls::u_mix, "u_mix"} });
+		//IOFunc::AddLeveledPoissonGridCellCentersToPolyscopePointCloud(holder, { { -1,"type" }, { BufChnls::vor, "vorticity" } }, { { BufChnls::u, "velocity" } });
+		IOFunc::AddMarkerParticlesToPolyscope(marker_particles_d, "marker_particles");
+		IOFunc::AddTilesToPolyscopeVolumetricMesh(grid, LEAF, "leaf_tiles");
+		auto xform = mParams.meshToWorldTransform(current_time);
+		Eigen::Matrix<T, -1, 3> V_world =
+			(xform * mMeshSDFAccel->V_.transpose()).transpose();
+		auto* psMesh = polyscope::registerSurfaceMesh("mesh", V_world, mMeshSDFAccel->F_);
+		polyscope::show();
+	}
 }
 
 void FluidEuler::adaptAndAdvect(DriverMetaData& metadata, std::vector<std::shared_ptr<HADeviceGrid<Tile>>> grid_ptrs) {

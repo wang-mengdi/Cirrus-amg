@@ -627,8 +627,8 @@ namespace IOFunc {
 
                             
                             {
-                                //auto ref_center = acc.cellCenterGlobal(6, Coord(232, 238, 368));
-                                //if ((pos - ref_center).length() > 0.01) continue;
+                                auto ref_center = acc.cellCenterGlobal(5, Coord(120, 112, 94));
+                                if ((pos - ref_center).length() > 0.01) continue;
 
 
         //                        //if (info.mLevel != 5) continue;
@@ -764,9 +764,9 @@ namespace IOFunc {
 										//Info("building polyscope level {} g_ijk {} uvw ({}, {}, {}), len {}", level, g_ijk, u, v, w, len);
           //                          }
 
-          //                          if (len > 100) {
-										//Warn("Large vector magnitude at level {}, g_ijk {}: ({}, {}, {})", level, g_ijk, u, v, w);
-          //                          }
+                                    if (len > 10) {
+										Warn("Large vector magnitude at level {}, g_ijk {}: ({}, {}, {})", level, g_ijk, u, v, w);
+                                    }
                                 }
                             }
                         }
