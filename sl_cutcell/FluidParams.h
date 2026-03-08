@@ -73,8 +73,8 @@ public:
 	nanovdb::Vec3R mGravity;
 	T mesh_motion_inflow = 0.0;
 
-	int mSampleParticleCount;
-	T mRelativeSampleRadius;//k*dx, where dx is the finest level
+	int mSampleNumPerTile;//number of sampled points per finest tile
+	T mRelativeSampleBandwidth;//k*dx, where dx is the finest level
 
 	//MaskGridAccessor mMaskGridAccessor;
 	//SDFGridAccessor mSDFGridAccessor;

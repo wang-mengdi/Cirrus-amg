@@ -75,7 +75,7 @@ void MarkOldParticlesAsInvalid(thrust::device_vector<Particle>& particles, const
 __device__ Vec SemiLagrangianBackwardPosition(const HATileAccessor<Tile>&acc, const int fine_level, const int coarse_level, const Vec & pos, const T dt, const int u_channel);
 
 
-thrust::device_vector<MarkerParticle> SampleMarkerParticlesOutsideMesh(const MeshSDFAccel & mesh_sdf, const Eigen::Transform<T, 3, Eigen::Affine>&mesh_to_world, int N, T r, T birth_time, RandomGenerator & rng, int batch_size = 4096);
+thrust::device_vector<MarkerParticle> SampleMarkerParticlesOutsideMeshBand(const MeshSDFAccel & mesh_sdf, const Eigen::Transform<T, 3, Eigen::Affine>&mesh_to_world, T dx, T relative_bandwidth, T samples_per_tile, T birth_time, RandomGenerator & rng);
 
 void ClearAllNeumannNeighborFaces(HADeviceGrid<Tile>& grid, const int u_channel);
 
@@ -189,8 +189,7 @@ public:
 		{
 			//refine using mesh vertices
 			auto h_acc = grid.deviceAccessor();
-			auto sample_r = mParams.mRelativeSampleRadius * h_acc.voxelSize(mParams.mFineLevel);
-			marker_particles_d = SampleMarkerParticlesOutsideMesh(*mMeshSDFAccel, mParams.meshToWorldTransform(0.), mParams.mSampleParticleCount, sample_r, 0., mRamdonGenerator);
+			marker_particles_d = SampleMarkerParticlesOutsideMeshBand(*mMeshSDFAccel, mParams.meshToWorldTransform(0.), h_acc.voxelSize(mParams.mFineLevel), mParams.mRelativeSampleBandwidth, mParams.mSampleNumPerTile, 0., mRamdonGenerator);
 			RefineWithMarkerParticles(grid, marker_particles_d, mParams.mCoarseLevel, mParams.mFineLevel, BufChnls::counter, false);
 
 		}
@@ -383,8 +382,7 @@ public:
 		CheckCudaError("adv particle");
 
 		auto h_acc = last_grid.deviceAccessor();
-		auto sample_r = mParams.mRelativeSampleRadius * h_acc.voxelSize(mParams.mFineLevel);
-		auto new_particles_d = SampleMarkerParticlesOutsideMesh(*mMeshSDFAccel, mParams.meshToWorldTransform(current_time), mParams.mSampleParticleCount, sample_r, current_time, mRamdonGenerator);
+		auto new_particles_d = SampleMarkerParticlesOutsideMeshBand(*mMeshSDFAccel, mParams.meshToWorldTransform(current_time), h_acc.voxelSize(mParams.mFineLevel), mParams.mRelativeSampleBandwidth, mParams.mSampleNumPerTile, current_time, mRamdonGenerator);
 		marker_particles_d.insert(marker_particles_d.end(), new_particles_d.begin(), new_particles_d.end());
 		cudaDeviceSynchronize(); reseeding_time = timer.stop("reseeding and remove particles in solid"); timer.start();
 		Info("total {:.5f}M particles, time step counter {}", marker_particles_d.size() / (1024 * 1024 + 0.f), time_step_counter);

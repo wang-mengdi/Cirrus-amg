@@ -15,10 +15,10 @@
         "flowmap_stride": 1,
         "gravity": 0.0,
         "inflow_velocity": 1.0,
-        "marker_particles_per_step": 65536,
         "mesh_file": "./scenes/sphere.obj",
         "particle_life": 2.5,
-        "relative_sample_radius": 5.0,
+        "sample_num_per_tile": 128,
+        "relative_sample_bandwidth": 5.0,
         "test": "meshmotion"
     },
     "simulator": "euler"

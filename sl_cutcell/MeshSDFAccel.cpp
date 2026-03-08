@@ -8,6 +8,13 @@
 #include <igl/per_face_normals.h>
 #include <igl/per_vertex_normals.h>
 
+void AssertRigidTransform(const Eigen::Transform<T, 3, Eigen::Affine>& xform)
+{
+    const auto& R = xform.linear();
+    ASSERT(R.isUnitary(T(1e-6)));
+    ASSERT(std::abs(R.determinant() - T(1)) < T(1e-6));
+}
+
 void MeshSDFAccel::init(const fs::path& obj_path)
 {
 	//fmt::print("current working directory: {}\n", fs::current_path().string());
@@ -34,30 +41,36 @@ void MeshSDFAccel::build(const Eigen::Matrix<T, -1, 3>& V_in, const Eigen::Matri
     V_ = V_in;
     F_ = F_in;
 
+    ASSERT(V_.cols() == 3);
+    ASSERT(F_.cols() == 3);
+
     // Build AABB once (read-only after this).
     tree_.init(V_, F_);
 
-    // face normals
+    // Per-face unit normals.
     igl::per_face_normals(V_, F_, FN_);
+    ASSERT(FN_.rows() == F_.rows());
+    ASSERT(FN_.cols() == 3);
 
-    // vertex normals
-    igl::per_vertex_normals(V_, F_, VN_);
+    // Per-face areas and total area.
+    face_area_.resize(F_.rows(), 1);
+    total_area_ = T(0);
 
-	//// Precompute per-vertex unit normals.
- //   
+    for (int i = 0; i < F_.rows(); ++i) {
+        const Eigen::Matrix<T, 1, 3> a = V_.row(F_(i, 0));
+        const Eigen::Matrix<T, 1, 3> b = V_.row(F_(i, 1));
+        const Eigen::Matrix<T, 1, 3> c = V_.row(F_(i, 2));
 
- //   // Precompute per-face unit normals.
- //   FN_.resize(F_.rows(), 3);
- //   for (int i = 0; i < F_.rows(); ++i) {
- //       const Eigen::Matrix<T, 1, 3> a = V_.row(F_(i, 0));
- //       const Eigen::Matrix<T, 1, 3> b = V_.row(F_(i, 1));
- //       const Eigen::Matrix<T, 1, 3> c = V_.row(F_(i, 2));
- //       FN_.row(i) = (b - a).cross(c - a).normalized();
- //   }
+        const T area = T(0.5) * ((b - a).cross(c - a)).norm();
+        face_area_(i) = area;
+        total_area_ += area;
+    }
 }
 
 std::vector<T> MeshSDFAccel::querySDF(const std::vector<Vec>& points, const Eigen::Transform<T, 3, Eigen::Affine>& xform) const
 {
+    AssertRigidTransform(xform);
+
     const int N = static_cast<int>(points.size());
     std::vector<T> sdf(N);
 

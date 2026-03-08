@@ -243,93 +243,114 @@ __device__ Vec SemiLagrangianBackwardPosition(const HATileAccessor<Tile>& acc, c
 	return pos2;
 }
 
-// Sample N marker particles outside the mesh.
-// For each candidate:
-// 1. Randomly pick one mesh vertex.
-// 2. Sample a point uniformly inside a world-space ball of radius r centered at that vertex.
-// 3. Reject the point if it is inside the mesh (sdf < 0).
-// 4. Accept the point if it is outside or exactly on the surface (sdf >= 0).
-thrust::device_vector<MarkerParticle> SampleMarkerParticlesOutsideMesh(const MeshSDFAccel& mesh_sdf, const Eigen::Transform<T, 3, Eigen::Affine>& mesh_to_world, int N,	T r, T birth_time, RandomGenerator& rng, int batch_size)
+thrust::device_vector<MarkerParticle> SampleMarkerParticlesOutsideMeshBand(const MeshSDFAccel& mesh_sdf, const Eigen::Transform<T, 3, Eigen::Affine>& mesh_to_world, T dx, T relative_bandwidth, T samples_per_tile, T birth_time, RandomGenerator& rng)
 {
-	ASSERT(N >= 0);
-	ASSERT(r > T(0));
-	ASSERT(batch_size > 0);
+	ASSERT(dx > T(0));
+	ASSERT(relative_bandwidth >= T(0));
+	ASSERT(samples_per_tile >= T(0));
 	ASSERT(mesh_sdf.V_.rows() > 0);
+	ASSERT(mesh_sdf.F_.rows() > 0);
+	ASSERT(mesh_sdf.face_area_.rows() == mesh_sdf.F_.rows());
+	ASSERT(mesh_sdf.FN_.rows() == mesh_sdf.F_.rows());
+	ASSERT(mesh_sdf.total_area_ >= T(0));
+	AssertRigidTransform(mesh_to_world);
 
-	if (N == 0) {
+	if (mesh_sdf.total_area_ <= T(0) || samples_per_tile <= T(0)) {
+		ASSERT(false, "Mesh has non-positive total area or samples_per_tile is non-positive, cannot sample marker particles.");
 		return thrust::device_vector<MarkerParticle>();
 	}
 
-	std::vector<MarkerParticle> h_particles;
-	h_particles.reserve(static_cast<size_t>(N));
+	const T sample_bandwidth = relative_bandwidth * dx;
+	const T tile_width = T(8) * dx;
+	const T tile_area = tile_width * tile_width;
+	const T samples_per_area = samples_per_tile / tile_area;
+
+	// Expected total number of samples.
+	const T expected_total = mesh_sdf.total_area_ * samples_per_area;
+	int target_N = static_cast<int>(std::ceil(expected_total));
+
+	if (target_N <= 0) {
+		ASSERT(false, "Expected total number of marker particles is non-positive, cannot sample marker particles. Check if the mesh has positive area and samples_per_tile is positive.");
+		return thrust::device_vector<MarkerParticle>();
+	}
 
 	std::vector<Vec> candidates;
-	candidates.reserve(static_cast<size_t>(batch_size));
+	candidates.reserve(static_cast<size_t>(target_N));
 
-	while (static_cast<int>(h_particles.size()) < N) {
-		const int remaining = N - static_cast<int>(h_particles.size());
-		const int curr_batch_size = std::min(batch_size, remaining);
+	// Precompute normal transform for world-space offset.
+	// This handles general affine transforms correctly.
+	const Eigen::Matrix<T, 3, 3> normal_xform = mesh_to_world.linear().inverse().transpose();
 
-		candidates.clear();
-		candidates.resize(static_cast<size_t>(curr_batch_size));
+	// Generate candidates face by face.
+	for (int fid = 0; fid < mesh_sdf.F_.rows(); ++fid) {
+		const T area = mesh_sdf.face_area_(fid);
+		if (area <= T(0)) continue;
 
-		// Generate candidate points in world space
-		for (int k = 0; k < curr_batch_size; ++k) {
-			// Randomly pick one vertex in mesh-local space
-			const int vid = rng.rand(0, static_cast<int>(mesh_sdf.V_.rows()) - 1);
+		const T expected_count = samples_per_area * area;
+		int count = static_cast<int>(std::floor(expected_count));
+		const T frac = expected_count - T(count);
 
-			Eigen::Matrix<T, 3, 1> p_mesh(
-				mesh_sdf.V_(vid, 0),
-				mesh_sdf.V_(vid, 1),
-				mesh_sdf.V_(vid, 2));
-
-			// Transform the vertex to world space
-			const Eigen::Matrix<T, 3, 1> center_world = mesh_to_world * p_mesh;
-
-			// Sample a random direction by rejection from the unit ball
-			Eigen::Matrix<T, 3, 1> dir;
-			while (true) {
-				dir << T(rng.uniform(-1.0, 1.0)),
-					T(rng.uniform(-1.0, 1.0)),
-					T(rng.uniform(-1.0, 1.0));
-
-				const T norm2 = dir.squaredNorm();
-				if (norm2 > T(1e-12) && norm2 <= T(1)) {
-					dir /= std::sqrt(norm2);
-					break;
-				}
-			}
-
-			// Sample radius with volume-uniform distribution
-			const T u = T(rng.uniform(0.0, 1.0));
-			const T rho = r * std::cbrt(u);
-
-			// Final candidate point in world space
-			const Eigen::Matrix<T, 3, 1> sample_world = center_world + rho * dir;
-			candidates[static_cast<size_t>(k)] = Vec(sample_world(0), sample_world(1), sample_world(2));
+		if (T(rng.uniform(0.0, 1.0)) < frac) {
+			++count;
 		}
 
-		// Query SDF for the whole batch
-		const std::vector<T> sdf = mesh_sdf.querySDF(candidates, mesh_to_world);
-		ASSERT(static_cast<int>(sdf.size()) == curr_batch_size);
+		if (count <= 0) continue;
 
-		// Keep points outside the mesh or exactly on the surface
-		for (int k = 0; k < curr_batch_size; ++k) {
-			if (sdf[static_cast<size_t>(k)] < T(0)) {
-				continue;
+		const int i0 = mesh_sdf.F_(fid, 0);
+		const int i1 = mesh_sdf.F_(fid, 1);
+		const int i2 = mesh_sdf.F_(fid, 2);
+
+		const Eigen::Matrix<T, 3, 1> a = mesh_sdf.V_.row(i0).transpose();
+		const Eigen::Matrix<T, 3, 1> b = mesh_sdf.V_.row(i1).transpose();
+		const Eigen::Matrix<T, 3, 1> c = mesh_sdf.V_.row(i2).transpose();
+
+		Eigen::Matrix<T, 3, 1> n_local = mesh_sdf.FN_.row(fid).transpose();
+		Eigen::Matrix<T, 3, 1> n_world = normal_xform * n_local;
+		n_world = n_world.normalized();
+
+		for (int s = 0; s < count; ++s) {
+			// Uniform sample on triangle.
+			const T u = T(rng.uniform(0.0, 1.0));
+			const T v = T(rng.uniform(0.0, 1.0));
+			const T su = std::sqrt(u);
+
+			const T w0 = T(1) - su;
+			const T w1 = su * (T(1) - v);
+			const T w2 = su * v;
+
+			const Eigen::Matrix<T, 3, 1> p_local = w0 * a + w1 * b + w2 * c;
+			const Eigen::Matrix<T, 3, 1> p_world_surface = mesh_to_world * p_local;
+
+			T offset = T(0);
+			if (sample_bandwidth > T(0)) {
+				offset = sample_bandwidth * T(rng.uniform(0.0, 1.0));
 			}
 
-			MarkerParticle p;
-			p.pos = candidates[static_cast<size_t>(k)];
-			p.birth_time = birth_time;
-			h_particles.push_back(p);
+			const Eigen::Matrix<T, 3, 1> p_world = p_world_surface + offset * n_world;
+			candidates.emplace_back(p_world(0), p_world(1), p_world(2));
 		}
 	}
 
-	ASSERT(static_cast<int>(h_particles.size()) >= N);
-	h_particles.resize(static_cast<size_t>(N));
+	if (candidates.empty()) {
+		return thrust::device_vector<MarkerParticle>();
+	}
 
-	Info("Sampled {} marker particles outside the mesh", N);
+	const std::vector<T> sdf = mesh_sdf.querySDF(candidates, mesh_to_world);
+	ASSERT(sdf.size() == candidates.size());
+
+	std::vector<MarkerParticle> h_particles;
+	h_particles.reserve(candidates.size());
+
+	for (size_t i = 0; i < candidates.size(); ++i) {
+		if (sdf[i] < T(0)) continue;
+
+		MarkerParticle p;
+		p.pos = candidates[i];
+		p.birth_time = birth_time;
+		h_particles.push_back(p);
+	}
+
+	Info("Sampled {} marker particles outside the mesh within bandwidth {}, total {} faces and area {} avg {} particles per face", h_particles.size(), sample_bandwidth, mesh_sdf.F_.rows(), mesh_sdf.total_area_, (h_particles.size() + 0.) / mesh_sdf.F_.rows());
 
 	return thrust::device_vector<MarkerParticle>(h_particles.begin(), h_particles.end());
 }

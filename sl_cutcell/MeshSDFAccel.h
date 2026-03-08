@@ -5,6 +5,8 @@
 
 #include "PoissonTile.h"
 
+void AssertRigidTransform(const Eigen::Transform<T, 3, Eigen::Affine>& xform);
+
 class MeshSDFAccel {
 public:
     MeshSDFAccel(){}
@@ -28,8 +30,9 @@ public:
     // AABB over (V_, F_). igl::AABB is header-only; safe to keep as a member.
     igl::AABB<Eigen::Matrix<T, -1, 3>, 3> tree_;
 
-	// Per-vertex unit normals (nV x 3), for pseudonormal sign
-    Eigen::Matrix<T, -1, 3> VN_; // (nV x 3)
     // Per-face unit normals (nF x 3), for pseudonormal sign
     Eigen::Matrix<T, -1, 3> FN_;
+
+    Eigen::Matrix<T, -1, 1> face_area_; // (nF x 1)
+    T total_area_ = T(0);
 };
