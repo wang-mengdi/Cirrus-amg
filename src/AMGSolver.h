@@ -7,6 +7,7 @@ void PrepareLaplacianSystemFromLeafAndGhostCellTypesAndFaceCoeffs(HADeviceGrid<T
 
 void AMGFullNegativeLaplacianOnLeafs(HADeviceGrid<Tile>& grid, const int x_channel, const int coeff_channel, const int Ax_channel);
 
+//AMGAddGradientToFace does not consider face coeffs.
 void AMGAddGradientToFace(HADeviceGrid<Tile>& grid, int subtree_level, uint8_t launch_tile_types, int x_channel, int coeff_channel, int u_channel);
 void AMGAddFaceWeightedGradientToFace(HADeviceGrid<Tile>& grid, int subtree_level, uint8_t launch_tile_types, int x_channel, int coeff_channel, int u_channel);
 //does not consider face coeffs. This should be used in projection to take Neumann faces into account

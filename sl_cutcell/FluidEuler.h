@@ -107,16 +107,18 @@ public:
 	double projection_time = 0;
 
 
-	void addSolidVelocityWithFractionsToFaces(HADeviceGrid<Tile>& grid, const double current_time, const double dt) {
-		auto params = mParams;
-		grid.launchVoxelFuncOnAllTiles(
-			[params, current_time, dt] __device__(HATileAccessor<Tile>&acc, HATileInfo<Tile>&info, const Coord & l_ijk) {
-			for (int axis : {0, 1, 2}) {
-				params.addSolidVelocityToFaceCenter(current_time, dt, acc, info, l_ijk, axis);
-			}
-		}, LEAF
-		);
-	}
+	//void addSolidVelocityWithFractionsToFaces(HADeviceGrid<Tile>& grid, const double current_time, const double dt) {
+	//	auto params = mParams;
+	//	grid.launchVoxelFuncOnAllTiles(
+	//		[params, current_time, dt] __device__(HATileAccessor<Tile>&acc, HATileInfo<Tile>&info, const Coord & l_ijk) {
+	//		for (int axis : {0, 1, 2}) {
+	//			params.addSolidVelocityToFaceCenter(current_time, dt, acc, info, l_ijk, axis);
+	//		}
+	//	}, LEAF
+	//	);
+	//}
+
+	void mixFluidAndSolidVelocityOnFaces(HADeviceGrid<Tile>& grid, const double current_time, const double dt, const int coeff_channel, const int u_fluid_channel, const int u_mix_channel);
 
 	void buildTypesAndAMGCoeffs(HADeviceGrid<Tile>& grid, const T current_time) {
 		//Info("building types and AMG coeffs at time {}", current_time);
@@ -203,6 +205,7 @@ public:
 
 		//the velocity here is the composed velocity, which is weighted fluid + solid
 		//clear velocity variables to 0
+		//initial velocity: 0
 		FillChannelsInGridWithValue(grid, 0.0, LEAF | NONLEAF | GHOST, { BufChnls::u, BufChnls::u + 1, BufChnls::u + 2 });
 		//add solid velocity to velocity variables
 		//Info("metadata current time: {} dt: {} fps {}", metadata.current_time, metadata.dt, metadata.fps);
@@ -283,69 +286,8 @@ public:
 	}
 
 
-	void project(HADeviceGrid<Tile>& grid) {
-		//auto c0_channel = ProjChnls::c0;
-
-		{
-
-			grid.launchVoxelFuncOnAllTiles(
-				[=] __device__(HATileAccessor<Tile>&acc, HATileInfo<Tile>&info, const Coord & l_ijk) {
-				info.tile()(ProjChnls::b, l_ijk) = NODATA;
-			}, LEAF | GHOST | NONLEAF, 4
-			);
-			CUDA_CHECK(cudaGetLastError());
-			CUDA_CHECK(cudaDeviceSynchronize());
-
-		}
-
-		//AMG
-		{
-			CalculateNeighborTiles(grid);
-
-			AMGVolumeWeightedDivergenceWithoutCoeffOnLeafs(grid, BufChnls::u, ProjChnls::b);
-
-
-
-
-			//Info("before proj div pt linf: {}", NormSync(grid, -1, ProjChnls::b, false));
-
-			AMGSolver solver(ProjChnls::c0, 0.5, 1, 1);
-			//solver.prepareTypesAndCoeffs(grid);
-
-			CPUTimer timer;
-			timer.start();
-			auto [iters, err] = solver.solve(grid, false, 100, 1e-7, 2, 10, 1, mParams.mIsPureNeumann);
-			cudaDeviceSynchronize();
-			double elapsed = timer.stop("AMGPCG");
-			double total_cells = grid.numTotalTiles() * Tile::SIZE;
-			double cells_per_second = (total_cells + 0.0) / (elapsed / 1000.0);
-			Info("Total {:.5}M cells, AMGPCG speed {:.5} M cells /s at {} iters", total_cells / (1024.0 * 1024), cells_per_second / (1024.0 * 1024), iters);
-			projection_time = elapsed;
-
-			//Info("pressure pt l2: {}", NormSync(grid, 2, ProjChnls::x, false));
-
-			AMGAddFaceWeightedGradientToFace(grid, -1, LEAF, ProjChnls::x, ProjChnls::c0, BufChnls::u);
-
-			AMGVolumeWeightedDivergenceWithoutCoeffOnLeafs(grid, BufChnls::u, ProjChnls::b);
-			Info("after proj div pt linf: {}", NormSync(grid, -1, ProjChnls::b, false));
-
-			{
-				Warn("after proj umax = {}, vmax = {}, wmax = {}", NormSync(grid, -1, BufChnls::u, false), NormSync(grid, -1, BufChnls::u + 1, false), NormSync(grid, -1, BufChnls::u + 2, false));
-			}
-		}
-
-		//{
-		//	//show velocity on polyscope before proj
-		//	polyscope::init();
-		//	polyscope::removeAllStructures();
-		//	auto holder = grid.getHostTileHolderForLeafs();
-		//	//AddLeveledPoissonGridCellCentersToPolyscopePointCloud
-		//	//AddPoissonGridCellCentersToPolyscopePointCloud
-		//	IOFunc::AddLeveledPoissonGridCellCentersToPolyscopePointCloud(holder, { { -1,"type" }, { ProjChnls::c0 + 3, "c3" }, {ProjChnls::x, "pressure"}, { ProjChnls::b, "divergence" } }, { {BufChnls::u, "velocity"} });
-		//	//IOFunc::AddLeveledPoissonGridCellCentersToPolyscopePointCloud(holder, { { -1,"type" }, { BufChnls::vor, "vorticity" } }, { { BufChnls::u, "velocity" } });
-		//	polyscope::show();
-		//}
-	}
+	//current_time and dt for calculating solid velocity and doing time interpolation
+	void project(HADeviceGrid<Tile>& grid, const T current_time, const T dt);
 
 	void adaptAndAdvect(DriverMetaData& metadata, std::vector<std::shared_ptr<HADeviceGrid<Tile>>> grid_ptrs) {
 		const double dt = metadata.dt;

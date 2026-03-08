@@ -354,3 +354,93 @@ thrust::device_vector<MarkerParticle> SampleMarkerParticlesOutsideMeshBand(const
 
 	return thrust::device_vector<MarkerParticle>(h_particles.begin(), h_particles.end());
 }
+
+void FluidEuler::mixFluidAndSolidVelocityOnFaces(HADeviceGrid<Tile>& grid, const double current_time, const double dt, const int coeff_channel, const int u_fluid_channel, const int u_mix_channel) {
+	auto params = mParams;
+	grid.launchVoxelFuncOnAllTiles(
+		[=] __device__(HATileAccessor<Tile>&acc, HATileInfo<Tile>&info, const Coord & l_ijk) {
+		auto& tile = info.tile();
+		auto h = acc.voxelSize(info);
+		for (int axis : {0, 1, 2}) {
+			T fluid_ratio = tile(coeff_channel + axis, l_ijk);
+			T solid_ratio = 1 - fluid_ratio;
+			T mix_vel;
+			if (fluid_ratio > 0) {
+				mix_vel += fluid_ratio * tile(u_fluid_channel + axis, l_ijk);
+			}
+			if (solid_ratio > 0) {
+				mix_vel += solid_ratio * params.solidFaceCenterVelocity(current_time, dt, acc, info, l_ijk, axis);
+			}
+
+			tile(u_mix_channel + axis, l_ijk) = mix_vel;
+		}
+	}, LEAF
+	);
+}
+
+void FluidEuler::project(HADeviceGrid<Tile>& grid, const T current_time, const T dt) {
+	//auto c0_channel = ProjChnls::c0;
+
+	{
+		//contaminate channels for debugging
+		grid.launchVoxelFuncOnAllTiles(
+			[=] __device__(HATileAccessor<Tile>&acc, HATileInfo<Tile>&info, const Coord & l_ijk) {
+			info.tile()(ProjChnls::b, l_ijk) = NODATA;
+		}, LEAF | GHOST | NONLEAF, 4
+		);
+		CUDA_CHECK(cudaGetLastError());
+		CUDA_CHECK(cudaDeviceSynchronize());
+
+	}
+
+	//AMG
+	{
+		CalculateNeighborTiles(grid);
+		//calculate mix velocities
+		mixFluidAndSolidVelocityOnFaces(grid, current_time, dt, ProjChnls::c0, BufChnls::u, ProjChnls::u_mix);
+		AMGVolumeWeightedDivergenceWithoutCoeffOnLeafs(grid, ProjChnls::u_mix, ProjChnls::b);
+
+		//Info("before proj div pt linf: {}", NormSync(grid, -1, ProjChnls::b, false));
+
+		AMGSolver solver(ProjChnls::c0, 0.5, 1, 1);
+		//solver.prepareTypesAndCoeffs(grid);
+
+		CPUTimer timer;
+		timer.start();
+		auto [iters, err] = solver.solve(grid, false, 100, 1e-7, 2, 10, 1, mParams.mIsPureNeumann);
+		cudaDeviceSynchronize();
+		double elapsed = timer.stop("AMGPCG");
+		double total_cells = grid.numTotalTiles() * Tile::SIZE;
+		double cells_per_second = (total_cells + 0.0) / (elapsed / 1000.0);
+		Info("Total {:.5}M cells, AMGPCG speed {:.5} M cells /s at {} iters", total_cells / (1024.0 * 1024), cells_per_second / (1024.0 * 1024), iters);
+		projection_time = elapsed;
+
+		//Info("pressure pt l2: {}", NormSync(grid, 2, ProjChnls::x, false));
+
+		//AMGAddFaceWeightedGradientToFace(grid, -1, LEAF, ProjChnls::x, ProjChnls::c0, BufChnls::u);
+		//add gradp to fluid velocity without coeffs
+		//solid velocity is not stored
+		AMGAddGradientToFace(grid, -1, LEAF, ProjChnls::x, ProjChnls::c0, BufChnls::u);
+
+		//mix and calculate divergence again for validation
+		mixFluidAndSolidVelocityOnFaces(grid, current_time, dt, ProjChnls::c0, BufChnls::u, ProjChnls::u_mix);
+		AMGVolumeWeightedDivergenceWithoutCoeffOnLeafs(grid, BufChnls::u, ProjChnls::b);
+		Info("after proj div pt linf: {}", NormSync(grid, -1, ProjChnls::b, false));
+
+		{
+			Warn("after proj umax = {}, vmax = {}, wmax = {}", NormSync(grid, -1, BufChnls::u, false), NormSync(grid, -1, BufChnls::u + 1, false), NormSync(grid, -1, BufChnls::u + 2, false));
+		}
+	}
+
+	//{
+	//	//show velocity on polyscope before proj
+	//	polyscope::init();
+	//	polyscope::removeAllStructures();
+	//	auto holder = grid.getHostTileHolderForLeafs();
+	//	//AddLeveledPoissonGridCellCentersToPolyscopePointCloud
+	//	//AddPoissonGridCellCentersToPolyscopePointCloud
+	//	IOFunc::AddLeveledPoissonGridCellCentersToPolyscopePointCloud(holder, { { -1,"type" }, { ProjChnls::c0 + 3, "c3" }, {ProjChnls::x, "pressure"}, { ProjChnls::b, "divergence" } }, { {BufChnls::u, "velocity"} });
+	//	//IOFunc::AddLeveledPoissonGridCellCentersToPolyscopePointCloud(holder, { { -1,"type" }, { BufChnls::vor, "vorticity" } }, { { BufChnls::u, "velocity" } });
+	//	polyscope::show();
+	//}
+}

@@ -162,49 +162,80 @@ __hostdev__ Eigen::Transform<T, 3, Eigen::Affine> FluidParams::meshToWorldTransf
 	}
 }
 
-__device__ void FluidParams::addSolidVelocityToFaceCenter(const T current_time, const T dt, const HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const Coord& l_ijk, const int axis) const
+__device__ T FluidParams::solidFaceCenterVelocity(const T current_time, const T dt, const HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const Coord& l_ijk, const int axis) const
 {
 	if (mTestCase == MESHMOTION) {
 		Vec wall_vel(0, 0, mesh_motion_inflow);
-		T solid_ratio = 0, solid_vel = 0;
-
 		auto g_ijk = acc.localToGlobalCoord(info, l_ijk);
 		auto ng_ijk = g_ijk; ng_ijk[axis]--;
 		if (wallCellType(current_time, acc, info.mLevel, g_ijk) == NEUMANN || wallCellType(current_time, acc, info.mLevel, ng_ijk) == NEUMANN) {
-			//it's a wall boundary NEUMANN cell
-			solid_ratio = 1;
-			solid_vel = wall_vel[axis];
+			return wall_vel[axis];
 		}
 		else {
-			//it either intersects with the mesh sdf or not
-			cuda_vec4_t<T> sdfs = FaceCornerSDFs(BufChnls::sdf, acc, info, l_ijk, axis);
-			auto h = acc.voxelSize(info.mLevel);
-			if (FaceSDFAllOutside<T>(sdfs, h * SDF_REL_EPS)) {//does not intersect, no solid part
-				solid_ratio = 0;
-				solid_vel = 0;
-			}
-			else {
-				auto pos0 = acc.faceCenter(axis, info, l_ijk);
+			//mesh rigid velocity
+			auto pos0 = acc.faceCenter(axis, info, l_ijk);
 
-				auto T0 = meshToWorldTransform(current_time);
-				auto T1 = meshToWorldTransform(current_time + dt);
+			auto T0 = meshToWorldTransform(current_time);
+			auto T1 = meshToWorldTransform(current_time + dt);
 
-				Eigen::Matrix<T, 3, 1> p0(pos0[0], pos0[1], pos0[2]);
-				Eigen::Matrix<T, 3, 1> p1 = T1 * (T0.inverse() * p0);
+			Eigen::Matrix<T, 3, 1> p0(pos0[0], pos0[1], pos0[2]);
+			Eigen::Matrix<T, 3, 1> p1 = T1 * (T0.inverse() * p0);
 
-				nanovdb::Vec3<T> pos1(p1[0], p1[1], p1[2]);
-				auto rigid_vel = (pos1 - pos0) / dt;
+			nanovdb::Vec3<T> pos1(p1[0], p1[1], p1[2]);
+			auto rigid_vel = (pos1 - pos0) / dt;
 
-
-				solid_ratio = 1 - FaceFluidRatio(sdfs);
-				solid_vel = rigid_vel[axis];
-			}
+			return rigid_vel[axis];
 		}
-
-		auto& tile = info.tile();
-		tile(BufChnls::u + axis, l_ijk) += solid_ratio * solid_vel;
 	}
 	else {
-		CUDA_ASSERT(false, "solidVelocityAtFaceCenter not implemented for test case %d", int(mTestCase));
+		CUDA_ASSERT(false);
+		return 0;
 	}
 }
+
+//__device__ void FluidParams::addSolidVelocityToFaceCenter(const T current_time, const T dt, const HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const Coord& l_ijk, const int axis) const
+//{
+//	if (mTestCase == MESHMOTION) {
+//		Vec wall_vel(0, 0, mesh_motion_inflow);
+//		T solid_ratio = 0, solid_vel = 0;
+//
+//		auto g_ijk = acc.localToGlobalCoord(info, l_ijk);
+//		auto ng_ijk = g_ijk; ng_ijk[axis]--;
+//		if (wallCellType(current_time, acc, info.mLevel, g_ijk) == NEUMANN || wallCellType(current_time, acc, info.mLevel, ng_ijk) == NEUMANN) {
+//			//it's a wall boundary NEUMANN cell
+//			solid_ratio = 1;
+//			solid_vel = wall_vel[axis];
+//		}
+//		else {
+//			//it either intersects with the mesh sdf or not
+//			cuda_vec4_t<T> sdfs = FaceCornerSDFs(BufChnls::sdf, acc, info, l_ijk, axis);
+//			auto h = acc.voxelSize(info.mLevel);
+//			if (FaceSDFAllOutside<T>(sdfs, h * SDF_REL_EPS)) {//does not intersect, no solid part
+//				solid_ratio = 0;
+//				solid_vel = 0;
+//			}
+//			else {
+//				auto pos0 = acc.faceCenter(axis, info, l_ijk);
+//
+//				auto T0 = meshToWorldTransform(current_time);
+//				auto T1 = meshToWorldTransform(current_time + dt);
+//
+//				Eigen::Matrix<T, 3, 1> p0(pos0[0], pos0[1], pos0[2]);
+//				Eigen::Matrix<T, 3, 1> p1 = T1 * (T0.inverse() * p0);
+//
+//				nanovdb::Vec3<T> pos1(p1[0], p1[1], p1[2]);
+//				auto rigid_vel = (pos1 - pos0) / dt;
+//
+//
+//				solid_ratio = 1 - FaceFluidRatio(sdfs);
+//				solid_vel = rigid_vel[axis];
+//			}
+//		}
+//
+//		auto& tile = info.tile();
+//		tile(BufChnls::u + axis, l_ijk) += solid_ratio * solid_vel;
+//	}
+//	else {
+//		CUDA_ASSERT(false, "solidVelocityAtFaceCenter not implemented for test case %d", int(mTestCase));
+//	}
+//}
