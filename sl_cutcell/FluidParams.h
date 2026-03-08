@@ -28,6 +28,7 @@ namespace BufChnls {
 namespace ProjChnls {
 	constexpr int x = 0;
 	constexpr int b = 1;
+	constexpr int u_mix = 3;
 	constexpr int c0 = 11;
 }
 
@@ -43,9 +44,9 @@ namespace ProjChnls {
 // 0    							x				
 // 1    							b/r				
 // 2								p				
-// 3	tmp/cell u					Ap				
-// 4	counter/cell v				z				
-// 5	cell w											
+// 3	tmp/cell u					Ap/mix u
+// 4	counter/cell v				z/mix v		
+// 5	cell w						mix w			
 // 6	u							u				
 // 7	v							v				
 // 8	w							w				
