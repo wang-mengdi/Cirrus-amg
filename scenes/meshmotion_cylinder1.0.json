@@ -18,7 +18,7 @@
         "mesh_file": "./scenes/cylinder.obj",
         "particle_life": 2.5,
         "sample_num_per_tile": 8,
-        "relative_sample_bandwidth": 5.0,
+        "relative_sample_bandwidth": 16.0,
         "test": "meshmotion"
     },
     "simulator": "euler"
