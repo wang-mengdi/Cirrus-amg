@@ -295,6 +295,9 @@ public:
 
 	void adaptAndAdvect(DriverMetaData& metadata, std::vector<std::shared_ptr<HADeviceGrid<Tile>>> grid_ptrs);
 
+	//(I - nu * dt * lap)u^{n+1} = u^* for implicit viscosity
+	void applyViscosity(HADeviceGrid<Tile>& grid, const T dt, const T nu);
+
 	void applyExternalForce(HADeviceGrid<Tile>& grid, const double dt) {
 		const nanovdb::Vec3R gravity = mParams.mGravity;
 		auto params = mParams;

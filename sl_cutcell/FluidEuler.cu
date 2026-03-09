@@ -690,6 +690,13 @@ void FluidEuler::adaptAndAdvect(DriverMetaData& metadata, std::vector<std::share
 	CheckCudaError("nfm advection");
 }
 
+void FluidEuler::applyViscosity(HADeviceGrid<Tile>& grid, const T dt, const T nu)
+{
+	for (int axis : {0, 1, 2}) {
+		//copy cell type and 
+	}
+}
+
 void FluidEuler::Advance(DriverMetaData& metadata) {
 
 	CPUTimer timer;

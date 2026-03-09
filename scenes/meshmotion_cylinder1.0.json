@@ -15,7 +15,7 @@
         "flowmap_stride": 1,
         "gravity": 0.0,
         "inflow_velocity": 1.0,
-        "mesh_file": "./scenes/sphere.obj",
+        "mesh_file": "./scenes/cylinder.obj",
         "particle_life": 2.5,
         "sample_num_per_tile": 8,
         "relative_sample_bandwidth": 5.0,

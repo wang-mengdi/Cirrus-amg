@@ -32,6 +32,11 @@ namespace ProjChnls {
 	constexpr int c0 = 11;
 }
 
+namespace ViscChnls {
+	constexpr int pressure_type = 5;
+	constexpr int u_cell_sdf = 9;
+}
+
 //namespace OutputChnls {
 //	//constexpr int u_node = 0;
 //	//constexpr int u_cell = 3;
@@ -40,17 +45,17 @@ namespace ProjChnls {
 //}
 
 ////Channel allocations
-//      Buffer						Projection		
+//      Buffer						Projection				Viscosity
 // 0    cell u 						x				
 // 1    cell v						b/r				
 // 2    cell w						p				
 // 3	tmp							Ap/mix u
 // 4	counter						z/mix v		
-// 5								mix w			
+// 5								mix w					pressure_type
 // 6	u							u				
 // 7	v							v				
 // 8	w							w				
-// 9	vor											
+// 9	vor													u_cell sdf
 //10    sdf
 //11								c0
 //12								c1
