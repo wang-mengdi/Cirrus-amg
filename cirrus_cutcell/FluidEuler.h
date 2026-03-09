@@ -91,7 +91,7 @@ public:
 	std::vector<std::shared_ptr<HADeviceGrid<Tile>>> grid_ptrs;
 	std::vector<double> time_steps;
 
-	thrust::device_vector<MarkerParticle> marker_particles_d;
+	thrust::device_vector<Particle> pfm_particles_d;
 
 	FluidParams mParams;
 	std::shared_ptr<MeshSDFAccel> mMeshSDFAccel = nullptr;

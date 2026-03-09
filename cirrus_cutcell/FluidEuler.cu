@@ -751,44 +751,12 @@ void FluidEuler::adaptAndAdvect(DriverMetaData& metadata, std::vector<std::share
 
 	CPUTimer timer; timer.start();
 
-	//1. advect particles with last_grid
-	//2. refine grid with particles
-	//3. calculate type, advect dye_density and velocity on grid
-
-	//012: temporary node velocity
-	//3: temporary node dye density
-
-	//shared by two grids
-	int u_channel = Tile::u_channel;//6
-	int dye_channel = Tile::dye_channel;//10
-
-	//last_grid:
-	//012: node u
-	//345: u copy
-	//678: face u
-	//9: node dye
-	//10: voxel dye
-	int last_tmp_channel = 3;
-	int last_u_node_channel = 0;//on last_grid
-	int last_dye_node_channel = Tile::vor_channel;//on last_grid
-
-	//next grid:
-	//012: uw
-	//3: particle counter
-	//678: face u
-	//10: voxel dye
-	int next_uw_channel = 0;//on grid
-	int next_counter_channel = 4;//on grid
+	int advection_u_channel = ProjChnls::u_mix;
 
 	//saved intermediate velocities
 	int n = grid_ptrs.size() - 1;
 	//we only need to prepare the last grid at this time
 	auto& last_grid = *grid_ptrs[n - 1];
-	InterpolateVelocitiesAtAllTiles(last_grid, u_channel, last_u_node_channel);
-
-
-	//cudaDeviceSynchronize(); timer.stop("Prepare last grid"); timer.start();
-	CheckCudaError("prepare last grid");
 
 	thrust::host_vector<HATileAccessor<Tile>> accs_h;
 	for (int i = 0; i < n; i++) {
@@ -799,18 +767,18 @@ void FluidEuler::adaptAndAdvect(DriverMetaData& metadata, std::vector<std::share
 	thrust::device_vector<double> time_steps_d = time_steps;
 	auto time_steps_d_ptr = thrust::raw_pointer_cast(time_steps_d.data());
 
-	MarkParticlesOutsideFluidRegionAsInvalid(particles, last_grid);
-	MarkOldParticlesAsInvalid(particles, current_time, mParams.mParticleLife);
-	EraseInvalidParticles(particles);
+	MarkParticlesOutsideFluidRegionAsInvalid(pfm_particles_d, last_grid);
+	MarkOldParticlesAsInvalid(pfm_particles_d, current_time, mParams.mParticleLife);
+	EraseInvalidParticles(pfm_particles_d);
 
-	ReseedParticles(last_grid, mParams, last_tmp_channel, current_time, mNumParticlesPerCell, particles);
+	ReseedParticles(last_grid, mParams, BufChnls::tmp, BufChnls::sdf, current_time, mParams.mSampleNumPerCell, pfm_particles_d);
 	//cudaDeviceSynchronize(); timer.stop("Reseeding particles"); timer.start();
 
 
 
 
 	cudaDeviceSynchronize(); reseeding_time = timer.stop("reseeding and remove particles in solid"); timer.start();
-	Info("total {:.5f}M particles, time step counter {}", particles.size() / (1024 * 1024 + 0.f), time_step_counter);
+	Info("total {:.5f}M particles, time step counter {}", pfm_particles_d.size() / (1024 * 1024 + 0.f), time_step_counter);
 
 	//{
 	//	polyscope::init();
@@ -829,8 +797,8 @@ void FluidEuler::adaptAndAdvect(DriverMetaData& metadata, std::vector<std::share
 		//nfm_query_grid_ptr = grid_ptrs[n - 1]->deepCopy();
 
 		//without midpoint velocity, we can directly use the last grid
-		nfm_query_grid_ptr = grid_ptrs[n - 1];
-		ResetParticleImpulse(last_grid, u_channel, last_u_node_channel, particles);
+		//nfm_query_grid_ptr = grid_ptrs[n - 1];
+		ResetParticleImpulse(last_grid, mParams.mFineLevel, mParams.mCoarseLevel, advection_u_channel, pfm_particles_d);
 
 		cudaDeviceSynchronize(); timer.stop("reset all particles impulse"); timer.start();
 	}
@@ -840,105 +808,37 @@ void FluidEuler::adaptAndAdvect(DriverMetaData& metadata, std::vector<std::share
 
 		int back_traced_steps = time_step_counter % mParams.mFlowMapStride;
 		int nfm_start_idx = n - back_traced_steps - 1;
-		auto particles_d_ptr = thrust::raw_pointer_cast(particles.data());
+		auto particles_d_ptr = thrust::raw_pointer_cast(pfm_particles_d.data());
 		LaunchIndexFunc([=] __device__(int idx) {
 			auto& particle = particles_d_ptr[idx];
 
 			if (particle.start_time == current_time) {
 
 				Vec psi = particle.pos;
-				Vec m0; Eigen::Matrix3<T> matT;
-				NFMBackQueryImpulseAndT(accs_d_ptr, fine_level, coarse_level, time_steps_d_ptr, u_channel, last_u_node_channel, nfm_start_idx, n - 1, psi, m0, matT);
+				Eigen::Matrix3<T> matT;
+				NFMBackMarchPsiAndT(accs_d_ptr, fine_level, coarse_level, time_steps_d_ptr, advection_u_channel, nfm_start_idx, n - 1, psi, matT);
+				Vec m0;
+				bool success = KernelIntpVelocityMAC2(accs_d_ptr[nfm_start_idx], fine_level, coarse_level, psi, advection_u_channel, m0);
+
+
+				//NFMBackQueryImpulseAndT(accs_d_ptr, fine_level, coarse_level, time_steps_d_ptr, u_channel, last_u_node_channel, nfm_start_idx, n - 1, psi, m0, matT);
+
 				particle.impulse = m0;
 				particle.matT = matT;
 			}
-		}, particles.size(), 128);
+		}, pfm_particles_d.size(), 128);
 
 		cudaDeviceSynchronize(); timer.stop("reset newly sampled particles impulse"); timer.start();
 	}
-	//cudaDeviceSynchronize(); timer.stop("Reset particle impulse"); timer.start();
 
-	//ResetParticlesGradM(last_grid, u_channel, last_u_node_channel, particles);
-	//cudaDeviceSynchronize(); timer.stop("Reset particle gradm"); timer.start();
-	//CheckCudaError("reinit");
-
-
-
-
-	////midpoint velocity
-	//{
-	//	//012: node u
-	//	//345: u copy
-	//	//678: face u
-	//	//9: node dye
-	//	//10: voxel dye
-	//	int last_u_copy_channel = 3;
-	//	for (int axis : {0, 1, 2}) {
-	//		Copy(last_grid, u_channel + axis, last_u_copy_channel + axis, -1, LEAF, LAUNCH_SUBTREE, INTERIOR | DIRICHLET | NEUMANN);
-	//	}
-	//	auto last_acc = last_grid.deviceAccessor();
-	//	int fine_level = mParams.mFineLevel;
-	//	int coarse_level = mParams.mCoarseLevel;
-	//	last_grid.launchVoxelFuncOnAllTiles(
-	//		[=] __device__(HATileAccessor<Tile>&acc, HATileInfo<Tile>&info, const Coord & l_ijk) {
-	//		auto& tile = info.tile();
-	//		for (int axis : {0, 1, 2}) {
-	//			//Vec psi = last_acc.faceCenter(axis, info, l_ijk);
-	//			Vec psi = NFMErodedAdvectionPoint(axis, acc, info, l_ijk);
-	//			Eigen::Matrix3<T> matT = Eigen::Matrix3<T>::Identity();
-
-	//			//we want forward T to calculate matT.T@m0
-	//			//and forward T equals to backward F
-	//			RK4ForwardPositionAndF(last_acc, fine_level, coarse_level, -0.5 * dt, last_u_copy_channel, last_u_node_channel, psi, matT);
-	//			Vec m0 = InterpolateFaceValue(last_acc, psi, last_u_copy_channel, last_u_node_channel);
-
-	//			Vec m1 = MatrixTimesVec(matT.transpose(), m0);
-
-	//			tile(u_channel + axis, l_ijk) = m1[axis];
-	//		}
-	//	}, LEAF, 4
-	//	);
-
-	//	//AdvectGridImpulseRK4Forward(last_grid, last_u_copy_channel, last_u_node_channel, 0.5 * dt, last_grid, u_channel);
-	//	applyVelocityBC(last_grid, current_time);
-
-	//	project(last_grid, u_channel, current_time);
-	//	//CalcLeafNodeValuesFromFaceCenters(last_grid, u_channel, last_u_node_channel);
-	//	InterpolateVelocitiesAtAllTiles(last_grid, u_channel, last_u_node_channel);
-
-	//	//CheckCudaError("project");
-	//	cudaDeviceSynchronize(); timer.stop("Midpoint"); timer.start();
-	//}
-
-
-
-	//RemoveParticlesInNeumannCells(particles, last_grid);
-
-	//if (metadata.current_frame == 7 && time_step_counter >= 253) {
-	//	auto holder = last_grid.getHostTileHolder(LEAF | NONLEAF | GHOST);
-	//	IOFunc::WriteHAHostTileHolderToFile(*holder, fs::path(metadata.output_base_dir) / fmt::format("grid_{:03d}_{:03d}.bin", metadata.current_frame, time_step_counter));
-	//	IOFunc::WriteHostVectorToBinary<Particle>(particles, fs::path(metadata.output_base_dir) / fmt::format("particles_{:03d}_{:03d}.bin", metadata.current_frame, time_step_counter));
-	//}
-
-
-	//AdvectParticlesRK4Forward(last_grid, u_channel, last_u_node_channel, dt, particles);
-	//AdvectParticlesAndSingleStepGradMRK4Forward(last_grid, u_channel, last_u_node_channel, dt, particles);
-	//AdvectParticlesAndSingleStepGradMRK4ForwardAtGivenLevel(last_grid, mParams.mFineLevel, u_channel, last_u_node_channel, dt, particles, 1e-4);
-	HistogramSortParticlesAtGivenLevel(last_grid, mParams.mFineLevel, last_tmp_channel, particles, tile_prefix_sum_d, records_d);
-	//Info("HistogramSortParticles done");
-	//cudaDeviceSynchronize(); CheckCudaError("HistogramSortParticles");
-	OptimizedAdvectParticlesAndSingleStepGradMRK4ForwardAtGivenLevel(last_grid, mParams.mFineLevel, u_channel, last_u_node_channel, dt, tile_prefix_sum_d, records_d);
-	//cudaDeviceSynchronize(); CheckCudaError("OptimizedAdvectParticlesAndSingleStepGradMRK4ForwardAtGivenLevel");
-	//Info("OptimizedAdvectParticlesAndSingleStepGradMRK4ForwardAtGivenLevel done");
-	//Info("after pfm advection max gradm {}", LinfNormOfGradMForbenius(particles));
-	//Info("optimized advect {} particles", particles.size());
-	EraseInvalidParticles(particles);
-	//Info("after erasing max gradm {}", LinfNormOfGradMForbenius(particles));
-	//Info("after erasing {} particles", particles.size());
-
+	static thrust::device_vector<int> tile_prefix_sum_d;
+	static thrust::device_vector<ParticleRecord> records_d;
+	HistogramSortParticlesAtGivenLevel(last_grid, mParams.mFineLevel, BufChnls::tmp, pfm_particles_d, tile_prefix_sum_d, records_d);
+	OptimizedAdvectParticlesAndSingleStepGradMRK4ForwardAtGivenLevel(last_grid, mParams.mFineLevel, advection_u_channel, dt, tile_prefix_sum_d, records_d);
+	EraseInvalidParticles(pfm_particles_d);
 	cudaDeviceSynchronize(); double adv_elapsed = timer.stop("Advect particles"); timer.start(); particle_advection_time = adv_elapsed;
 	{
-		double num_particles_M = particles.size() / (1024. * 1024.);
+		double num_particles_M = pfm_particles_d.size() / (1024. * 1024.);
 		Info("Particle advection time: {} ms, {}M particles, throughput {}M particles/s", adv_elapsed, num_particles_M, num_particles_M / adv_elapsed * 1000);
 	}
 	CheckCudaError("adv particle");
@@ -957,41 +857,43 @@ void FluidEuler::adaptAndAdvect(DriverMetaData& metadata, std::vector<std::share
 
 	auto& grid = *grid_ptrs[n];
 
-	RefineWithParticles(grid, particles, mParams.mCoarseLevel, mParams.mFineLevel, next_counter_channel, false);
+	RefineWithParticles(grid, pfm_particles_d, mParams.mCoarseLevel, mParams.mFineLevel, BufChnls::counter, false);
 
 	//cudaDeviceSynchronize(); timer.stop("Refine with particles"); timer.start();
 
 
-	CoarsenWithParticles(grid, particles, mParams.mCoarseLevel, mParams.mFineLevel, next_counter_channel, false);
+	CoarsenWithParticles(grid, pfm_particles_d, mParams.mCoarseLevel, mParams.mFineLevel, BufChnls::counter, false);
 	CheckCudaError("adapt with particles");
 
 
 	cudaDeviceSynchronize(); adaptive_time = timer.stop("adapt with particles"); timer.start();
 
 
+	{
+		//after the grid structure is set, calculate type and initialize AMG coeffs
+	}
+
+
+
 	//ParticleImpulseToGridMACIntp(grid, particles, u_channel, next_uw_channel);
-	HistogramSortParticlesAtGivenLevel(grid, mParams.mFineLevel, next_counter_channel, particles, tile_prefix_sum_d, records_d);
-	OptimizedP2GTransferAtGivenLevel(grid, mParams.mFineLevel, u_channel, next_uw_channel, tile_prefix_sum_d, records_d);
-	EraseInvalidParticles(particles);
+	HistogramSortParticlesAtGivenLevel(grid, mParams.mFineLevel, BufChnls::counter, pfm_particles_d, tile_prefix_sum_d, records_d);
+	OptimizedP2GTransferAtGivenLevel(grid, mParams.mFineLevel, advection_u_channel, AdvChnls::u_weight, tile_prefix_sum_d, records_d);
+	EraseInvalidParticles(pfm_particles_d);
 
 	CheckCudaError("pfm p2g");
 	//Info("max impulse after pfm: {}", VelocityLinf(grid, u_channel, -1, LEAF, LAUNCH_SUBTREE));
 
 
-	cudaDeviceSynchronize(); p2g_time = timer.stop("P2G"); timer.start();
+	cudaDeviceSynchronize(); auto p2g_time = timer.stop("P2G"); timer.start();
 	{
-		double num_particles_M = particles.size() / (1024. * 1024.);
+		double num_particles_M = pfm_particles_d.size() / (1024. * 1024.);
 		Info("P2G time: {} ms, {}M particles, throughput {}M particles/s", p2g_time, num_particles_M, num_particles_M / p2g_time * 1000);
 	}
 
 	//advect dye and NFM
 	{
-		CalcLeafNodeValuesFromCellCenters(last_grid, dye_channel, last_dye_node_channel);
-
-
-
 		auto last_acc = last_grid.deviceAccessor();
-		auto nfm_query_acc = nfm_query_grid_ptr->deviceAccessor();
+		//auto nfm_query_acc = nfm_query_grid_ptr->deviceAccessor();
 		auto params = mParams;
 
 		int fine_level = mParams.mFineLevel;

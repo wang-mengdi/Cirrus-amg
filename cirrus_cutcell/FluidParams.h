@@ -19,10 +19,9 @@ namespace BufChnls {
 	constexpr int sdf = 10;
 }
 
-//namespace AdvChnls {
-//	constexpr int u = 6;
-//	constexpr int counter = 4;
-//}
+namespace AdvChnls {
+	constexpr int u_weight = 0;
+}
 
 
 namespace ProjChnls {
@@ -79,7 +78,8 @@ public:
 	nanovdb::Vec3R mGravity;
 	T mesh_motion_inflow = 0.0;
 
-	int mSampleNumPerTile;//number of sampled points per finest tile
+	//int mSampleNumPerTile;//number of sampled points per finest tile
+	int mSampleNumPerCell;
 	T mRelativeSampleBandwidth;//k*dx, where dx is the finest level
 
 	int mExtrapolationIters;

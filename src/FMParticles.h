@@ -48,7 +48,7 @@ __device__ void KernelScatterVelocityMAC2(const HATileAccessor<Tile>& acc, const
 void ParticleImpulseToGridMACIntp(HADeviceGrid<Tile>& grid, const thrust::device_vector<Particle>& particles, const int u_channel, const int uw_channel);
 
 
-//void ResetParticleImpulse(HADeviceGrid<Tile>& grid, const int u_channel, const int node_u_channel, thrust::device_vector<Particle>& particles_d);
+void ResetParticleImpulse(HADeviceGrid<Tile>& grid, const int fine_level, const int coarse_level, const int u_channel, thrust::device_vector<Particle>& particles_d);
 //void ResetParticlesGradM(HADeviceGrid<Tile>& grid, const int u_channel, const int node_u_channel, thrust::device_vector<Particle>& particles_d);
 //void AdvectParticlesRK4Forward(HADeviceGrid<Tile>& grid, const int u_channel, const int node_u_channel, const double dt, thrust::device_vector<Particle>& particles_d);
 //void AdvectParticlesAndSingleStepGradMRK4Forward(HADeviceGrid<Tile>& grid, const int u_channel, const int node_u_channel, const double dt, thrust::device_vector<Particle>& particles_d);
@@ -63,8 +63,8 @@ public:
 
 void HistogramSortParticlesAtGivenLevel(HADeviceGrid<Tile>& grid, const int level, const int counter_channel, thrust::device_vector<Particle>& particles_d, thrust::device_vector<int>& tile_prefix_sum_d, thrust::device_vector<ParticleRecord>& sorted_particles_record_d);
 
-__global__ void OptimizedAdvectParticlesAndSingleStepGradMRK4ForwardAtGivenLevel128Kernel(HATileAccessor<Tile> acc, HATileInfo<Tile>* infos_ptr, const int level, const int u_channel, const int node_u_channel, const double dt, int* tile_prefix_sum_ptr, ParticleRecord* records_ptr, const T eps);
-void OptimizedAdvectParticlesAndSingleStepGradMRK4ForwardAtGivenLevel(HADeviceGrid<Tile>& grid, const int level, const int u_channel, const int node_u_channel, 
+__global__ void OptimizedAdvectParticlesAndSingleStepGradMRK4ForwardAtGivenLevel128Kernel(HATileAccessor<Tile> acc, HATileInfo<Tile>* infos_ptr, const int level, const int u_channel, const double dt, int* tile_prefix_sum_ptr, ParticleRecord* records_ptr, const T eps);
+void OptimizedAdvectParticlesAndSingleStepGradMRK4ForwardAtGivenLevel(HADeviceGrid<Tile>& grid, const int level, const int u_channel, 
 	const double dt, thrust::device_vector<int>& tile_prefix_sum_d, thrust::device_vector<ParticleRecord>& records_d, const T eps = 1e-4);
 
 void OptimizedP2GTransferAtGivenLevel(HADeviceGrid<Tile>& grid, const int level, const int u_channel, const int uw_channel, thrust::device_vector<int>& tile_prefix_sum_d, thrust::device_vector<ParticleRecord>& records_d);

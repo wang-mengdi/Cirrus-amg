@@ -61,7 +61,8 @@ FluidParams::FluidParams(json& j)
 	mGravity[2] = Json::Value<double>(j, "gravity", -9.8);
 	mParticleLife = Json::Value<T>(j, "particle_life", FLT_MAX);
 
-	mSampleNumPerTile = Json::Value<int>(j, "sample_num_per_tile", 128);
+	//mSampleNumPerTile = Json::Value<int>(j, "sample_num_per_tile", 128);
+	mSampleNumPerCell = Json::Value<int>(j, "sample_num_per_cell", 8);
 	mRelativeSampleBandwidth = Json::Value<double>(j, "relative_sample_bandwidth", 5.0);
 
 	mExtrapolationIters = Json::Value<int>(j, "extrapolation_iters", 5);

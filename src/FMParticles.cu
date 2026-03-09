@@ -513,17 +513,19 @@ void ParticleImpulseToGridMACIntp(HADeviceGrid<Tile>& grid, const thrust::device
 
 
 
-////must calculate node velocities first
-//void ResetParticleImpulse(HADeviceGrid<Tile>& grid, const int u_channel, const int node_u_channel, thrust::device_vector<Particle>& particles_d) {
-//	auto particles_ptr = thrust::raw_pointer_cast(particles_d.data());
-//	auto acc = grid.deviceAccessor();
-//	LaunchIndexFunc([=] __device__(int idx) {
-//		auto& p = particles_ptr[idx];
-//		p.impulse = InterpolateFaceValue(acc, p.pos, u_channel, node_u_channel);
-//
-//		p.matT = Eigen::Matrix3<T>::Identity();
-//	}, particles_d.size());
-//}
+//must calculate node velocities first
+void ResetParticleImpulse(HADeviceGrid<Tile>& grid, const int fine_level, const int coarse_level, const int u_channel, thrust::device_vector<Particle>& particles_d) {
+	auto particles_ptr = thrust::raw_pointer_cast(particles_d.data());
+	auto acc = grid.deviceAccessor();
+	LaunchIndexFunc([=] __device__(int idx) {
+		auto& p = particles_ptr[idx];
+		Vec vel;
+		bool success = KernelIntpVelocityMAC2(acc, fine_level, coarse_level, p.pos, u_channel, vel);
+		p.impulse = vel;
+		//p.impulse = InterpolateFaceValue(acc, p.pos, u_channel, node_u_channel);
+		p.matT = Eigen::Matrix3<T>::Identity();
+	}, particles_d.size());
+}
 
 //void AdvectParticlesAndSingleStepGradMRK4ForwardAtGivenLevel(HADeviceGrid<Tile>& grid, const int level, const int u_channel, const int node_u_channel, const double dt, thrust::device_vector<Particle>& particles_d, const bool erase_invalid) {
 //	//advect particles
@@ -1239,7 +1241,7 @@ public:
 
 //each block processes particles in a tile
 //blockdim is 128 so one block will iterate over all particles with 128 stride
-__global__ void OptimizedAdvectParticlesAndSingleStepGradMRK4ForwardAtGivenLevel128Kernel(HATileAccessor<Tile> acc, HATileInfo<Tile>* infos_ptr, const int level, const int u_channel, const int node_u_channel, const double dt, int* tile_prefix_sum_ptr, ParticleRecord* records_ptr, const T eps) {
+__global__ void OptimizedAdvectParticlesAndSingleStepGradMRK4ForwardAtGivenLevel128Kernel(HATileAccessor<Tile> acc, HATileInfo<Tile>* infos_ptr, const int level, const int u_channel, const double dt, int* tile_prefix_sum_ptr, ParticleRecord* records_ptr, const T eps) {
 	//__shared__ float shared[6][14][14][14];
 	__shared__ LocalVelocityData<3, 2> shared_data;
 
@@ -1344,7 +1346,7 @@ __global__ void OptimizedAdvectParticlesAndSingleStepGradMRK4ForwardAtGivenLevel
 	}
 }
 
-void OptimizedAdvectParticlesAndSingleStepGradMRK4ForwardAtGivenLevel(HADeviceGrid<Tile>& grid, const int level, const int u_channel, const int node_u_channel, 
+void OptimizedAdvectParticlesAndSingleStepGradMRK4ForwardAtGivenLevel(HADeviceGrid<Tile>& grid, const int level, const int u_channel, 
 	const double dt, thrust::device_vector<int>& tile_prefix_sum_d, thrust::device_vector<ParticleRecord>& records_d, const T eps) {
 	//advect particles
 	int level_num_tiles = grid.hNumTiles[level];
@@ -1354,7 +1356,7 @@ void OptimizedAdvectParticlesAndSingleStepGradMRK4ForwardAtGivenLevel(HADeviceGr
 	auto acc = grid.deviceAccessor();
 
 
-	OptimizedAdvectParticlesAndSingleStepGradMRK4ForwardAtGivenLevel128Kernel << <level_num_tiles, 128 >> > (acc, level_infos_ptr, level, u_channel, node_u_channel, dt, tile_prefix_sum_ptr, records_ptr, eps);
+	OptimizedAdvectParticlesAndSingleStepGradMRK4ForwardAtGivenLevel128Kernel << <level_num_tiles, 128 >> > (acc, level_infos_ptr, level, u_channel, dt, tile_prefix_sum_ptr, records_ptr, eps);
 }
 
 __global__ void P2GTransferAtGivenLevel128Kernel(HATileAccessor<Tile> acc, HATileInfo<Tile>* infos_ptr, const int level, const int u_channel, const int uw_channel,
