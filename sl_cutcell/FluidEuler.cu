@@ -727,12 +727,12 @@ void FluidEuler::Advance(DriverMetaData& metadata) {
 
 
 
-	if (time_step_counter == 65) {
-		amg_solver_open_visualization = 1;
-	}
-	else {
-		amg_solver_open_visualization = 0;
-	}
+	//if (time_step_counter == 65) {
+	//	amg_solver_open_visualization = 1;
+	//}
+	//else {
+	//	amg_solver_open_visualization = 0;
+	//}
 
 
 	//projection

@@ -1,6 +1,6 @@
 {
     "driver": {
-        "cfl": 0.5,
+        "cfl": 2.0,
         "first_frame": 0,
         "fps": 400,
         "last_frame": 400,
