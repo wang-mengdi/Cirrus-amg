@@ -685,14 +685,14 @@ void FluidEuler::adaptAndAdvect(DriverMetaData& metadata, std::vector<std::share
 					//grid velocity advection
 					for (int axis : {0, 1, 2}) {
 						{
-							Vec psi = acc.faceCenter(axis, info, l_ijk);
-							//Vec psi = NFMErodedAdvectionPoint(axis, acc, info, l_ijk);
+							//Vec psi = acc.faceCenter(axis, info, l_ijk);
+							Vec psi = NFMErodedAdvectionPoint(axis, acc, info, l_ijk);
 							Eigen::Matrix3<T> matT;
 
-							NFMBackMarchPsiAndT(accs_d_ptr, fine_level, coarse_level, time_steps_d_ptr, BufChnls::u, nfm_start_idx, n, psi, matT);
+							NFMBackMarchPsiAndT(accs_d_ptr, fine_level, coarse_level, time_steps_d_ptr, ProjChnls::u_mix, nfm_start_idx, n, psi, matT);
 
 							Vec m0; Eigen::Matrix3<T> _T;
-							KernelIntpVelocityAndJacobianMAC2(acc, fine_level, coarse_level, psi, BufChnls::u, m0, _T);
+							KernelIntpVelocityAndJacobianMAC2(acc, fine_level, coarse_level, psi, ProjChnls::u_mix, m0, _T);
 
 
 							//{

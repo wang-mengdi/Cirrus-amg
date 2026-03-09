@@ -226,7 +226,7 @@ public:
 		//	);
 		//}
 		project(grid, current_time, dt);
-		CalculateVelocityAndVorticityMagnitudeOnLeafCellCenters(grid, mParams.mFineLevel, mParams.mCoarseLevel, BufChnls::u, BufChnls::u_cell, BufChnls::vor);
+		CalculateVelocityAndVorticityMagnitudeOnLeafCellCenters(grid, mParams.mFineLevel, mParams.mCoarseLevel, ProjChnls::u_mix, BufChnls::u_cell, BufChnls::vor);
 		extrapolateFluidVelocityForAdvection(grid, mParams.mExtrapolationIters, BufChnls::u, ProjChnls::c0);
 
 	}
