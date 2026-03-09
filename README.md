@@ -19,4 +19,8 @@ cutcell，流体外插速度场对流，有点类似于IB。
 
 ### impulse_cutcell
 cutcell解，若干步impulse对流。
-对流速度是外插的fluid velocity.
+对流速度是mix velocity（流体和固体加权）
+事实证明，在cutcell的情况下，只有mix velocity能搓出涡，否则太平滑了没有涡。
+
+### cirrus_cutcell
+使用cirrus的混合对流格式，但使用cutcell求解。

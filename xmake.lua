@@ -69,11 +69,37 @@ add_defines("FMT_UNICODE=0")
 --         end
 --     end)
 
-target("impulse_cutcell")
+-- target("impulse_cutcell")
+--     set_kind("binary")
+--     add_headerfiles("impulse_cutcell/*.h")
+--     add_files("impulse_cutcell/*.cpp", "impulse_cutcell/*.cu")
+--     add_includedirs("impulse_cutcell", {public = true})
+--     add_cugencodes("native")
+--     --add_cuflags("-extended-lambda --std=c++17")
+--     add_cuflags("-std=c++17 --expt-relaxed-constexpr --expt-extended-lambda")
+--     add_cxxflags("/utf-8")
+--     add_packages("libigl", "tbb", "polyscope")
+--     add_deps("src")
+
+--     after_build(function (target)
+--         local userprofile = os.getenv("USERPROFILE")
+--         local pkgdir = path.join(userprofile, "AppData/Local/.xmake/packages")
+
+--         local pattern = path.join(pkgdir, "t/token/24.09.0", "*", "bin", "token.dll")
+
+--         local outdir = target:targetdir()
+--         os.mkdir(outdir)
+
+--         for _, dll in ipairs(os.files(pattern)) do
+--             os.cp(dll, outdir)
+--         end
+--     end)
+
+target("cirrus_cutcell")
     set_kind("binary")
-    add_headerfiles("impulse_cutcell/*.h")
-    add_files("impulse_cutcell/*.cpp", "impulse_cutcell/*.cu")
-    add_includedirs("impulse_cutcell", {public = true})
+    add_headerfiles("cirrus_cutcell/*.h")
+    add_files("cirrus_cutcell/*.cpp", "cirrus_cutcell/*.cu")
+    add_includedirs("cirrus_cutcell", {public = true})
     add_cugencodes("native")
     --add_cuflags("-extended-lambda --std=c++17")
     add_cuflags("-std=c++17 --expt-relaxed-constexpr --expt-extended-lambda")
@@ -94,6 +120,7 @@ target("impulse_cutcell")
             os.cp(dll, outdir)
         end
     end)
+
 
 target("tests")
     set_kind("binary")
