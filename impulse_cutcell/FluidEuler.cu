@@ -656,38 +656,89 @@ void FluidEuler::adaptAndAdvect(DriverMetaData& metadata, std::vector<std::share
 		int nfm_start_idx = n - back_traced_steps - 1;
 		Info("nfm start idx: {}, back traced steps: {}, accs_d size {}", nfm_start_idx, back_traced_steps, accs_d.size());
 
-		grid.launchVoxelFuncOnAllTiles(
-			[=] __device__(HATileAccessor<Tile>&acc, HATileInfo<Tile>&info, const Coord & l_ijk) {
-			auto& tile = info.tile();
+		//prepare pointers for previous grids
+		thrust::host_vector<HATileAccessor<Tile>> accs_h;
+		for (int i = 0; i < n; i++) accs_h.push_back(grid_ptrs[i]->deviceAccessor());
+		thrust::device_vector<HATileAccessor<Tile>> accs_d = accs_h;
+		auto accs_d_ptr = thrust::raw_pointer_cast(accs_d.data());
+		thrust::device_vector<double> time_steps_d = time_steps;
+		auto time_steps_d_ptr = thrust::raw_pointer_cast(time_steps_d.data());
+		CheckCudaError("prepare pointers");
+		Info("prepare pointers");
+
+		{
+			auto last_acc = last_grid.deviceAccessor();
+			auto nfm_query_acc = nfm_query_grid_ptr->deviceAccessor();
+			auto params = mParams;
+
+			int fine_level = mParams.mFineLevel;
+			int coarse_level = mParams.mCoarseLevel;
+
+			int back_traced_steps = time_step_counter % mParams.mFlowMapStride;
+			int nfm_start_idx = n - back_traced_steps - 1;
+			Info("nfm start idx: {}, back traced steps: {}, accs_d size {}", nfm_start_idx, back_traced_steps, accs_d.size());
+
+			grid.launchVoxelFuncOnAllTiles(
+				[=] __device__(HATileAccessor<Tile>&acc, HATileInfo<Tile>&info, const Coord & l_ijk) {
+				auto& tile = info.tile();
+				{
+					//grid velocity advection
+					for (int axis : {0, 1, 2}) {
+						{
+							Vec psi = acc.faceCenter(axis, info, l_ijk);
+							//Vec psi = NFMErodedAdvectionPoint(axis, acc, info, l_ijk);
+							Eigen::Matrix3<T> matT;
+
+							NFMBackMarchPsiAndT(accs_d_ptr, fine_level, coarse_level, time_steps_d_ptr, BufChnls::u, nfm_start_idx, n, psi, matT);
+
+							Vec m0; Eigen::Matrix3<T> _T;
+							KernelIntpVelocityAndJacobianMAC2(acc, fine_level, coarse_level, psi, BufChnls::u, m0, _T);
 
 
-			{
-				//grid velocity advection
-				for (int axis : {0, 1, 2}) {
-					{
-						Vec pos = acc.faceCenter(axis, info, l_ijk);
-						Vec back_pos = SemiLagrangianBackwardPosition(acc, fine_level, coarse_level, pos, dt, BufChnls::u + axis);
-						Vec back_vel;
-						KernelIntpVelocityMAC2(acc, fine_level, coarse_level, back_pos, BufChnls::u, back_vel);
-						auto fluid_ratio = -tile(ProjChnls::c0 + axis, l_ijk) / acc.voxelSize(info);
-						if (fluid_ratio > 0) {
-							tile(BufChnls::u + axis, l_ijk) = fluid_ratio * back_vel[axis];
-						}
-						else {
-							tile(BufChnls::u + axis, l_ijk) = 0;
+							//{
+							//	auto g_ijk = acc.localToGlobalCoord(info, l_ijk);
+							//	CUDA_ASSERT(isfinite(m0[0]), "level %d global %d %d %d axis %d m00 value %f", info.mLevel, g_ijk[0], g_ijk[1], g_ijk[2], axis, m0[0]);
+							//	CUDA_ASSERT(isfinite(m0[1]), "level %d global %d %d %d axis %d m01 value %f", info.mLevel, g_ijk[0], g_ijk[1], g_ijk[2], axis, m0[1]);
+							//	CUDA_ASSERT(isfinite(m0[2]), "level %d global %d %d %d axis %d m02 value %f", info.mLevel, g_ijk[0], g_ijk[1], g_ijk[2], axis, m0[2]);
+
+							//	//ASSERT 3*3 values in matT are finite
+							//	for(int i=0; i<3; i++) {
+							//		for(int j=0; j<3; j++) {
+							//			CUDA_ASSERT(isfinite(matT(i,j)), "level %d global %d %d %d axis %d matT value %f at %d %d", info.mLevel, g_ijk[0], g_ijk[1], g_ijk[2], axis, matT(i,j), i, j);
+							//		}
+							//	}
+							//}
+
+							Vec m1 = MatrixTimesVec(matT.transpose(), m0);
+
+
+							auto fluid_ratio = -tile(ProjChnls::c0 + axis, l_ijk) / acc.voxelSize(info);
+
+
+							if(fluid_ratio > 0) tile(BufChnls::u + axis, l_ijk) = m1[axis];
+							else tile(BufChnls::u + axis, l_ijk) = 0;
+
+
+							//{
+							//	auto g_ijk = acc.localToGlobalCoord(info, l_ijk);
+							//	CUDA_ASSERT(isfinite(m1[axis]), "level %d global %d %d %d axis %d m1 value %f", info.mLevel, g_ijk[0], g_ijk[1], g_ijk[2], axis, m1[axis]);
+							//}
 						}
 					}
 				}
-			}
-		}, LEAF, 4
-		);
+			}, LEAF, 4
+			);
 
-		CheckCudaError("launch nfm");
+			CheckCudaError("launch nfm");
 
+		}
+
+		cudaDeviceSynchronize(); nfm_advection_time = timer.stop("NFM advection"); timer.start();
+		CheckCudaError("nfm advection");
 	}
 
-	cudaDeviceSynchronize(); nfm_advection_time = timer.stop("NFM advection"); timer.start();
-	CheckCudaError("nfm advection");
+	CheckCudaError("launch nfm");
+
 }
 
 void FluidEuler::applyViscosity(HADeviceGrid<Tile>& grid, const T dt, const T nu)

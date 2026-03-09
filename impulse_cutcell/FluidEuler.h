@@ -164,7 +164,7 @@ public:
 		}
 
 		mParams = FluidParams(j);
-		ASSERT(mParams.mFlowMapStride == 1, "SL only supports 1-step advection");
+		//ASSERT(mParams.mFlowMapStride == 1, "SL only supports 1-step advection");
 
 		if (metadata.first_frame != 0) return;
 
@@ -271,7 +271,7 @@ public:
 			metadata.Append_Output_Thread(std::make_shared<std::thread>(IOFunc::OutputPoissonGridAsStructuredVTI, holder,
 				std::vector<std::pair<int, std::string>>{ {-1, "type"}, { -2, "level" }, { BufChnls::vor, "vorticity" }},
 				//std::vector<std::pair<int, std::string>>{ },
-				std::vector<std::pair<int, std::string>>{ {BufChnls::u_cell, "cell_velocity"} },
+				std::vector<std::pair<int, std::string>>{ {BufChnls::u, "fluid_velocity"} },
 				//std::vector<std::pair<int, std::string>>{ { -1, "type" }, { Tile::vor_channel, "vorticity" }, { Tile::dye_channel, "dye_density" } },
 				//std::vector<std::pair<int, std::string>>{ {Tile::u_channel, "velocity"} },
 				metadata.base_path / fmt::format("fluid{:04d}.vti", metadata.current_frame)));

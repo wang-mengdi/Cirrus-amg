@@ -14,8 +14,9 @@ Running args: `.\scenes\smokesphere.json`
 
 ### sl_cutcell
 cutcell，流体外插速度场对流，有点类似于IB。
-用semi-lagrangian每步对流。
+用semi-lagrangian每步对流，对流速度是外插的fluid velocity。
 结论是r=1的球或者圆柱都无法在后面算出来尾涡，可能是边界条件太好了速度场过于smooth。
 
 ### impulse_cutcell
 cutcell解，若干步impulse对流。
+对流速度是外插的fluid velocity.
