@@ -659,6 +659,90 @@ namespace IOFunc {
         mesh->setTransparency(0.2);
     }
 
+    void AddLeveledTilesToPolyscopeVolumetricMesh(HADeviceGrid<Tile>& grid, const uint8_t types, const std::string& base_name) {
+        using Coord = typename Tile::CoordType;
+
+        int hex_offs[8][3] = {
+            {0,0,0}, {1,0,0}, {1,1,0}, {0,1,0},
+            {0,0,1}, {1,0,1}, {1,1,1}, {0,1,1}
+        };
+
+        auto acc = grid.hostAccessor();
+
+        for (int level = 0; level < grid.mNumLevels; ++level) {
+            std::vector<Vec> vertices;
+            std::vector<std::array<size_t, 8>> hexCells;
+            std::vector<int> cellLevels;
+            std::vector<Coord> cellCoords;
+            std::vector<int> cellInterestFlags;
+
+            // 用整数坐标做 key，避免浮点比较
+            struct CoordKey {
+                int x, y, z;
+                bool operator==(const CoordKey& other) const {
+                    return x == other.x && y == other.y && z == other.z;
+                }
+            };
+
+            struct CoordKeyHash {
+                size_t operator()(const CoordKey& k) const {
+                    size_t h1 = std::hash<int>{}(k.x);
+                    size_t h2 = std::hash<int>{}(k.y);
+                    size_t h3 = std::hash<int>{}(k.z);
+                    return h1 ^ (h2 << 1) ^ (h3 << 2);
+                }
+            };
+
+            std::unordered_map<CoordKey, size_t, CoordKeyHash> vertexMap;
+
+            for (int i = 0; i < grid.hNumTiles[level]; ++i) {
+                auto& info = grid.hTileArrays[level][i];
+                if (!(info.mType & types)) continue;
+
+                auto bbox = acc.tileBBox(info);
+                std::array<size_t, 8> hexCell;
+
+                for (int s = 0; s < 8; ++s) {
+                    Coord off(hex_offs[s][0], hex_offs[s][1], hex_offs[s][2]);
+
+                    auto p = bbox.min() + Vec(off[0], off[1], off[2]) * bbox.dim();
+                    Vec vertex(p[0], p[1], p[2]);
+
+                    // 用 bbox 的角点整数索引作为 key
+                    auto c = info.mTileCoord + off;
+                    CoordKey key{ (int)c[0], (int)c[1], (int)c[2] };
+
+                    auto it = vertexMap.find(key);
+                    if (it != vertexMap.end()) {
+                        hexCell[s] = it->second;
+                    }
+                    else {
+                        size_t id = vertices.size();
+                        vertices.push_back(vertex);
+                        vertexMap[key] = id;
+                        hexCell[s] = id;
+                    }
+                }
+
+                hexCells.push_back(hexCell);
+                cellLevels.push_back(level);
+                cellCoords.push_back(info.mTileCoord);
+
+                auto tile = info.getTile(DEVICE);
+                cellInterestFlags.push_back(tile.mIsInterestArea);
+            }
+
+            if (hexCells.empty()) continue;
+
+            std::string name = fmt::format("{}_level_{}", base_name, level);
+            auto mesh = polyscope::registerVolumeMesh(name, vertices, hexCells);
+            mesh->addCellScalarQuantity("Level", cellLevels);
+            mesh->addCellVectorQuantity("Tile Coord", cellCoords);
+            mesh->addCellScalarQuantity("Interest Flag", cellInterestFlags);
+            mesh->setTransparency(0.2);
+        }
+    }
+
     void AddLeveledPoissonGridCellCentersToPolyscopePointCloud(std::shared_ptr<HAHostTileHolder<Tile>> holder_ptr, const std::vector<std::pair<int, std::string>> scalar_channels, std::vector<std::pair<int, std::string>> vec_channels, int level, const double invalid_value) {
         auto& holder = *holder_ptr;
         using Coord = typename Tile::CoordType;

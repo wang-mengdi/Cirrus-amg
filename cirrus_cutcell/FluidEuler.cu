@@ -630,7 +630,7 @@ void FluidEuler::iterativeNodeSDFAndRefineNarrowBand(HADeviceGrid<Tile>& grid, c
 	auto params = mParams;
 	auto xform = params.meshToWorldTransform(current_time);
 	while (true) {
-		CalculateSDFOnNodes(grid, BufChnls::sdf, *mMeshSDFAccel, LEAF | GHOST, xform);
+		CalculateSDFOnNodes(grid, BufChnls::sdf, *mMeshSDFAccel, LEAF | NONLEAF | GHOST, xform);
 		auto levelTarget = [=]__device__(const HATileAccessor<Tile> &acc, const HATileInfo<Tile> &info) ->int {
 			auto h = acc.voxelSize(params.mFineLevel);
 
@@ -831,23 +831,7 @@ void FluidEuler::adaptAndAdvect(DriverMetaData& metadata, std::vector<std::share
 		cudaDeviceSynchronize(); timer.stop("reset newly sampled particles impulse"); timer.start();
 	}
 
-	//{
-	//	//show velocity on polyscope before proj
-	//	polyscope::init();
-	//	polyscope::removeAllStructures();
-	//	auto holder = last_grid.getHostTileHolderForLeafs();
-	//	//AddLeveledPoissonGridCellCentersToPolyscopePointCloud
-	//	//AddPoissonGridCellCentersToPolyscopePointCloud
-	//	IOFunc::AddLeveledPoissonGridCellCentersToPolyscopePointCloud(holder, { { -1,"type" }, { ProjChnls::c0 + 3, "c3" }, {ProjChnls::x, "pressure"}, { ProjChnls::b, "divergence" } }, { {BufChnls::u, "velocity"} });
-	//	//IOFunc::AddLeveledPoissonGridCellCentersToPolyscopePointCloud(holder, { { -1,"type" }, { BufChnls::vor, "vorticity" } }, { { BufChnls::u, "velocity" } });
-	//	IOFunc::AddParticlesToPolyscope(pfm_particles_d, "marker_particles");
-	//	IOFunc::AddTilesToPolyscopeVolumetricMesh(last_grid, LEAF, "leaf_tiles");
-	//	auto xform = mParams.meshToWorldTransform(current_time);
-	//	Eigen::Matrix<T, -1, 3> V_world =
-	//		(xform * mMeshSDFAccel->V_.transpose()).transpose();
-	//	auto* psMesh = polyscope::registerSurfaceMesh("mesh", V_world, mMeshSDFAccel->F_);
-	//	polyscope::show();
-	//}
+
 
 	static thrust::device_vector<int> tile_prefix_sum_d;
 	static thrust::device_vector<ParticleRecord> records_d;
@@ -893,12 +877,32 @@ void FluidEuler::adaptAndAdvect(DriverMetaData& metadata, std::vector<std::share
 	cudaDeviceSynchronize(); adaptive_time = timer.stop("adapt with particles"); timer.start();
 
 
+
+
 	{
 		//after the grid structure is set, calculate type and initialize AMG coeffs
 		iterativeNodeSDFAndRefineNarrowBand(grid, current_time, mParams.mRelativeRefineBandwidth, mParams.mRelativeRefineBandwidth);
 		buildTypesAndAMGCoeffsFromNodeSDFs(grid, current_time);
 	}
 
+	{
+		//show velocity on polyscope before proj
+		polyscope::init();
+		polyscope::removeAllStructures();
+		auto holder = last_grid.getHostTileHolderForLeafs();
+		//AddLeveledPoissonGridCellCentersToPolyscopePointCloud
+		//AddPoissonGridCellCentersToPolyscopePointCloud
+		//IOFunc::AddLeveledPoissonGridCellCentersToPolyscopePointCloud(holder, { { -1,"type" }, { ProjChnls::c0 + 3, "c3" }, {ProjChnls::x, "pressure"}, { ProjChnls::b, "divergence" } }, { {BufChnls::u, "velocity"} });
+		//IOFunc::AddLeveledPoissonGridCellCentersToPolyscopePointCloud(holder, { { -1,"type" }, { BufChnls::vor, "vorticity" } }, { { BufChnls::u, "velocity" } });
+
+		//IOFunc::AddParticlesToPolyscope(pfm_particles_d, "pfm_particles");
+		IOFunc::AddLeveledTilesToPolyscopeVolumetricMesh(last_grid, LEAF, "leaf_tiles");
+		auto xform = mParams.meshToWorldTransform(current_time);
+		Eigen::Matrix<T, -1, 3> V_world =
+			(xform * mMeshSDFAccel->V_.transpose()).transpose();
+		auto* psMesh = polyscope::registerSurfaceMesh("mesh", V_world, mMeshSDFAccel->F_);
+		polyscope::show();
+	}
 
 
 	//ParticleImpulseToGridMACIntp(grid, particles, u_channel, next_uw_channel);
