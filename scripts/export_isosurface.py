@@ -4,14 +4,14 @@ import pyvista as pv
 
 # 定义隐式函数
 def f(x, y, z):
-    # 示例：球面
-    return x**2 + y**2 + z**2 - 1.0
+    # sphere centered at (0.5,0.5,0.5) with radius 0.25
+    return (x - 0.5)**2 + (y - 0.5)**2 + (z - 0.5)**2 - 0.25**2
 
 # 网格采样
-N = 100
-x = np.linspace(-1.5, 1.5, N)
-y = np.linspace(-1.5, 1.5, N)
-z = np.linspace(-1.5, 1.5, N)
+N = 256
+x = np.linspace(0, 1, N)
+y = np.linspace(0, 1, N)
+z = np.linspace(0, 1, N)
 X, Y, Z = np.meshgrid(x, y, z, indexing='ij')
 
 # 计算体素值
@@ -29,4 +29,4 @@ faces_pv = np.hstack([[3, *face] for face in faces])
 mesh = pv.PolyData(verts, faces_pv)
 
 # 导出为 .vtu 文件
-mesh.save("isosurface.vtu")
+mesh.save("isosurface.vtp")

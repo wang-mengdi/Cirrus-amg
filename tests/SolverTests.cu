@@ -1339,7 +1339,7 @@ namespace SolverTests
 			fs::create_directories(file_path.parent_path());
 			IOFunc::OutputPoissonGridAsStructuredVTI(
 				holder,
-				{ {-1, "type"}, {analytical_nlap_channel, "analytical"}, {numerical_nlap_channel, "numerical"}, {residual_channel, "r"}, {x_channel, "x"} },
+				{ {-1, "type"}, {-2, "level"}, {analytical_nlap_channel, "analytical"}, {numerical_nlap_channel, "numerical"}, {residual_channel, "r"}, {x_channel, "x"}},
 				{},
 				file_path);
 		}
