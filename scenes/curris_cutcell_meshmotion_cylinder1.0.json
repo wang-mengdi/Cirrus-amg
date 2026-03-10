@@ -7,7 +7,7 @@
         "min_step_frame_fraction": 0.0,
         "output_base_dir": "./output",
         "queue_size": 4,
-        "snapshot_stride": 1
+        "snapshot_stride": 20
     },
     "scene": {
         "coarse_level": 2,
