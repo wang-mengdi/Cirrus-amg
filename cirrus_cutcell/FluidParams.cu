@@ -47,12 +47,18 @@ FluidParams::FluidParams(json& j)
 
 	std::string test = Json::Value<std::string>(j, "test", "meshmotion");
 	if (test == "meshmotion") mTestCase = MESHMOTION;
+	else if (test == "aircraft") mTestCase = AIRCRAFT;
 	else ASSERT(false, "invalid test {}", test);
 
-	if (mTestCase == MESHMOTION) {
+	if (mTestCase == MESHMOTION || mTestCase == AIRCRAFT) {
 		mIsPureNeumann = true;
 		mesh_motion_inflow = Json::Value<T>(j, "inflow_velocity", 1.0);
 	}
+
+	int init_x = Json::Value<int>(j, "initial_grid_size_x", 1);
+	int init_y = Json::Value<int>(j, "initial_grid_size_y", 1);
+	int init_z = Json::Value<int>(j, "initial_grid_size_z", 1);
+	mInitialGridSize = Coord(init_x, init_y, init_z);
 
 	mFlowMapStride = Json::Value<int>(j, "flowmap_stride", 5);
 	mCoarseLevel = Json::Value<int>(j, "coarse_level", 0);
@@ -97,7 +103,7 @@ __hostdev__ int FluidParams::initialLevelTarget(const HATileAccessor<Tile>& acc,
 
 __hostdev__ uint8_t FluidParams::wallCellType(const T current_time, const HATileAccessor<Tile>& acc, const int level, const Coord& g_ijk) const
 {
-	if (mTestCase == MESHMOTION) {
+	if (mTestCase == MESHMOTION || mTestCase == AIRCRAFT) {
 		//uses 1 layer of solid walls on the coarse level
 
 		//z+ air
@@ -164,6 +170,57 @@ __hostdev__ Eigen::Transform<T, 3, Eigen::Affine> FluidParams::meshToWorldTransf
 
 		return transform;
 	}
+	else if (mTestCase == AIRCRAFT) {
+		using Vec3 = Eigen::Matrix<T, 3, 1>;
+		using AngleAxisT = Eigen::AngleAxis<T>;
+		using TransformT = Eigen::Transform<T, 3, Eigen::Affine>;
+
+		T t = current_time;
+
+		// -----------------------------
+		// Parameters
+		// -----------------------------
+
+		const T x = T(0.5);
+		const T y = T(0.5);
+
+		// center translation: z from 1.3 -> 0.7
+		const T z0 = T(1.3);
+		const T z1 = T(0.7);
+
+		// clamp motion time to [0, 2]
+		const T t_clamped = std::max(T(0), std::min(t, T(2)));
+
+		// translation progress in [0, 1]
+		const T trans_s = t_clamped / T(2);
+		const T z = (T(1) - trans_s) * z0 + trans_s * z1;
+
+		// initial angle of attack in degrees
+		const T alpha_deg = T(10);   // example: 10 degrees
+		const T alpha = alpha_deg * T(M_PI) / T(180);
+
+		// barrel roll: 180 degrees in 2 seconds
+		const T omega_deg = T(180);
+		const T roll = (t_clamped / T(2)) * (omega_deg * T(M_PI) / T(180));
+
+		TransformT transform = TransformT::Identity();
+
+		// Initial angle of attack:
+		// rotate around body right axis (+x)
+		Eigen::Matrix<T, 3, 3> R_attack =
+			AngleAxisT(alpha, Vec3::UnitX()).toRotationMatrix();
+
+		// Barrel roll around body forward axis.
+		// Initially forward is -z, so use local -z axis.
+		// Compose on the left so it acts after attack-angle orientation.
+		Eigen::Matrix<T, 3, 3> R_roll =
+			AngleAxisT(roll, -Vec3::UnitZ()).toRotationMatrix();
+
+		transform.linear() = R_roll * R_attack;
+		transform.translation() = Vec3(x, y, z);
+
+		return transform;
+	}
 	else {
 		CUDA_ASSERT(false, "meshToWorldTransform not implemented for test case %d", int(mTestCase));
 	}
@@ -171,7 +228,7 @@ __hostdev__ Eigen::Transform<T, 3, Eigen::Affine> FluidParams::meshToWorldTransf
 
 __device__ T FluidParams::solidFaceCenterVelocity(const T current_time, const T dt, const HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const Coord& l_ijk, const int axis) const
 {
-	if (mTestCase == MESHMOTION) {
+	if (mTestCase == MESHMOTION || mTestCase == AIRCRAFT) {
 		Vec wall_vel(0, 0, mesh_motion_inflow);
 		auto g_ijk = acc.localToGlobalCoord(info, l_ijk);
 		auto ng_ijk = g_ijk; ng_ijk[axis]--;
@@ -199,50 +256,3 @@ __device__ T FluidParams::solidFaceCenterVelocity(const T current_time, const T 
 		return 0;
 	}
 }
-
-//__device__ void FluidParams::addSolidVelocityToFaceCenter(const T current_time, const T dt, const HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const Coord& l_ijk, const int axis) const
-//{
-//	if (mTestCase == MESHMOTION) {
-//		Vec wall_vel(0, 0, mesh_motion_inflow);
-//		T solid_ratio = 0, solid_vel = 0;
-//
-//		auto g_ijk = acc.localToGlobalCoord(info, l_ijk);
-//		auto ng_ijk = g_ijk; ng_ijk[axis]--;
-//		if (wallCellType(current_time, acc, info.mLevel, g_ijk) == NEUMANN || wallCellType(current_time, acc, info.mLevel, ng_ijk) == NEUMANN) {
-//			//it's a wall boundary NEUMANN cell
-//			solid_ratio = 1;
-//			solid_vel = wall_vel[axis];
-//		}
-//		else {
-//			//it either intersects with the mesh sdf or not
-//			cuda_vec4_t<T> sdfs = FaceCornerSDFs(BufChnls::sdf, acc, info, l_ijk, axis);
-//			auto h = acc.voxelSize(info.mLevel);
-//			if (FaceSDFAllOutside<T>(sdfs, h * SDF_REL_EPS)) {//does not intersect, no solid part
-//				solid_ratio = 0;
-//				solid_vel = 0;
-//			}
-//			else {
-//				auto pos0 = acc.faceCenter(axis, info, l_ijk);
-//
-//				auto T0 = meshToWorldTransform(current_time);
-//				auto T1 = meshToWorldTransform(current_time + dt);
-//
-//				Eigen::Matrix<T, 3, 1> p0(pos0[0], pos0[1], pos0[2]);
-//				Eigen::Matrix<T, 3, 1> p1 = T1 * (T0.inverse() * p0);
-//
-//				nanovdb::Vec3<T> pos1(p1[0], p1[1], p1[2]);
-//				auto rigid_vel = (pos1 - pos0) / dt;
-//
-//
-//				solid_ratio = 1 - FaceFluidRatio(sdfs);
-//				solid_vel = rigid_vel[axis];
-//			}
-//		}
-//
-//		auto& tile = info.tile();
-//		tile(BufChnls::u + axis, l_ijk) += solid_ratio * solid_vel;
-//	}
-//	else {
-//		CUDA_ASSERT(false, "solidVelocityAtFaceCenter not implemented for test case %d", int(mTestCase));
-//	}
-//}

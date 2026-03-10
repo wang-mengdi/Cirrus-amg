@@ -64,12 +64,14 @@ namespace ViscChnls {
 
 //TVORTEX: tornado-like vortex, reference: Physically-based Simulation of Tornadoes
 //enum TestCase { KARMAN = 0, SMOKESPHERE };
-enum TestCase { MESHMOTION = 0 };
+enum TestCase { MESHMOTION = 0, AIRCRAFT };
 
 class FluidParams {
 public:
 	//parameters read from json
 	TestCase mTestCase;
+	Coord mInitialGridSize;//computational grid size at level 0, like (1,1,1) or (1,1,2)
+
 	int mFlowMapStride;
 	int mCoarseLevel;
 	int mFineLevel;
@@ -84,29 +86,6 @@ public:
 	T mRelativeRefineBandwidth;//for grid refinement, k*dx, where dx is the finest level
 
 	int mExtrapolationIters;
-
-	//MaskGridAccessor mMaskGridAccessor;
-	//SDFGridAccessor mSDFGridAccessor;
-
-	//SDFGridAccessor mSDFVelocityAccessors[3];
-
-	////for karman
-	//T karman_source = 1.0;
-
-	////Vec smokesphere_source = Vec(1.0, 0., 0.);
-	//Vec smokesphere_source = Vec(0., 0., 0.4);
-	//Vec smokesphere_center = Vec(0.5, 0.5, 0.3);
-	////Vec smokesphere_center = Vec(0.5, 0.5, 0.7);
-	//T smokesphere_radius = 0.05;
-
-	//T nasa_source = 1.0;
-
-	//T prop_source = 1.0;
-	//T f1_source = 1.0;
-	//T lizard_source = +1.0;
-	//T fish_source = 1.0;
-	//T bat_source = 1.0;
-	//T flamingo_source = 1.0;
 
 	//parameters set by itself
 	bool mIsPureNeumann = false;
@@ -125,20 +104,7 @@ public:
 	__hostdev__ uint8_t wallCellType(const T current_time, const HATileAccessor<Tile>& acc, const HATileInfo<Tile>& info, const nanovdb::Coord& l_ijk) const;
 	__hostdev__ void setWallCellType(const T current_time, const HATileAccessor<Tile>& acc, const HATileInfo<Tile>& info, const nanovdb::Coord& l_ijk) const;
 
-	//require coeffs(fluid ratios) are precomputed
-	//__hostdev__ void setVelocityBoundaryCondition(const T current_time, const HATileAccessor<Tile>& acc, const HATileInfo<Tile>& info, const nanovdb::Coord& l_ijk) const;
-
-
-	//runtime functions
-	//__hostdev__ bool isInParticleGenerationRegion(const T current_time, const HATileAccessor<Tile>& acc, const HATileInfo<Tile>& info, const Coord& l_ijk)const {
-	//	return false;
-	//}
-	//__device__ uint8_t cellType(const T current_time, const HATileAccessor<Tile>& acc, const HATileInfo<Tile>& info, const nanovdb::Coord& l_ijk, int& boundary_axis, int& boundary_off) const {
-	//	return DIRICHLET;
-	//}
-
 	__hostdev__ Eigen::Transform<T, 3, Eigen::Affine> meshToWorldTransform(const T current_time) const;
 
 	__device__ T solidFaceCenterVelocity(const T current_time, const T dt, const HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const Coord& l_ijk, const int axis)const;
-	//__device__ void addSolidVelocityToFaceCenter(const T current_time, const T dt, const HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const Coord& l_ijk, const int axis)const;
 };

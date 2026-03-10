@@ -178,7 +178,13 @@ public:
 
 		{
 			//1*1*1
-			grid.setTileHost(0, nanovdb::Coord(0, 0, 0), Tile(), LEAF);
+
+			for(int i=0;i<mParams.mInitialGridSize.x();i++)
+				for (int j = 0; j < mParams.mInitialGridSize.y(); j++)
+					for (int k = 0; k < mParams.mInitialGridSize.z(); k++)
+						grid.setTileHost(0, nanovdb::Coord(i, j, k), Tile(), LEAF);
+
+			//grid.setTileHost(0, nanovdb::Coord(0, 0, 0), Tile(), LEAF);
 			grid.compressHost();
 			grid.syncHostAndDevice();
 			grid.spawnGhostTiles();
