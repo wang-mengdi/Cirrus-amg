@@ -5,7 +5,6 @@
 #include <cub/block/block_reduce.cuh>
 #include <thrust/execution_policy.h>
 #include <tbb/parallel_for.h>
-#include "polyscope/surface_mesh.h"
 
 
 #include <cmath>

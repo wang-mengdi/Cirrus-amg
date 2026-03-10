@@ -19,6 +19,8 @@
 
 #include <polyscope/polyscope.h>
 #include <polyscope/point_cloud.h>
+#include "polyscope/surface_mesh.h"
+
 
 #include <sys/types.h>
 
@@ -134,6 +136,24 @@ public:
 
 			//CalculateSDFOnNodes(grid, BufChnls::sdf, *mMeshSDFAccel, LEAF | GHOST, xform);
 
+
+
+			//{
+			//	//show velocity on polyscope before proj
+			//	polyscope::init();
+			//	polyscope::removeAllStructures();
+			//	auto holder = grid.getHostTileHolderForLeafs();
+			//	IOFunc::AddPoissonGridNodesToPolyscope(holder, { {BufChnls::sdf, "sdf"} }, {});
+
+			//	auto xform = mParams.meshToWorldTransform(current_time);
+			//	Eigen::Matrix<T, -1, 3> V_world =
+			//		(xform * mMeshSDFAccel->V_.transpose()).transpose();
+			//	polyscope::registerSurfaceMesh("mesh", V_world, mMeshSDFAccel->F_);
+
+			//	//IOFunc::AddPoissonGridCellCentersToPolyscopePointCloud(holder, { { -1,"type" }, { BufChnls::vor, "vorticity" }, {ProjChnls::x, "pressure"}, { ProjChnls::b, "divergence" } }, { {BufChnls::u, "velocity"} });
+			//	//IOFunc::AddLeveledPoissonGridCellCentersToPolyscopePointCloud(holder, { { -1,"type" }, { BufChnls::vor, "vorticity" } }, { { BufChnls::u, "velocity" } });
+			//	polyscope::show();
+			//}
 
 			//set wall types
 			auto params = mParams;

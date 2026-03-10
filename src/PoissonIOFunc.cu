@@ -1012,6 +1012,13 @@ namespace IOFunc {
                             for (int k = 0; k <= Tile::DIM; k++) {
                                 Coord r_ijk(i, j, k);
                                 auto pos = acc.cellCorner(info, r_ijk);
+
+                                {
+                                    auto ref_point = acc.cellCenterGlobal(3, Coord(60, 23, 99));
+                                    if ((pos - ref_point).length() > 0.03) continue;
+                                }
+
+
                                 points.push_back(pos);
 
                                 tile_ijks.push_back(info.mTileCoord);
@@ -1065,6 +1072,8 @@ namespace IOFunc {
 
                 }
             }
+
+            if (points.empty()) continue;
 
             auto level_cloud_name = fmt::format("Level {} Nodes", level);
             auto pc = polyscope::registerPointCloud(level_cloud_name, points);

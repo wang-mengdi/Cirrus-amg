@@ -7,6 +7,8 @@
 
 #include <igl/per_face_normals.h>
 #include <igl/per_vertex_normals.h>
+#include <igl/signed_distance.h>
+
 
 void AssertRigidTransform(const Eigen::Transform<T, 3, Eigen::Affine>& xform)
 {
@@ -67,47 +69,74 @@ void MeshSDFAccel::build(const Eigen::Matrix<T, -1, 3>& V_in, const Eigen::Matri
     }
 }
 
-std::vector<T> MeshSDFAccel::querySDF(const std::vector<Vec>& points, const Eigen::Transform<T, 3, Eigen::Affine>& xform) const
+////self version use tbb but face some sign flipping issues
+//std::vector<T> MeshSDFAccel::querySDF(const std::vector<Vec>& points, const Eigen::Transform<T, 3, Eigen::Affine>& xform) const
+//{
+//    AssertRigidTransform(xform);
+//
+//    const int N = static_cast<int>(points.size());
+//    std::vector<T> sdf(N);
+//
+//    // Inverse transform: world -> mesh-local
+//    const Eigen::Transform<T, 3, Eigen::Affine> invX = xform.inverse();
+//    const Eigen::Matrix<T, 4, 4> M = invX.matrix();
+//
+//    tbb::parallel_for(
+//        tbb::blocked_range<int>(0, N, 2048),
+//        [&](const tbb::blocked_range<int>& r) {
+//            for (int i = r.begin(); i != r.end(); ++i) {
+//                // Read point (Vec must support .x()/.y()/.z() or [0],[1],[2])
+//                const T px = static_cast<T>(points[i][0]);
+//                const T py = static_cast<T>(points[i][1]);
+//                const T pz = static_cast<T>(points[i][2]);
+//
+//                // Homogeneous transform
+//                Eigen::Matrix<T, 4, 1> pw; pw << px, py, pz, T(1);
+//                Eigen::Matrix<T, 4, 1> pl4 = M * pw;
+//                Eigen::Matrix<T, 1, 3> p = pl4.template head<3>().transpose();
+//
+//                // Closest point in mesh-local
+//                int fid = -1;
+//                Eigen::Matrix<T, 1, 3> c;
+//                const T d2 = tree_.squared_distance(V_, F_, p, fid, c);
+//                const T d = std::sqrt(std::max<T>(d2, T(0)));
+//
+//                // Pseudonormal sign
+//                int s = 1;
+//                if (fid >= 0) {
+//                    const Eigen::Matrix<T, 1, 3> n = FN_.row(fid);
+//                    const T dot = (p - c).dot(n);
+//                    s = (dot >= T(0)) ? +1 : -1;
+//                }
+//                sdf[i] = s * d;
+//            }
+//        });
+//
+//    return sdf;
+//}
+
+std::vector<T> MeshSDFAccel::querySDF(const std::vector<Vec>& points,
+    const Eigen::Transform<T, 3, Eigen::Affine>& xform) const
 {
     AssertRigidTransform(xform);
-
     const int N = static_cast<int>(points.size());
     std::vector<T> sdf(N);
+    if (N == 0) return sdf;
 
-    // Inverse transform: world -> mesh-local
-    const Eigen::Transform<T, 3, Eigen::Affine> invX = xform.inverse();
-    const Eigen::Matrix<T, 4, 4> M = invX.matrix();
+    const auto invX = xform.inverse();
+    Eigen::Matrix<T, Eigen::Dynamic, 3> P(N, 3);
+    for (int i = 0; i < N; ++i) {
+        Eigen::Matrix<T, 3, 1> pw(points[i][0], points[i][1], points[i][2]);
+        Eigen::Matrix<T, 3, 1> pl = invX * pw;
+        P.row(i) = pl.transpose();
+    }
 
-    tbb::parallel_for(
-        tbb::blocked_range<int>(0, N, 2048),
-        [&](const tbb::blocked_range<int>& r) {
-            for (int i = r.begin(); i != r.end(); ++i) {
-                // Read point (Vec must support .x()/.y()/.z() or [0],[1],[2])
-                const T px = static_cast<T>(points[i][0]);
-                const T py = static_cast<T>(points[i][1]);
-                const T pz = static_cast<T>(points[i][2]);
+    Eigen::Matrix<T, Eigen::Dynamic, 1> S;
+    Eigen::VectorXi I;
+    Eigen::Matrix<T, Eigen::Dynamic, 3> C, Nrm;
 
-                // Homogeneous transform
-                Eigen::Matrix<T, 4, 1> pw; pw << px, py, pz, T(1);
-                Eigen::Matrix<T, 4, 1> pl4 = M * pw;
-                Eigen::Matrix<T, 1, 3> p = pl4.template head<3>().transpose();
+    igl::signed_distance(P, V_, F_, igl::SIGNED_DISTANCE_TYPE_WINDING_NUMBER, S, I, C, Nrm);
 
-                // Closest point in mesh-local
-                int fid = -1;
-                Eigen::Matrix<T, 1, 3> c;
-                const T d2 = tree_.squared_distance(V_, F_, p, fid, c);
-                const T d = std::sqrt(std::max<T>(d2, T(0)));
-
-                // Pseudonormal sign
-                int s = 1;
-                if (fid >= 0) {
-                    const Eigen::Matrix<T, 1, 3> n = FN_.row(fid);
-                    const T dot = (p - c).dot(n);
-                    s = (dot >= T(0)) ? +1 : -1;
-                }
-                sdf[i] = s * d;
-            }
-        });
-
+    for (int i = 0; i < N; ++i) sdf[i] = S(i);
     return sdf;
 }

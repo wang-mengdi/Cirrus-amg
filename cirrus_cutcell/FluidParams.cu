@@ -196,7 +196,7 @@ __hostdev__ Eigen::Transform<T, 3, Eigen::Affine> FluidParams::meshToWorldTransf
 		const T z = (T(1) - trans_s) * z0 + trans_s * z1;
 
 		// initial angle of attack in degrees
-		const T alpha_deg = T(10);   // example: 10 degrees
+		const T alpha_deg = -10;   // example: 10 degrees. The sign is flipped, -10 means nose heading up 10 deg.
 		const T alpha = alpha_deg * T(M_PI) / T(180);
 
 		// barrel roll: 180 degrees in 2 seconds
