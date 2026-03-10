@@ -192,14 +192,14 @@ public:
 			});
 		}
 
-		if(mMeshSDFAccel != nullptr)
-		{
-			//refine using mesh vertices
-			auto h_acc = grid.deviceAccessor();
-			marker_particles_d = SampleMarkerParticlesOutsideMeshBand(*mMeshSDFAccel, mParams.meshToWorldTransform(0.), h_acc.voxelSize(mParams.mFineLevel), mParams.mRelativeSampleBandwidth, mParams.mSampleNumPerTile, 0., mRamdonGenerator);
-			RefineWithMarkerParticles(grid, marker_particles_d, mParams.mCoarseLevel, mParams.mFineLevel, BufChnls::counter, false);
+		//if(mMeshSDFAccel != nullptr)
+		//{
+		//	//refine using mesh vertices
+		//	auto h_acc = grid.deviceAccessor();
+		//	marker_particles_d = SampleMarkerParticlesOutsideMeshBand(*mMeshSDFAccel, mParams.meshToWorldTransform(0.), h_acc.voxelSize(mParams.mFineLevel), mParams.mRelativeSampleBandwidth, mParams.mSampleNumPerTile, 0., mRamdonGenerator);
+		//	RefineWithMarkerParticles(grid, marker_particles_d, mParams.mCoarseLevel, mParams.mFineLevel, BufChnls::counter, false);
 
-		}
+		//}
 
 		T current_time = 0.0, dt = 1e-5;
 		FillChannelsInGridWithValue(grid, std::numeric_limits<T>::quiet_NaN(), LEAF | NONLEAF | GHOST, {});
@@ -282,8 +282,8 @@ public:
 			WriteStatToFile(metadata);
 		}
 
-			auto particles_h_ptr = std::make_shared<thrust::host_vector<MarkerParticle>>(marker_particles_d);
-			metadata.Append_Output_Thread(std::make_shared<std::thread>(IOFunc::OutputMarkerParticleSystemAsVTU,
+			auto particles_h_ptr = std::make_shared<thrust::host_vector<MarkerParticle>>(pfm_particles_d);
+			metadata.Append_Output_Thread(std::make_shared<std::thread>(IOFunc::OutputParticleSystemAsVTU,
 				particles_h_ptr, metadata.base_path / fmt::format("particles{:04d}.vtu", metadata.current_frame)
 			));
 		//}
@@ -344,7 +344,7 @@ public:
 			"nfm_advection_time {} ms\n"
 			"advance_time {} ms\n",
 			metadata.current_frame,
-			marker_particles_d.size(),
+			pfm_particles_d.size(),
 			grid_ptrs.back()->numTotalLeafTiles() * Tile::SIZE,
 			reseeding_time,
 			particle_advection_time,
@@ -357,8 +357,8 @@ public:
 
 	void PrintMemoryInfo(void) {
 		double M = 1024 * 1024, G = 1024 * 1024 * 1024;
-		double particle_num = marker_particles_d.size();
-		double particle_capacity = marker_particles_d.capacity();
+		double particle_num = pfm_particles_d.size();
+		double particle_capacity = pfm_particles_d.capacity();
 		double total_tile_num = 0;
 		for (auto grid_ptr : grid_ptrs) {
 			auto& grid = *grid_ptr;
@@ -456,16 +456,16 @@ public:
 		}
 
 		// 4) marker particles
-		static_assert(std::is_trivially_copyable_v<MarkerParticle>,
-			"MarkerParticle must be trivially copyable for raw checkpoint");
+		static_assert(std::is_trivially_copyable_v<Particle>,
+			"Particle must be trivially copyable for raw checkpoint");
 
-		uint64_t n_particles = (uint64_t)marker_particles_d.size();
+		uint64_t n_particles = (uint64_t)pfm_particles_d.size();
 		IOFunc::WritePod(os, n_particles);
 
 		if (n_particles) {
-			thrust::host_vector<MarkerParticle> h(marker_particles_d);
+			thrust::host_vector<Particle> h(pfm_particles_d);
 			os.write(reinterpret_cast<const char*>(h.data()),
-				(std::streamsize)(sizeof(MarkerParticle) * (size_t)n_particles));
+				(std::streamsize)(sizeof(Particle) * (size_t)n_particles));
 		}
 
 		ASSERT(os.good(), "Save_Frame: write failed {}", file.string());

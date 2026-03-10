@@ -871,6 +871,8 @@ void FluidEuler::adaptAndAdvect(DriverMetaData& metadata, std::vector<std::share
 
 	{
 		//after the grid structure is set, calculate type and initialize AMG coeffs
+		iterativeNodeSDFAndRefineNarrowBand(grid, current_time, mParams.mRelativeSampleBandwidth, mParams.mRelativeSampleBandwidth);
+		buildTypesAndAMGCoeffsFromNodeSDFs(grid, current_time);
 	}
 
 
@@ -907,30 +909,10 @@ void FluidEuler::adaptAndAdvect(DriverMetaData& metadata, std::vector<std::share
 			auto& tile = info.tile();
 			//if (!tile.isInterior(l_ijk)) return;
 
-			//type
-			int boundary_axis, boundary_off;
-			tile.type(l_ijk) = params.cellType(current_time, acc, info, l_ijk, boundary_axis, boundary_off);
-
-			//{
-			//	auto g_ijk = acc.localToGlobalCoord(info, l_ijk);
-			//	Coord diff = g_ijk - Coord(128, 128, 130);
-			//	if (abs(diff[0]) + abs(diff[1]) + abs(diff[2]) <= 1) {
-			//		printf("g_ijk %d %d %d type %d\n", g_ijk[0], g_ijk[1], g_ijk[2], tile.type(l_ijk));
-			//	}
-			//}
-
-			//dye density
-			{
-				auto pos = acc.cellCenter(info, l_ijk);
-				auto pos2 = SemiLagrangianBackwardPosition(last_acc, pos, dt, u_channel, last_u_node_channel);
-				auto dye2 = InterpolateCellValue(last_acc, pos2, Tile::dye_channel, last_dye_node_channel);
-				tile(Tile::dye_channel, l_ijk) = dye2;
-			}
-
 			{
 				//grid velocity advection
 				for (int axis : {0, 1, 2}) {
-					if (tile(next_uw_channel + axis, l_ijk) < 1 - 1e-3)
+					if (tile(AdvChnls::u_weight + axis, l_ijk) < 1 - 1e-3)
 					{
 						//Vec psi = acc.faceCenter(axis, info, l_ijk);
 						Vec psi = NFMErodedAdvectionPoint(axis, acc, info, l_ijk);
@@ -939,18 +921,13 @@ void FluidEuler::adaptAndAdvect(DriverMetaData& metadata, std::vector<std::share
 						//NFMBackQueryImpulseAndT(accs_d_ptr, info.mLevel, coarse_level, time_steps_d_ptr, u_channel, last_u_node_channel, nfm_start_idx, n, psi, m0, matT);
 						//NFMBackQueryImpulseAndT(accs_d_ptr, fine_level, coarse_level, time_steps_d_ptr, u_channel, last_u_node_channel, nfm_start_idx, n, psi, m0, matT);
 
-						NFMBackMarchPsiAndT(accs_d_ptr, fine_level, coarse_level, time_steps_d_ptr, u_channel, last_u_node_channel, nfm_start_idx, n, psi, matT);
-						//m0 = InterpolateFaceValue(accs_d_ptr[nfm_start_idx], psi, u_channel, last_u_node_channel);
-						m0 = InterpolateFaceValue(nfm_query_acc, psi, u_channel, last_u_node_channel);
+						NFMBackMarchPsiAndT(accs_d_ptr, fine_level, coarse_level, time_steps_d_ptr, advection_u_channel, nfm_start_idx, n, psi, matT);
+
+						KernelIntpVelocityMAC2(accs_d_ptr[nfm_start_idx], fine_level, coarse_level, psi, advection_u_channel, m0);
 
 						Vec m1 = MatrixTimesVec(matT.transpose(), m0);
 
-						tile(Tile::u_channel + axis, l_ijk) = m1[axis];
-
-						//if (m1[axis] > 1e5) {
-						//	auto g_ijk = acc.localToGlobalCoord(info, l_ijk);
-						//	printf("g_ijk %d %d %d axis %d m1 %f\n", g_ijk[0], g_ijk[1], g_ijk[2], axis, m1[axis]);
-						//}
+						tile(BufChnls::u + axis, l_ijk) = m1[axis];
 					}
 				}
 			}

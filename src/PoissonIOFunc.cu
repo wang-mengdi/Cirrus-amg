@@ -182,6 +182,48 @@ namespace IOFunc {
         writer->Write();
     }
 
+    void OutputParticleSystemAsVTU(std::shared_ptr<thrust::host_vector<Particle>> particles_ptr, fs::path path) {
+        fmt::print("Output Particle System to vtu file: {}\n", path.string());
+        auto& particles = *particles_ptr;
+
+        // setup VTK
+        vtkNew<vtkXMLUnstructuredGridWriter> writer;
+        vtkNew<vtkUnstructuredGrid> unstructured_grid;
+
+        // Use vtkFloatArray for position data (float instead of double)
+        vtkNew<vtkFloatArray> positions;
+        positions->SetNumberOfComponents(3);  // 3D points
+        positions->SetNumberOfTuples(particles.size());
+        positions->SetName("Positions");
+
+        //// Use vtkTypeInt64Array for global_idx
+        //vtkNew<vtkTypeInt64Array> global_idx_array;
+        //global_idx_array->SetName("global_idx");
+        //global_idx_array->SetNumberOfComponents(1);  // Scalar data
+        //global_idx_array->SetNumberOfTuples(particles.size());
+
+        for (int i = 0; i < particles.size(); i++) {
+            auto p = particles[i].pos;  // Assume pos is a float array or convertible to float
+            //auto global_idx = particles[i].global_idx;
+
+            positions->SetTuple3(i, p[0], p[1], p[2]);  // Add float position data
+            //global_idx_array->SetTuple1(i, global_idx); // Add global_idx data
+        }
+
+        // Set points for the grid
+        vtkNew<vtkPoints> nodes;
+        nodes->SetData(positions);
+        unstructured_grid->SetPoints(nodes);
+
+        // Add global_idx array as point data
+        //unstructured_grid->GetPointData()->AddArray(global_idx_array);
+
+        // Write the output file
+        writer->SetFileName(path.string().c_str());
+        writer->SetInputData(unstructured_grid);
+        writer->SetDataModeToBinary();  // Optional: Use binary mode for smaller file size
+        writer->Write();
+    }
 
   //  void OutputMarkerParticleSystemAsVTU(const thrust::device_vector<MarkerParticle>& particles_d, const fs::path& path) {
   //      fmt::print("Output Particle System to vtu file: {}\n", path.string());

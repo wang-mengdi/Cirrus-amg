@@ -91,7 +91,9 @@ namespace IOFunc {
 
     //particle system
     void OutputMarkerParticleSystemAsVTU(std::shared_ptr<thrust::host_vector<MarkerParticle>> particles_ptr, fs::path path);
+    void OutputParticleSystemAsVTU(std::shared_ptr<thrust::host_vector<Particle>> particles_ptr, fs::path path);
     void AddMarkerParticlesToPolyscope(thrust::device_vector<MarkerParticle> particles_d, std::string name);
+
 
     //tiles
     void OutputTilesAsVTU(std::shared_ptr<HAHostTileHolder<Tile>> holder_ptr, const fs::path& path);
