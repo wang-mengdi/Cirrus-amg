@@ -16,17 +16,6 @@ public:
     static constexpr int p_channel = 2;
     static constexpr int Ap_channel = 3;
     static constexpr int z_channel = 4;
-    //static constexpr int tmp_channel = 5;
-    //static constexpr int u_channel = 6;
-    //static constexpr int v_channel = 7;
-    //static constexpr int w_channel = 8;
-    //static constexpr int vor_channel = 9;//vorticity
-	//static constexpr int dye_channel = 10;//dye density
-    //static constexpr int num_channels = 11;
-    //static constexpr uint32_t c0_channel = 11;
-    //static constexpr uint32_t c1_channel = 12;
-    //static constexpr uint32_t c2_channel = 13;
-    //static constexpr uint32_t c3_channel = 14;
 	static constexpr int num_channels = NUMCHNLS;
 
     using T = typename Type;
@@ -45,7 +34,7 @@ public:
     T mData[num_channels][CHNLSIZE];//9^3 =729
     HATileInfo<PoissonTile<T, num_channels>> mNeighbors[6];//x-,y-,z-,x+,y+,z+
     uint8_t mCellType[SIZE];
-    bool mIsInterestArea = false, mIsLockedRefine = false;
+    bool mIsInterestArea = false , mIsLockedRefine = false;
     int mStatus;//record refine and coarsen status
     int mSerialIdx;
 
@@ -173,9 +162,11 @@ public:
 };
 
 using Tile = PoissonTile<float, 15>;
+using VelTile = PoissonTile<float, 3>;//3 velocity channels
 using T = Tile::T;
 using Coord = typename Tile::Coord;
 using Vec = Tile::VecType;
 constexpr T NODATA = FLT_MAX;//sometimes we use NODATA to indicate invalid data, so it cannot be nan
 //constexpr T NODATA = std::numeric_limits<T>::quiet_NaN();
 
+VelTile ExtractVelocityTile(const Tile& src, int u_channel);
