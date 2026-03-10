@@ -246,7 +246,7 @@ __global__ void CalculateReseedingNumbersOnLeafTiles128Kernel(const T current_ti
 
 	if (!(info.mType & LEAF)) return;
 
-	auto sample_threshold_sdf = params.mRelativeSampleBandwidth * acc.voxelSize(params.mFineLevel);
+	auto sample_threshold_sdf = params.mRelativeParticleSampleBandwidth * acc.voxelSize(params.mFineLevel);
 
 	//int reseed_threshold = num_particles_per_cell / 2;
 	int reseed_threshold = 1;
@@ -667,22 +667,22 @@ void FluidEuler::iterativeNodeSDFAndRefineNarrowBand(HADeviceGrid<Tile>& grid, c
 }
 
 void FluidEuler::project(HADeviceGrid<Tile>& grid, const T current_time, const T dt) {
-	//at the end we have corrected fluid velocity and mix velocity
+	//will use u_mix as a temporary channel
 
 
 	//auto c0_channel = ProjChnls::c0;
 
-	{
-		//contaminate channels for debugging
-		grid.launchVoxelFuncOnAllTiles(
-			[=] __device__(HATileAccessor<Tile>&acc, HATileInfo<Tile>&info, const Coord & l_ijk) {
-			info.tile()(ProjChnls::b, l_ijk) = NODATA;
-		}, LEAF | GHOST | NONLEAF, 4
-		);
-		CUDA_CHECK(cudaGetLastError());
-		CUDA_CHECK(cudaDeviceSynchronize());
+	//{
+	//	//contaminate channels for debugging
+	//	grid.launchVoxelFuncOnAllTiles(
+	//		[=] __device__(HATileAccessor<Tile>&acc, HATileInfo<Tile>&info, const Coord & l_ijk) {
+	//		info.tile()(ProjChnls::b, l_ijk) = NODATA;
+	//	}, LEAF | GHOST | NONLEAF, 4
+	//	);
+	//	CUDA_CHECK(cudaGetLastError());
+	//	CUDA_CHECK(cudaDeviceSynchronize());
 
-	}
+	//}
 
 	//AMG
 	{
@@ -714,10 +714,10 @@ void FluidEuler::project(HADeviceGrid<Tile>& grid, const T current_time, const T
 		AMGAddGradientToFace(grid, -1, LEAF, ProjChnls::x, ProjChnls::c0, BufChnls::u);
 
 		//mix and calculate divergence again for validation
-		mixFluidAndSolidVelocityOnFaces(grid, current_time, dt, ProjChnls::c0, BufChnls::u, ProjChnls::u_mix);
+		mixFluidAndSolidVelocityOnFaces(grid, current_time, dt, ProjChnls::c0, BufChnls::u, BufChnls::u);
 
 
-		AMGVolumeWeightedDivergenceWithoutCoeffOnLeafs(grid, ProjChnls::u_mix, ProjChnls::b);
+		AMGVolumeWeightedDivergenceWithoutCoeffOnLeafs(grid, BufChnls::u, ProjChnls::b);
 		Info("after proj div pt linf: {}", NormSync(grid, -1, ProjChnls::b, false));
 
 		{
@@ -751,7 +751,7 @@ void FluidEuler::adaptAndAdvect(DriverMetaData& metadata, std::vector<std::share
 
 	CPUTimer timer; timer.start();
 
-	int advection_u_channel = ProjChnls::u_mix;
+	int advection_u_channel = BufChnls::u;
 
 	//saved intermediate velocities
 	int n = grid_ptrs.size() - 1;
@@ -831,11 +831,35 @@ void FluidEuler::adaptAndAdvect(DriverMetaData& metadata, std::vector<std::share
 		cudaDeviceSynchronize(); timer.stop("reset newly sampled particles impulse"); timer.start();
 	}
 
+	//{
+	//	//show velocity on polyscope before proj
+	//	polyscope::init();
+	//	polyscope::removeAllStructures();
+	//	auto holder = last_grid.getHostTileHolderForLeafs();
+	//	//AddLeveledPoissonGridCellCentersToPolyscopePointCloud
+	//	//AddPoissonGridCellCentersToPolyscopePointCloud
+	//	IOFunc::AddLeveledPoissonGridCellCentersToPolyscopePointCloud(holder, { { -1,"type" }, { ProjChnls::c0 + 3, "c3" }, {ProjChnls::x, "pressure"}, { ProjChnls::b, "divergence" } }, { {BufChnls::u, "velocity"} });
+	//	//IOFunc::AddLeveledPoissonGridCellCentersToPolyscopePointCloud(holder, { { -1,"type" }, { BufChnls::vor, "vorticity" } }, { { BufChnls::u, "velocity" } });
+	//	IOFunc::AddParticlesToPolyscope(pfm_particles_d, "marker_particles");
+	//	IOFunc::AddTilesToPolyscopeVolumetricMesh(last_grid, LEAF, "leaf_tiles");
+	//	auto xform = mParams.meshToWorldTransform(current_time);
+	//	Eigen::Matrix<T, -1, 3> V_world =
+	//		(xform * mMeshSDFAccel->V_.transpose()).transpose();
+	//	auto* psMesh = polyscope::registerSurfaceMesh("mesh", V_world, mMeshSDFAccel->F_);
+	//	polyscope::show();
+	//}
+
 	static thrust::device_vector<int> tile_prefix_sum_d;
 	static thrust::device_vector<ParticleRecord> records_d;
 	HistogramSortParticlesAtGivenLevel(last_grid, mParams.mFineLevel, BufChnls::tmp, pfm_particles_d, tile_prefix_sum_d, records_d);
 	OptimizedAdvectParticlesAndSingleStepGradMRK4ForwardAtGivenLevel(last_grid, mParams.mFineLevel, advection_u_channel, dt, tile_prefix_sum_d, records_d);
 	EraseInvalidParticles(pfm_particles_d);
+
+	Warn("after particle advection {} particles", pfm_particles_d.size());
+
+
+
+
 	cudaDeviceSynchronize(); double adv_elapsed = timer.stop("Advect particles"); timer.start(); particle_advection_time = adv_elapsed;
 	{
 		double num_particles_M = pfm_particles_d.size() / (1024. * 1024.);
@@ -871,7 +895,7 @@ void FluidEuler::adaptAndAdvect(DriverMetaData& metadata, std::vector<std::share
 
 	{
 		//after the grid structure is set, calculate type and initialize AMG coeffs
-		iterativeNodeSDFAndRefineNarrowBand(grid, current_time, mParams.mRelativeSampleBandwidth, mParams.mRelativeSampleBandwidth);
+		iterativeNodeSDFAndRefineNarrowBand(grid, current_time, mParams.mRelativeRefineBandwidth, mParams.mRelativeRefineBandwidth);
 		buildTypesAndAMGCoeffsFromNodeSDFs(grid, current_time);
 	}
 
@@ -1003,7 +1027,7 @@ void FluidEuler::Advance(DriverMetaData& metadata) {
 
 
 
-	CalculateVelocityAndVorticityMagnitudeOnLeafCellCenters(grid, mParams.mFineLevel, mParams.mCoarseLevel, ProjChnls::u_mix, BufChnls::u_cell, BufChnls::vor);
+	CalculateVelocityAndVorticityMagnitudeOnLeafCellCenters(grid, mParams.mFineLevel, mParams.mCoarseLevel, BufChnls::u, BufChnls::u_cell, BufChnls::vor);
 
 	//{
 	//	//show velocity on polyscope before proj
@@ -1015,7 +1039,7 @@ void FluidEuler::Advance(DriverMetaData& metadata) {
 	//	polyscope::show();
 	//}
 
-	extrapolateFluidVelocityForAdvection(grid, mParams.mExtrapolationIters, BufChnls::u, ProjChnls::c0);
+	//extrapolateFluidVelocityForAdvection(grid, mParams.mExtrapolationIters, BufChnls::u, ProjChnls::c0);
 
 	CheckCudaError("Advance");
 	time_step_counter++;

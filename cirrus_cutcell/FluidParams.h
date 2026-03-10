@@ -80,7 +80,8 @@ public:
 
 	//int mSampleNumPerTile;//number of sampled points per finest tile
 	int mSampleNumPerCell;
-	T mRelativeSampleBandwidth;//k*dx, where dx is the finest level
+	T mRelativeParticleSampleBandwidth;//for particle generation, k*dx, where dx is the finest level
+	T mRelativeRefineBandwidth;//for grid refinement, k*dx, where dx is the finest level
 
 	int mExtrapolationIters;
 

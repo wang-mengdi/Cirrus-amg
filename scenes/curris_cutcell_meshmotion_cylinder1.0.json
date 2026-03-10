@@ -1,6 +1,6 @@
 {
     "driver": {
-        "cfl": 2.0,
+        "cfl": 0.5,
         "first_frame": 0,
         "fps": 200,
         "last_frame": 200,
@@ -17,8 +17,9 @@
         "inflow_velocity": 1.0,
         "mesh_file": "./scenes/cylinder.obj",
         "particle_life": 2.5,
-        "sample_num_per_tile": 8,
-        "relative_sample_bandwidth": 5.0,
+        "sample_num_per_cell": 8,
+        "particle_sample_relative_bandwidth": 5.0,
+        "refine_relative_bandwidth": 10.0,
         "test": "meshmotion"
     },
     "simulator": "euler"

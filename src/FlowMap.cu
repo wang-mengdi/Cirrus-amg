@@ -749,6 +749,7 @@ __device__ bool RK4ForwardPositionAndTAtGivenLevel(const HATileAccessor<Tile>& a
 }
 
 __device__ void NFMBackMarchPsiAndT(const HATileAccessor<Tile>* accs_d_ptr, const int fine_level, const int coarse_level, const double* time_steps_d_ptr, const int u_channel, const int start_step, const int end_step, Vec& psi, Eigen::Matrix3<T>& matT) {
+	CUDA_ASSERT(end_step > start_step, "end_step %d should be greater than start_step %d", end_step, start_step);
 	matT = Eigen::Matrix3<T>::Identity();
 	for (int i = end_step - 1; i >= start_step; i--) {
 		const auto& acc = accs_d_ptr[i];

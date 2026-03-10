@@ -251,6 +251,26 @@ namespace IOFunc {
         //psCloud->addVectorQuantity("impulse", impulses);
     }
 
+    void AddParticlesToPolyscope(thrust::device_vector<Particle> particles_d, std::string name) {
+        thrust::host_vector<Particle> particles = particles_d;
+
+        std::vector<Vec> positions;
+        std::vector<Vec> impulses;
+
+        positions.reserve(particles.size());
+        impulses.reserve(particles.size());
+
+        for (int i = 0; i < particles.size(); i++) {
+            auto p = particles[i].pos;
+            auto v = particles[i].impulse;
+            positions.emplace_back(p[0], p[1], p[2]);
+            impulses.emplace_back(v[0], v[1], v[2]);
+        }
+
+        polyscope::PointCloud* psCloud = polyscope::registerPointCloud(name, positions);
+        psCloud->addVectorQuantity("impulse", impulses);
+    }
+
     void OutputTilesAsVTU(std::shared_ptr<HAHostTileHolder<Tile>> holder_ptr, const fs::path& path) {
         using Coord = typename Tile::CoordType;
 
@@ -668,16 +688,16 @@ namespace IOFunc {
                             auto pos = acc.cellCenter(info, l_ijk); // 使用cellCenter代替cellCorner
 
                             
-                            {
-                                auto ref_center = acc.cellCenterGlobal(5, Coord(120, 112, 94));
-                                if ((pos - ref_center).length() > 0.01) continue;
+        //                    {
+        //                        auto ref_center = acc.cellCenterGlobal(5, Coord(120, 112, 94));
+        //                        if ((pos - ref_center).length() > 0.01) continue;
 
 
-        //                        //if (info.mLevel != 5) continue;
-        //                        Coord diff = g_ijk - Coord(232, 238, 368);
-        //                        if (!(info.mLevel == 6 && abs(diff[0]) + abs(diff[1]) + abs(diff[2]) <= 5)) continue;
-								////Info("entering tile {} type {}", info.mTileCoord, info.mType);
-                            }
+        ////                        //if (info.mLevel != 5) continue;
+        ////                        Coord diff = g_ijk - Coord(232, 238, 368);
+        ////                        if (!(info.mLevel == 6 && abs(diff[0]) + abs(diff[1]) + abs(diff[2]) <= 5)) continue;
+								//////Info("entering tile {} type {}", info.mTileCoord, info.mType);
+        //                    }
 
 
 

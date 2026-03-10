@@ -203,7 +203,7 @@ public:
 
 		T current_time = 0.0, dt = 1e-5;
 		FillChannelsInGridWithValue(grid, std::numeric_limits<T>::quiet_NaN(), LEAF | NONLEAF | GHOST, {});
-		iterativeNodeSDFAndRefineNarrowBand(grid, current_time, mParams.mRelativeSampleBandwidth, mParams.mRelativeSampleBandwidth);
+		iterativeNodeSDFAndRefineNarrowBand(grid, current_time, mParams.mRelativeRefineBandwidth, mParams.mRelativeRefineBandwidth);
 		buildTypesAndAMGCoeffsFromNodeSDFs(grid, current_time);
 
 
@@ -226,9 +226,8 @@ public:
 		//	);
 		//}
 		project(grid, current_time, dt);
-		CalculateVelocityAndVorticityMagnitudeOnLeafCellCenters(grid, mParams.mFineLevel, mParams.mCoarseLevel, ProjChnls::u_mix, BufChnls::u_cell, BufChnls::vor);
-		extrapolateFluidVelocityForAdvection(grid, mParams.mExtrapolationIters, BufChnls::u, ProjChnls::c0);
-
+		CalculateVelocityAndVorticityMagnitudeOnLeafCellCenters(grid, mParams.mFineLevel, mParams.mCoarseLevel, BufChnls::u, BufChnls::u_cell, BufChnls::vor);
+		//extrapolateFluidVelocityForAdvection(grid, mParams.mExtrapolationIters, BufChnls::u, ProjChnls::c0);
 	}
 
 	virtual double CFL_Time(const double cfl) {
