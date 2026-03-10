@@ -335,7 +335,7 @@ void ReseedParticles(HADeviceGrid<Tile>& grid, const FluidParams& params, const 
 				p.global_idx = global_particle_counter++;
 				p.pos = Vec(x, y, z);
 				p.impulse = Vec(0., 0., 0.);
-				p.matT = Eigen::Matrix3<T>::Identity();
+				p.matT() = Eigen::Matrix3<T>::Identity();
 				p.start_time = current_time;
 				reseed_particles_h.push_back(p);
 			}
@@ -824,7 +824,7 @@ void FluidEuler::adaptAndAdvect(DriverMetaData& metadata, std::vector<std::share
 				//NFMBackQueryImpulseAndT(accs_d_ptr, fine_level, coarse_level, time_steps_d_ptr, u_channel, last_u_node_channel, nfm_start_idx, n - 1, psi, m0, matT);
 
 				particle.impulse = m0;
-				particle.matT = matT;
+				particle.matT() = matT;
 			}
 		}, pfm_particles_d.size(), 128);
 

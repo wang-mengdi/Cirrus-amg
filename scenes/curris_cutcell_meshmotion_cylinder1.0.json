@@ -1,0 +1,25 @@
+{
+    "driver": {
+        "cfl": 2.0,
+        "first_frame": 0,
+        "fps": 200,
+        "last_frame": 200,
+        "min_step_frame_fraction": 0.0,
+        "output_base_dir": "./output",
+        "queue_size": 4,
+        "snapshot_stride": 20
+    },
+    "scene": {
+        "coarse_level": 2,
+        "fine_level": 5,
+        "flowmap_stride": 5,
+        "gravity": 0.0,
+        "inflow_velocity": 1.0,
+        "mesh_file": "./scenes/cylinder.obj",
+        "particle_life": 2.5,
+        "sample_num_per_tile": 8,
+        "relative_sample_bandwidth": 5.0,
+        "test": "meshmotion"
+    },
+    "simulator": "euler"
+}

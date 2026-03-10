@@ -236,7 +236,7 @@ void RefineWithParticles(HADeviceGrid<Tile>& grid, const thrust::device_vector<P
 double LinfNormOfGradMForbenius(const thrust::host_vector<Particle>& particles) {
 	double ret = 0;
 	for(const auto& p : particles) {
-		ret = std::max<double>(ret, p.gradm.norm());
+		ret = std::max<double>(ret, p.gradm().norm());
 	}	
 	return ret;
 }
@@ -325,7 +325,7 @@ void ParticleImpulseToPopulatedGridLeafs(HADeviceGrid<Tile>& grid, const thrust:
 		auto& p = particles_ptr[idx];
 		Vec pos = p.pos;
 		//Vec vel = p.impulse;
-		Vec p_m = MatrixTimesVec(p.matT.transpose(), p.impulse);
+		Vec p_m = MatrixTimesVec(p.matT().transpose(), p.impulse);
 		HATileInfo<Tile> info; Coord l_ijk; Vec frac;
 		acc.findLeafVoxelAndFrac(pos, info, l_ijk, frac);
 		if (info.empty()) return;
@@ -341,7 +341,7 @@ void ParticleImpulseToPopulatedGridLeafs(HADeviceGrid<Tile>& grid, const thrust:
 					Coord r_ijk = l_ijk + Coord(offi, offj, offk);
 					auto node_pos = acc.cellCorner(info, r_ijk);
 					auto w = weight(pos, node_pos, re);
-					Vec vel = p_m + MatrixTimesVec(p.gradm, node_pos - pos);
+					Vec vel = p_m + MatrixTimesVec(p.gradm(), node_pos - pos);
 
 					for (int axis : {0, 1, 2}) {
 						atomicAdd(&tile.node(u_channel + axis, r_ijk), w * vel[axis]);
@@ -469,12 +469,12 @@ void ParticleImpulseToGridMACIntp(HADeviceGrid<Tile>& grid, const thrust::device
 		[=]__device__(int idx) {
 		auto& p = particles_ptr[idx];
 		Vec pos = p.pos;
-		Vec vel = MatrixTimesVec(p.matT.transpose(), p.impulse);
+		Vec vel = MatrixTimesVec(p.matT().transpose(), p.impulse);
 
 		//if (p.gradm.norm() > 1e5) {
 		//	printf("particle %d gradm at pos=%f %f %f: %f %f %f %f %f %f %f %f %f\n", idx, pos[0], pos[1], pos[2], p.gradm(0, 0), p.gradm(0, 1), p.gradm(0, 2), p.gradm(1, 0), p.gradm(1, 1), p.gradm(1, 2), p.gradm(2, 0), p.gradm(2, 1), p.gradm(2, 2));
 		//}
-		KernelScatterVelocityMAC2(acc, u_channel, uw_channel, pos, vel, p.gradm);
+		KernelScatterVelocityMAC2(acc, u_channel, uw_channel, pos, vel, p.gradm());
 
 
 	}, particles.size(), 128);
@@ -523,7 +523,7 @@ void ResetParticleImpulse(HADeviceGrid<Tile>& grid, const int fine_level, const 
 		bool success = KernelIntpVelocityMAC2(acc, fine_level, coarse_level, p.pos, u_channel, vel);
 		p.impulse = vel;
 		//p.impulse = InterpolateFaceValue(acc, p.pos, u_channel, node_u_channel);
-		p.matT = Eigen::Matrix3<T>::Identity();
+		p.matT() = Eigen::Matrix3<T>::Identity();
 	}, particles_d.size());
 }
 
@@ -1324,8 +1324,8 @@ __global__ void OptimizedAdvectParticlesAndSingleStepGradMRK4ForwardAtGivenLevel
 				//}
 
 				if (shared_data.RK4ForwardPositionAndT(dt, u_channel, p.pos, T_short)) {
-					p.matT = p.matT * T_short;
-					p.gradm = T_short.transpose() * gradm * T_short;
+					p.matT() = p.matT() * T_short;
+					p.gradm() = T_short.transpose() * gradm * T_short;
 
 					//{
 					//	auto pos = p.pos;
@@ -1406,9 +1406,9 @@ __global__ void P2GTransferAtGivenLevel128Kernel(HATileAccessor<Tile> acc, HATil
 			}
 
 			// Scatter velocity and gradient
-			Vec vel = MatrixTimesVec(p.matT.transpose(), p.impulse);
+			Vec vel = MatrixTimesVec(p.matT().transpose(), p.impulse);
 			//shared_data.scatterVelocityAndGradientWithKernelCube4(p.pos, vel, p.gradm);
-			shared_data.scatterVelocityAndGradientWithKernel(p.pos, vel, p.gradm);
+			shared_data.scatterVelocityAndGradientWithKernel(p.pos, vel, p.gradm());
 			//shared_data.scatterVelocityAndGradientWithKernelDirectAtomicAdd(p.pos, vel, p.gradm);
 		}
 	}

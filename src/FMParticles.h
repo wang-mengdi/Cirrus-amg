@@ -11,8 +11,26 @@ public:
 	double start_time;
 	Vec impulse;
 	Vec pos;
-	Eigen::Matrix3<T> gradm;
-	Eigen::Matrix3<T> matT;
+    T gradm_data[9];
+    T matT_data[9];
+
+    using Mat3 = Eigen::Matrix<T, 3, 3>;
+
+    __hostdev__ Eigen::Map<Mat3> gradm() {
+        return Eigen::Map<Mat3>(gradm_data);
+    }
+
+    __hostdev__ Eigen::Map<const Mat3> gradm() const {
+        return Eigen::Map<const Mat3>(gradm_data);
+    }
+
+    __hostdev__ Eigen::Map<Mat3> matT() {
+        return Eigen::Map<Mat3>(matT_data);
+    }
+
+    __hostdev__ Eigen::Map<const Mat3> matT() const {
+        return Eigen::Map<const Mat3>(matT_data);
+    }
 };
 
 

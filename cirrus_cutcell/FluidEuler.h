@@ -282,7 +282,7 @@ public:
 			WriteStatToFile(metadata);
 		}
 
-			auto particles_h_ptr = std::make_shared<thrust::host_vector<MarkerParticle>>(pfm_particles_d);
+			auto particles_h_ptr = std::make_shared<thrust::host_vector<Particle>>(pfm_particles_d);
 			metadata.Append_Output_Thread(std::make_shared<std::thread>(IOFunc::OutputParticleSystemAsVTU,
 				particles_h_ptr, metadata.base_path / fmt::format("particles{:04d}.vtu", metadata.current_frame)
 			));
@@ -515,22 +515,22 @@ public:
 		}
 
 		// 4) marker particles
-		static_assert(std::is_trivially_copyable_v<MarkerParticle>,
-			"MarkerParticle must be trivially copyable for raw checkpoint");
+		static_assert(std::is_trivially_copyable_v<Particle>,
+			"Particle must be trivially copyable for raw checkpoint");
 
 		uint64_t n_particles = 0;
 		IOFunc::ReadPod(is, n_particles);
 
-		thrust::host_vector<MarkerParticle> h_particles;
+		thrust::host_vector<Particle> h_particles;
 		h_particles.resize((size_t)n_particles);
 
 		if (n_particles) {
 			is.read(reinterpret_cast<char*>(h_particles.data()),
-				(std::streamsize)(sizeof(MarkerParticle) * (size_t)n_particles));
+				(std::streamsize)(sizeof(Particle) * (size_t)n_particles));
 			ASSERT(is.good(), "Load_Frame: truncated particle data");
 		}
 
-		marker_particles_d = thrust::device_vector<MarkerParticle>(h_particles.begin(), h_particles.end());
+		pfm_particles_d = thrust::device_vector<Particle>(h_particles.begin(), h_particles.end());
 
 		ASSERT(is.good(), "Load_Frame: read failed {}", file.string());
 		Info("Loaded snapshot: {}", file.string());

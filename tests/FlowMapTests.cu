@@ -168,8 +168,8 @@ namespace FlowMapTests {
                 p.start_time = time;
                 p.impulse = operator()(pos, time);
                 p.pos = pos;
-                p.gradm = Eigen::Matrix3<T>::Zero();
-                p.matT = Eigen::Matrix3<T>::Identity();
+                p.gradm() = Eigen::Matrix3<T>::Zero();
+                p.matT() = Eigen::Matrix3<T>::Identity();
                 particles.push_back(p);
             }
             return particles;
@@ -211,8 +211,8 @@ namespace FlowMapTests {
                 p.start_time = time;
                 p.impulse = (*this)(pos, time);
                 p.pos = pos;
-                p.gradm = Eigen::Matrix3<T>::Zero();
-                p.matT = Eigen::Matrix3<T>::Identity();
+                p.gradm() = Eigen::Matrix3<T>::Zero();
+                p.matT() = Eigen::Matrix3<T>::Identity();
                 particles.push_back(p);
             }
             return particles;
