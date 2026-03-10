@@ -1,9 +1,9 @@
 {
     "driver": {
         "cfl": 0.5,
-        "first_frame": 9,
+        "first_frame": 0,
         "fps": 200,
-        "last_frame": 9,
+        "last_frame": 200,
         "min_step_frame_fraction": 0.0,
         "output_base_dir": "./output",
         "queue_size": 4,

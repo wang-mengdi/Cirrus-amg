@@ -885,24 +885,24 @@ void FluidEuler::adaptAndAdvect(DriverMetaData& metadata, std::vector<std::share
 		buildTypesAndAMGCoeffsFromNodeSDFs(grid, current_time);
 	}
 
-	{
-		//show velocity on polyscope before proj
-		polyscope::init();
-		polyscope::removeAllStructures();
-		auto holder = last_grid.getHostTileHolderForLeafs();
-		//AddLeveledPoissonGridCellCentersToPolyscopePointCloud
-		//AddPoissonGridCellCentersToPolyscopePointCloud
-		//IOFunc::AddLeveledPoissonGridCellCentersToPolyscopePointCloud(holder, { { -1,"type" }, { ProjChnls::c0 + 3, "c3" }, {ProjChnls::x, "pressure"}, { ProjChnls::b, "divergence" } }, { {BufChnls::u, "velocity"} });
-		//IOFunc::AddLeveledPoissonGridCellCentersToPolyscopePointCloud(holder, { { -1,"type" }, { BufChnls::vor, "vorticity" } }, { { BufChnls::u, "velocity" } });
+	//{
+	//	//show velocity on polyscope before proj
+	//	polyscope::init();
+	//	polyscope::removeAllStructures();
+	//	auto holder = last_grid.getHostTileHolderForLeafs();
+	//	//AddLeveledPoissonGridCellCentersToPolyscopePointCloud
+	//	//AddPoissonGridCellCentersToPolyscopePointCloud
+	//	//IOFunc::AddLeveledPoissonGridCellCentersToPolyscopePointCloud(holder, { { -1,"type" }, { ProjChnls::c0 + 3, "c3" }, {ProjChnls::x, "pressure"}, { ProjChnls::b, "divergence" } }, { {BufChnls::u, "velocity"} });
+	//	//IOFunc::AddLeveledPoissonGridCellCentersToPolyscopePointCloud(holder, { { -1,"type" }, { BufChnls::vor, "vorticity" } }, { { BufChnls::u, "velocity" } });
 
-		//IOFunc::AddParticlesToPolyscope(pfm_particles_d, "pfm_particles");
-		IOFunc::AddLeveledTilesToPolyscopeVolumetricMesh(last_grid, LEAF, "leaf_tiles");
-		auto xform = mParams.meshToWorldTransform(current_time);
-		Eigen::Matrix<T, -1, 3> V_world =
-			(xform * mMeshSDFAccel->V_.transpose()).transpose();
-		auto* psMesh = polyscope::registerSurfaceMesh("mesh", V_world, mMeshSDFAccel->F_);
-		polyscope::show();
-	}
+	//	//IOFunc::AddParticlesToPolyscope(pfm_particles_d, "pfm_particles");
+	//	IOFunc::AddLeveledTilesToPolyscopeVolumetricMesh(last_grid, LEAF, "leaf_tiles");
+	//	auto xform = mParams.meshToWorldTransform(current_time);
+	//	Eigen::Matrix<T, -1, 3> V_world =
+	//		(xform * mMeshSDFAccel->V_.transpose()).transpose();
+	//	auto* psMesh = polyscope::registerSurfaceMesh("mesh", V_world, mMeshSDFAccel->F_);
+	//	polyscope::show();
+	//}
 
 
 	//ParticleImpulseToGridMACIntp(grid, particles, u_channel, next_uw_channel);

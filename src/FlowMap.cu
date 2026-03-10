@@ -108,9 +108,11 @@ __device__ bool KernelIntpVelocityComponentMAC2(const HATileAccessor<Tile>& acc,
 				auto ng_ijk = g_ijk + Coord(offi, offj, offk);
 				HATileInfo<Tile> ninfo; Coord nl_ijk; Vec n_frac;
 				acc.findVoxel(level, ng_ijk, ninfo, nl_ijk);
-				if (!ninfo.empty() && !(ninfo.mType & GHOST)) {
+				//if (!ninfo.empty() && !(ninfo.mType & GHOST)) {
+				if (!ninfo.empty()) {
 					auto& ntile = ninfo.tile();
 					auto n_u_i = ntile(u_channel + axis, nl_ijk);
+					if (n_u_i == NODATA) return false;
 
 					T w = wi * wj * wk;
 					Vec dw = Vec(dwi * wj * wk, wi * dwj * wk, wi * wj * dwk);
@@ -168,9 +170,11 @@ __device__ bool KernelIntpVelocityComponentAndGradientMAC2(const HATileAccessor<
 				auto ng_ijk = g_ijk + Coord(offi, offj, offk);
 				HATileInfo<Tile> ninfo; Coord nl_ijk; Vec n_frac;
 				acc.findVoxel(level, ng_ijk, ninfo, nl_ijk);
-				if (!ninfo.empty() && !(ninfo.mType & GHOST)) {
+				//if (!ninfo.empty() && !(ninfo.mType & GHOST)) {
+				if (!ninfo.empty()) {
 					auto& ntile = ninfo.tile();
 					auto n_u_i = ntile(u_channel + axis, nl_ijk);
+					if (n_u_i == NODATA) return false;
 
 
 					//{
@@ -824,8 +828,21 @@ void CalculateVelocityAndVorticityMagnitudeOnLeafCellCenters(HADeviceGrid<Tile>&
 	//CalcLeafNodeValuesFromFaceCenters(grid, Tile::u_channel, tmp_u_node_channel);
 	//InterpolateFaceVelocitiesAtAllTiles(grid, face_u_channel, node_u_channel);
 	 
+	// at the beginning we have all velocities at LEAF cells
 	// acquire interpolated, conservative velocities at NONLEAF cells
 	AccumulateFacesFromLeafsToAllNonLeafs(grid, face_u_channel, 1. / 4, false, INTERIOR | DIRICHLET | NEUMANN);
+
+	grid.launchVoxelFuncOnAllTiles(
+		[=] __device__(HATileAccessor<Tile>&acc, HATileInfo<Tile>&info, const Coord & l_ijk) {
+		auto& tile = info.tile();
+		for (int axis : {0, 1, 2}) {
+			auto fpos = acc.faceCenter(axis, info, l_ijk);
+			Vec vel;
+			KernelIntpVelocityMAC2(acc, info.mLevel - 1, coarse_level, fpos, face_u_channel, vel);
+			tile(face_u_channel + axis, l_ijk) = vel[axis];
+		}
+	}, GHOST, 4
+	);
 
 	//Warn("CalculateVelocityAndVorticityMagnitudeOnLeafCellCenters after InterpolateFaceVelocitiesAtAllTiles");
 	//{

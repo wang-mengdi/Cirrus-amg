@@ -585,7 +585,7 @@ void AccumulateFacesToParentsOneStep(HADeviceGrid<Tile>& grid, const int fine_u_
 }
 
 void AccumulateFacesFromLeafsToAllNonLeafs(HADeviceGrid<Tile>& grid, const int u_channel, const Tile::T coeff, bool additive, uint8_t cell_types) {
-    FillChannelsInGridWithValue(grid, std::numeric_limits<T>::quiet_NaN(), GHOST, { u_channel, u_channel + 1, u_channel + 2 });
+    //FillChannelsInGridWithValue(grid, std::numeric_limits<T>::quiet_NaN(), GHOST, { u_channel, u_channel + 1, u_channel + 2 });
 
     for (int level = grid.mMaxLevel; level > 0; level--) {
         int num_fine_tiles = grid.hNumTiles[level];
