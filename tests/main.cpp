@@ -51,8 +51,8 @@ int main(int argc, char** argv) {
 		//JCP test for laplacian operator
 		//for (int min_level : {1, 2, 3, 4, 5}) {
 		for (int min_level : {3}) {
-			SolverTests::TestDiscretizedLaplacian("sphere_empty", min_level, min_level + 2, "exponential");
-			SolverTests::TestDiscretizedLaplacian("star_empty", min_level, min_level + 2, "exponential");
+			//SolverTests::TestDiscretizedLaplacian("sphere_empty", min_level, min_level + 2, "exponential");
+			//SolverTests::TestDiscretizedLaplacian("star_empty", min_level, min_level + 2, "exponential");
 			//SolverTests::TestDiscretizedLaplacian("uniform", min_level, min_level, "exponential");
 		}
 	}
@@ -150,10 +150,10 @@ int main(int argc, char** argv) {
 		//}
 	}
 
-	//SolverTests::TestSolverErrorSolid("sphere_solid", 2, 4);
-	//SolverTests::TestSolverErrorSolid("sphere_solid", 3, 5);
-	//SolverTests::TestSolverErrorSolid("sphere_solid", 4, 6);
-	//SolverTests::TestSolverErrorSolid("sphere_solid", 5, 7);
+	SolverTests::TestSolverErrorSolid("sphere_solid", 2, 4);
+	SolverTests::TestSolverErrorSolid("sphere_solid", 3, 5);
+	SolverTests::TestSolverErrorSolid("sphere_solid", 4, 6);
+	SolverTests::TestSolverErrorSolid("sphere_solid", 5, 7);
 	 
 	//SolverTests::TestRecoveryNew("sphere_solid", 2, 4);
 	//SolverTests::TestRecoveryNew("sphere_solid", 3, 5);

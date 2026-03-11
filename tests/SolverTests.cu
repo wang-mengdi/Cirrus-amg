@@ -2131,7 +2131,7 @@ namespace SolverTests
 		params.bottom_iters = 10;
 		params.omega = 1.5;
 
-		SolveLinearSystem(grid, coeff_channel, false, 100, 1e-5, 1, params, true);
+		SolveLinearSystem(grid, coeff_channel, false, 100, 1e-8, 1, params, true);
 
 
 

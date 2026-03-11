@@ -3,8 +3,14 @@ from paraview.simple import *
 # =========================
 # Hardcoded file paths
 # =========================
-vti_path = r"C:\Code\Cirrus-dev\output\laplacian_test_sphere_empty_levels_3_5.vti"
-sphere_path = r"C:\Code\Cirrus-dev\output\sphere.vtp"
+
+## sphere35, show level and sphere mesh
+# vti_path = r"C:\Code\Cirrus-dev\output\laplacian_test_sphere_empty_levels_3_5.vti"
+# sphere_path = r"C:\Code\Cirrus-dev\output\sphere.vtp"
+# output_path = r"C:\Code\Cirrus-dev\output\render.png"
+
+vti_path = r"C:\Code\Cirrus-dev\output\laplacian_test_star_empty_levels_3_5.vti"
+sphere_path = r"C:\Code\Cirrus-dev\output\star35.vtp"
 output_path = r"C:\Code\Cirrus-dev\output\render.png"
 
 # =========================

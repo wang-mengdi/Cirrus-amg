@@ -2,10 +2,28 @@ import numpy as np
 from skimage.measure import marching_cubes
 import pyvista as pv
 
-# 定义隐式函数
+# # 定义隐式函数
+# def f(x, y, z):
+#     # sphere centered at (0.5,0.5,0.5) with radius 0.25
+#     return (x - 0.5)**2 + (y - 0.5)**2 + (z - 0.5)**2 - 0.25**2
+
 def f(x, y, z):
-    # sphere centered at (0.5,0.5,0.5) with radius 0.25
-    return (x - 0.5)**2 + (y - 0.5)**2 + (z - 0.5)**2 - 0.25**2
+    # shift to center
+    x = x - 0.5
+    y = y - 0.5
+    z = z - 0.5
+
+    r = np.sqrt(x*x + y*y + z*z)
+
+    # avoid divide-by-zero
+    r_safe = np.maximum(r, 1e-12)
+
+    theta = np.arccos(z / r_safe)
+    phi = np.arctan2(y, x)
+
+    r0 = 0.237 + 0.079 * np.cos(6 * theta) * np.cos(6 * phi)
+
+    return r - r0
 
 # 网格采样
 N = 256
