@@ -183,7 +183,7 @@ namespace IOFunc {
     }
 
     void OutputParticleSystemAsVTU(std::shared_ptr<thrust::host_vector<Particle>> particles_ptr, fs::path path) {
-        CPUTimer timer;
+        CPUTimer timer; timer.start();
         //fmt::print("Output Particle System to vtu file: {}\n", path.string());
         auto& particles = *particles_ptr;
 

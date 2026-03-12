@@ -13,7 +13,9 @@ class CPUTimer
 {
 	std::chrono::high_resolution_clock::time_point mStart;
 public:
-	CPUTimer() {}
+	CPUTimer() {
+		start();
+	}
 	void start(void) {
 		mStart = std::chrono::high_resolution_clock::now();
 	}
