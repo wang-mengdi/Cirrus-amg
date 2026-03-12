@@ -1,7 +1,7 @@
 {
     "driver": {
         "cfl": 0.5,
-        "first_frame": 264,
+        "first_frame": 0,
         "fps": 200,
         "last_frame": 400,
         "min_step_frame_fraction": 0.0,
@@ -19,7 +19,7 @@
         "flowmap_stride": 5,
         "gravity": 0.0,
         "inflow_velocity": 1.0,
-        "mesh_file": "./scenes/delta_centered_heading_negz.obj",
+        "mesh_file": "./scenes/sphere.obj",
         "particle_life": 2.5,
         "sample_num_per_cell": 8,
         "particle_sample_relative_bandwidth": 5.0,
