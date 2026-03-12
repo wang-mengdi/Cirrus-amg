@@ -1,6 +1,23 @@
 add_rules("mode.debug", "mode.release", "mode.releasedbg")
 set_languages("c++17")
 
+if is_mode("debug") then
+    set_symbols("debug")
+    set_optimize("none")
+    add_defines("CIRRUS_DEBUG")
+    add_cxxflags("/RTC1")
+end
+
+if is_mode("releasedbg") then
+    set_symbols("debug")
+    set_optimize("fast")
+    add_defines("CIRRUS_DEBUG")
+end
+
+if is_mode("release") then
+    set_optimize("fastest")
+end
+
 add_requires("fmt =12.1.0")
 add_requireconfs("*.fmt", { override = true, version = "12.1.0" })
 
@@ -103,6 +120,11 @@ target("cirrus_cutcell")
     add_cugencodes("native")
     --add_cuflags("-extended-lambda --std=c++17")
     add_cuflags("-std=c++17 --expt-relaxed-constexpr --expt-extended-lambda")
+    if is_mode("debug") then
+        add_cuflags("-G -lineinfo")
+    elseif is_mode("releasedbg") then
+        add_cuflags("-lineinfo")
+    end
     add_cxxflags("/utf-8")
     add_packages("libigl", "tbb", "polyscope")
     add_deps("src")
