@@ -263,11 +263,11 @@ __hostdev__ Eigen::Transform<T, 3, Eigen::Affine> FluidParams::meshToWorldTransf
 		if (t > (T)2) t = (T)2;
 
 		// -----------------------------
-		// Trajectory: same as SPHERECIRCLING
+		// Trajectory: circle in x-y + descend in z
 		// -----------------------------
 		const T center_x = (T)0.5;
 		const T center_y = (T)0.5;
-		const T orbit_r = (T)0.3;
+		const T orbit_r = (T)0.2;
 
 		const T z0 = (T)1.7;
 		const T z1 = (T)0.3;
@@ -282,54 +282,57 @@ __hostdev__ Eigen::Transform<T, 3, Eigen::Affine> FluidParams::meshToWorldTransf
 		Vec3 pos(x, y, z);
 
 		// -----------------------------
-		// Orientation
-		// Body convention:
-		//   local -z = nose/forward
-		//   local +x = up
+		// Body convention from Blender export:
+		//   local -Z = forward
+		//   local +Y = up
+		//   local +X = right
 		// -----------------------------
 
-		// Forward should remain roughly pointing toward world -z
+		// Keep the missile nose pointing roughly toward world -Z
 		Vec3 forward_base((T)0, (T)0, (T)-1);
 
-		// Up points toward the orbit center in x-y plane
-		T phi = theta + T(M_PI) * T(0.5);   // initial up = +y
-		Vec3 up_base(std::cos(phi), std::sin(phi), 0);
-		up_base.normalize();
+		// Initial up direction: +Y
+		Vec3 up_base((T)0, (T)1, (T)0);
 
-		// Build right-handed orthonormal basis
+		// Right-handed basis
 		Vec3 right_base = up_base.cross(forward_base).normalized();
 		up_base = forward_base.cross(right_base).normalized();
 
 		// -----------------------------
-		// Barrel roll: 360 degrees in 2s
-		// Roll around the missile forward axis
+		// True barrel roll: 360 deg in 2 seconds
+		// So at t = 1, roll = 180 deg
 		// -----------------------------
 		const T roll = s * (T)(2.0 * M_PI);
 		Eigen::Matrix<T, 3, 3> R_roll =
 			AngleAxisT(roll, forward_base).toRotationMatrix();
 
+		Vec3 right_rolled = (R_roll * right_base).normalized();
 		Vec3 up_rolled = (R_roll * up_base).normalized();
-		Vec3 right_rolled = up_rolled.cross(forward_base).normalized();
-		up_rolled = forward_base.cross(right_rolled).normalized();
+		Vec3 forward_rolled = forward_base;
 
 		// -----------------------------
-		// Optional angle of attack
+		// Optional small angle of attack
+		// Positive alpha should make the nose pitch upward relative to body up.
 		// -----------------------------
-		const T alpha_deg = (T)0; // set to 10 if desired
+		const T alpha_deg = (T)0;   // change to 10 if desired
 		const T alpha = alpha_deg * (T)M_PI / (T)180.0;
 
 		Eigen::Matrix<T, 3, 3> R_attack =
 			AngleAxisT(-alpha, right_rolled).toRotationMatrix();
 
-		Vec3 forward_final = (R_attack * forward_base).normalized();
+		Vec3 forward_final = (R_attack * forward_rolled).normalized();
 		Vec3 up_final = (R_attack * up_rolled).normalized();
 		Vec3 right_final = up_final.cross(forward_final).normalized();
 		up_final = forward_final.cross(right_final).normalized();
 
+		// Map local axes to world axes:
+		// local +X -> right
+		// local +Y -> up
+		// local +Z -> backward = -forward
 		Eigen::Matrix<T, 3, 3> R;
-		R.col(0) = up_final;        // local +x
-		R.col(1) = right_final;     // local +y
-		R.col(2) = -forward_final;  // local +z, since nose is local -z
+		R.col(0) = right_final;
+		R.col(1) = up_final;
+		R.col(2) = -forward_final;
 
 		TransformT transform = TransformT::Identity();
 		transform.linear() = R;
