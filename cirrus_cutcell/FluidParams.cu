@@ -292,7 +292,8 @@ __hostdev__ Eigen::Transform<T, 3, Eigen::Affine> FluidParams::meshToWorldTransf
 		Vec3 forward_base((T)0, (T)0, (T)-1);
 
 		// Up points toward the orbit center in x-y plane
-		Vec3 up_base(center_x - x, center_y - y, (T)0);
+		T phi = theta + T(M_PI) * T(0.5);   // initial up = +y
+		Vec3 up_base(std::cos(phi), std::sin(phi), 0);
 		up_base.normalize();
 
 		// Build right-handed orthonormal basis
