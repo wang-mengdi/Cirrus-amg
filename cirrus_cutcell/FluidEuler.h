@@ -316,10 +316,14 @@ public:
 			WriteStatToFile(metadata);
 		}
 
-			auto particles_h_ptr = std::make_shared<thrust::host_vector<Particle>>(pfm_particles_d);
-			metadata.Append_Output_Thread(std::make_shared<std::thread>(IOFunc::OutputParticleSystemAsVTU,
+			//auto particles_h_ptr = std::make_shared<thrust::host_vector<Particle>>(pfm_particles_d);
+			//metadata.Append_Output_Thread(std::make_shared<std::thread>(IOFunc::OutputParticleSystemAsVTU,
+			//	particles_h_ptr, metadata.base_path / fmt::format("particles{:04d}.vtu", metadata.current_frame)
+			//));
+
+			IOFunc::OutputParticleSystemAsVTU(
 				particles_h_ptr, metadata.base_path / fmt::format("particles{:04d}.vtu", metadata.current_frame)
-			));
+			);
 		//}
 	}
 
