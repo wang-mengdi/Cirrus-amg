@@ -2,54 +2,110 @@
 #include "AMGSolver.h"
 #include <tbb/parallel_for.h>
 
+void CalculateSDFOnGivenTiles(HADeviceGrid<Tile>& grid, const thrust::host_vector<HATileInfo<Tile>>& tile_infos, int node_sdf_channel, const MeshSDFAccel& mesh_sdf, const Eigen::Transform<T, 3, Eigen::Affine>& xform)
+{
+	if (tile_infos.empty()) return;
+
+	auto h_acc = grid.hostAccessor();
+
+	// 1. gather corners on host
+	std::vector<Vec> corners(tile_infos.size() * Tile::NODESIZE);
+
+	tbb::parallel_for(
+		tbb::blocked_range<size_t>(0, tile_infos.size()),
+		[&](const tbb::blocked_range<size_t>& r) {
+			for (size_t local_tile_idx = r.begin(); local_tile_idx != r.end(); ++local_tile_idx) {
+				const auto& info = tile_infos[local_tile_idx];
+				for (int node_idx = 0; node_idx < Tile::NODESIZE; ++node_idx) {
+					Coord r_ijk = h_acc.localNodeOffsetToCoord(node_idx);
+					corners[local_tile_idx * Tile::NODESIZE + node_idx] = h_acc.cellCorner(info, r_ijk);
+				}
+			}
+		});
+
+	// 2. query sdf on host
+	std::vector<T> h_sdfs = mesh_sdf.querySDF(corners, xform);
+	ASSERT(h_sdfs.size() == tile_infos.size() * Tile::NODESIZE,
+		"h_sdfs size {} mismatch expected {}", h_sdfs.size(), tile_infos.size() * Tile::NODESIZE);
+
+	// 3. move tile infos and sdfs to device
+	thrust::device_vector<HATileInfo<Tile>> d_infos = tile_infos;
+	thrust::device_vector<T> d_sdfs = h_sdfs;
+
+	auto d_infos_ptr = thrust::raw_pointer_cast(d_infos.data());
+	auto d_sdfs_ptr = thrust::raw_pointer_cast(d_sdfs.data());
+	const int num_tiles = static_cast<int>(tile_infos.size());
+	const int total_nodes = num_tiles * Tile::NODESIZE;
+	const T h0 = grid.mH0;
+
+	// 4. scatter back on device
+	LaunchIndexFunc(
+		[=] __device__(int seq_idx) {
+		const int local_tile_idx = seq_idx / Tile::NODESIZE;
+		const int node_idx = seq_idx % Tile::NODESIZE;
+
+		HATileInfo<Tile> info = d_infos_ptr[local_tile_idx];
+		auto& tile = info.tile();
+
+		HACoordAccessor<Tile> acc(h0);
+		Coord r_ijk = acc.localNodeOffsetToCoord(node_idx);
+
+		tile.node(node_sdf_channel, r_ijk) = d_sdfs_ptr[seq_idx];
+	},
+		total_nodes
+	);
+}
+
 // xform is the affine transform from mesh-local to world coordinates.
 // launch on launch_types
 void CalculateSDFOnNodes(HADeviceGrid<Tile>& grid, int node_sdf_channel, const MeshSDFAccel& mesh_sdf, const uint8_t launch_types, const Eigen::Transform<T, 3, Eigen::Affine>& xform) {
-	//step 1: gather tile corners to a std::vector<Vec>
-	std::vector<Vec> corners(grid.hAllTiles.size() * Tile::NODESIZE);
-	auto h_acc = grid.hostAccessor();
-	//use tbb to parallely fill corners
-	tbb::parallel_for(tbb::blocked_range<size_t>(0, grid.hAllTiles.size()), [&](const tbb::blocked_range<size_t>& r) {
-		for (size_t tile_idx = r.begin(); tile_idx != r.end(); ++tile_idx) {
-			HATileInfo<Tile> info = grid.hAllTiles[tile_idx];
-			if (info.mType & launch_types) {
-				for (int node_idx = 0; node_idx < Tile::NODESIZE; ++node_idx) {
-					auto l_ijk = h_acc.localNodeOffsetToCoord(node_idx);
-					auto pos = h_acc.cellCorner(info, l_ijk);
-					corners[tile_idx * Tile::NODESIZE + node_idx] = pos;
+	CalculateSDFOnGivenTiles(grid, grid.hAllTiles, node_sdf_channel, mesh_sdf, xform);
 
-					//if (info.mTileCoord == Coord(2, 4, 7) && l_ijk == Coord(8, 7, 0)) {
-					//	auto actual_sdf = (Vec(0.5, 0.5, 0.8) - pos).length() - 0.1;
-					//	std::vector<Vec> test_pos = { pos };
-					//	auto query_sdf = mesh_sdf.querySDF(test_pos, xform)[0];
-					//	printf("corner: %f, %f, %f tile idx %d, seq idx: %d actual sdf: %f query sdf: %f\n", pos[0], pos[1], pos[2], tile_idx, tile_idx * Tile::NODESIZE + node_idx, actual_sdf, query_sdf);
-					//}
+	////step 1: gather tile corners to a std::vector<Vec>
+	//std::vector<Vec> corners(grid.hAllTiles.size() * Tile::NODESIZE);
+	//auto h_acc = grid.hostAccessor();
+	////use tbb to parallely fill corners
+	//tbb::parallel_for(tbb::blocked_range<size_t>(0, grid.hAllTiles.size()), [&](const tbb::blocked_range<size_t>& r) {
+	//	for (size_t tile_idx = r.begin(); tile_idx != r.end(); ++tile_idx) {
+	//		HATileInfo<Tile> info = grid.hAllTiles[tile_idx];
+	//		if (info.mType & launch_types) {
+	//			for (int node_idx = 0; node_idx < Tile::NODESIZE; ++node_idx) {
+	//				auto l_ijk = h_acc.localNodeOffsetToCoord(node_idx);
+	//				auto pos = h_acc.cellCorner(info, l_ijk);
+	//				corners[tile_idx * Tile::NODESIZE + node_idx] = pos;
 
-				}
-			}
-		}
-		});
+	//				//if (info.mTileCoord == Coord(2, 4, 7) && l_ijk == Coord(8, 7, 0)) {
+	//				//	auto actual_sdf = (Vec(0.5, 0.5, 0.8) - pos).length() - 0.1;
+	//				//	std::vector<Vec> test_pos = { pos };
+	//				//	auto query_sdf = mesh_sdf.querySDF(test_pos, xform)[0];
+	//				//	printf("corner: %f, %f, %f tile idx %d, seq idx: %d actual sdf: %f query sdf: %f\n", pos[0], pos[1], pos[2], tile_idx, tile_idx * Tile::NODESIZE + node_idx, actual_sdf, query_sdf);
+	//				//}
 
-	//step 2: launch mesh_sdf.query on corners
-	std::vector<T> h_sdfs = mesh_sdf.querySDF(corners, xform);
-	thrust::device_vector<T> d_sdfs = h_sdfs;
+	//			}
+	//		}
+	//	}
+	//	});
 
-	//step 3: copy sdf back to grid
-	auto d_sdf_ptr = d_sdfs.data().get();
-	grid.launchNodeFuncWithTileIdxOnAllTiles(
-		[=] __device__(HATileAccessor<Tile> acc, const int tile_idx, HATileInfo<Tile>&info, const Coord &r_ijk) {
-		auto& tile = info.tile();
-		int node_idx = acc.localNodeCoordToOffset(r_ijk);
-		int seq_idx = tile_idx * Tile::NODESIZE + node_idx;
-		auto sdf_value = d_sdf_ptr[seq_idx];
-		tile.node(node_sdf_channel, r_ijk) = sdf_value;
+	////step 2: launch mesh_sdf.query on corners
+	//std::vector<T> h_sdfs = mesh_sdf.querySDF(corners, xform);
+	//thrust::device_vector<T> d_sdfs = h_sdfs;
 
-		//if (info.mTileCoord == Coord(2, 4, 7) && r_ijk == Coord(8, 7, 0)) {
-		//	printf("write sdf: %f, tile idx: %d, seq idx: %d\n", d_sdf_ptr[seq_idx], tile_idx, seq_idx);
-		//}
-	},
-		launch_types
-	);
+	////step 3: copy sdf back to grid
+	//auto d_sdf_ptr = d_sdfs.data().get();
+	//grid.launchNodeFuncWithTileIdxOnAllTiles(
+	//	[=] __device__(HATileAccessor<Tile> acc, const int tile_idx, HATileInfo<Tile>&info, const Coord &r_ijk) {
+	//	auto& tile = info.tile();
+	//	int node_idx = acc.localNodeCoordToOffset(r_ijk);
+	//	int seq_idx = tile_idx * Tile::NODESIZE + node_idx;
+	//	auto sdf_value = d_sdf_ptr[seq_idx];
+	//	tile.node(node_sdf_channel, r_ijk) = sdf_value;
+
+	//	//if (info.mTileCoord == Coord(2, 4, 7) && r_ijk == Coord(8, 7, 0)) {
+	//	//	printf("write sdf: %f, tile idx: %d, seq idx: %d\n", d_sdf_ptr[seq_idx], tile_idx, seq_idx);
+	//	//}
+	//},
+	//	launch_types
+	//);
 }
 
 __hostdev__ int CellCornerSDFInsideCount(const Tile& tile, const int node_sdf_channel, const Coord& l_ijk, T isovalue) {

@@ -203,7 +203,7 @@ namespace IOFunc {
         //global_idx_array->SetNumberOfComponents(1);  // Scalar data
         //global_idx_array->SetNumberOfTuples(particles.size());
 
-        for (int i = 0; i < particles.size(); i++) {
+        for (size_t i = 0; i < particles.size(); i++) {
             auto p = particles[i].pos;  // Assume pos is a float array or convertible to float
             //auto global_idx = particles[i].global_idx;
 

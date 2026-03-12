@@ -522,7 +522,7 @@ public:
 	//b_ijk for block coord, which is the beginning voxel coord / 8
 	//this operation only changes the host data structure
 	//need to sync
-	void setTileHost(const int level, const Coord& b_ijk, const Tile& data, uint8_t type) {
+	HATileInfo<Tile> setTileHost(const int level, const Coord& b_ijk, const Tile& data, uint8_t type) {
 		auto h_acc = hostAccessor();
 		auto& info = h_acc.tileInfo(level, b_ijk);
 
@@ -542,6 +542,8 @@ public:
 		else std::memcpy(info.mTilePtr, &data, sizeof(Tile));
 		Tile* ptr = info.mTilePtr;
 		info = HATileInfo<Tile>(type, level, ptr, b_ijk);
+
+		return info;
 	}
 
 	void removeTileHost(const int level, const Coord& b_ijk) {
@@ -850,7 +852,7 @@ public:
 	}
 
 
-	void spawnGhostTiles(bool verbose = false) {
+	void spawnGhostTiles(bool verbose = false, std::vector<HATileInfo<Tile>>* additive_new_tile_infos = nullptr) {
 		using Acc = HACoordAccessor<Tile>;
 		//note that we will NOT spawn ghost tiles on level 0
 		//because it's the root level, and they will not have parents
@@ -869,7 +871,10 @@ public:
 							auto& p_info = h_acc.tileInfo(level - 1, p_ijk);
 							//auto& p_info = grid.mHostLayers[level - 1].tileInfo(p_ijk);
 							if (p_info.isLeaf()) {
-								setTileHost(level, n_ijk, Tile(), GHOST);
+								auto child_info = setTileHost(level, n_ijk, Tile(), GHOST);
+								if (additive_new_tile_infos) {
+									additive_new_tile_infos->push_back(child_info);
+								}
 								//grid.mHostLayers[level].setTile(n_ijk, Tile(), level, GHOST);
 							}
 						}
@@ -1079,7 +1084,7 @@ public:
 	}
 
 	template<class ABFunc>
-	std::vector<int> refineStep(const ABFunc& level_target, bool verbose) {
+	std::vector<int> refineStep(const ABFunc& level_target, bool verbose, std::vector<HATileInfo<Tile>>* additive_new_tile_infos = nullptr) {
 		//must be called after ghost tiles are properly spawned
 		//then, refine leafs for one step
 		//this may need to be called multiple times to reach the target level
@@ -1147,7 +1152,10 @@ public:
 						Coord offset = Acc::childIndexToOffset(ci);
 						Coord c_ijk = Acc::childCoord(info.mTileCoord, offset);
 
-						setTileHost(i + 1, c_ijk, tile.childTile(offset), LEAF);
+						auto child_info = setTileHost(i + 1, c_ijk, tile.childTile(offset), LEAF);
+						if (additive_new_tile_infos) {
+							additive_new_tile_infos->push_back(child_info);
+						}
 					}
 				}
 			}
