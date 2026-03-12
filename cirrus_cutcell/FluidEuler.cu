@@ -663,7 +663,15 @@ void FluidEuler::iterativeNodeSDFAndRefineNarrowBand(HADeviceGrid<Tile>& grid, c
 
 		std::vector<HATileInfo<Tile>> refined_tiles;
 		auto refine_cnts = grid.refineStep(levelTarget, false, &refined_tiles);
+		{
+			auto err = cudaDeviceSynchronize();
+			ASSERT(err == cudaSuccess, "cuda error after refinestep: {}", cudaGetErrorString(err));
+		}
 		grid.spawnGhostTiles(false, &refined_tiles);
+		{
+			auto err = cudaDeviceSynchronize();
+			ASSERT(err == cudaSuccess, "cuda error after spawnghost: {}", cudaGetErrorString(err));
+		}
 		CalculateTSDFOnGivenTiles(grid, refined_tiles, BufChnls::sdf, *mMeshSDFAccel, xform, truncation);
 
 		auto cnt = std::accumulate(refine_cnts.begin(), refine_cnts.end(), 0);
