@@ -12,7 +12,7 @@ void AssertRigidTransform(const Eigen::Transform<T, 3, Eigen::Affine>& xform)
 {
     const auto& R = xform.linear();
     ASSERT(R.isUnitary(T(1e-6)));
-    ASSERT(std::abs(R.determinant() - T(1)) < T(1e-6));
+    ASSERT(std::abs(R.determinant() - T(1)) < T(1e-6), "R determinant {}", R.determinant());
 }
 
 
