@@ -105,13 +105,13 @@ int main(int argc, char** argv) {
 		//	//SolverTests::TestSolverErrorWithAllNeumannBC("sphere_solid", 1.0, min_level, min_level + 2, "athena_sin", "amg");
 		//}
 
-		////test 1, iters convergence part
-		//for (int min_level : {2, 3, 4, 5}) {
-		//	//the paper shows the "full weighted L2"
-		//	SolverTests::TestSolutionItersErrorWithAllNeumannBC("uniform", 1.0, min_level, min_level, "athena_sin", "amg");
-		//	SolverTests::TestSolutionItersErrorWithAllNeumannBC("sphere_empty", 1.0, min_level, min_level + 2, "athena_sin", "amg");
-		//	SolverTests::TestSolutionItersErrorWithAllNeumannBC("star_empty", 1.0, min_level, min_level + 2, "athena_sin", "amg");
-		//}
+		//test 1, iters convergence part
+		for (int min_level : {2, 3, 4, 5}) {
+			//the paper shows the "full weighted L2"
+			SolverTests::TestSolutionItersErrorWithAllNeumannBC("uniform", 1.0, min_level, min_level, "athena_sin", "amg");
+			SolverTests::TestSolutionItersErrorWithAllNeumannBC("sphere_empty", 1.0, min_level, min_level + 2, "athena_sin", "amg");
+			SolverTests::TestSolutionItersErrorWithAllNeumannBC("star_empty", 1.0, min_level, min_level + 2, "athena_sin", "amg");
+		}
 
 
 		//////cmg version of test 1 grid convergence and runtime part
@@ -150,10 +150,10 @@ int main(int argc, char** argv) {
 		//}
 	}
 
-	SolverTests::TestSolverErrorSolid("sphere_solid", 2, 4);
-	SolverTests::TestSolverErrorSolid("sphere_solid", 3, 5);
-	SolverTests::TestSolverErrorSolid("sphere_solid", 4, 6);
-	SolverTests::TestSolverErrorSolid("sphere_solid", 5, 7);
+	//SolverTests::TestSolverErrorSolid("sphere_solid", 2, 4);
+	//SolverTests::TestSolverErrorSolid("sphere_solid", 3, 5);
+	//SolverTests::TestSolverErrorSolid("sphere_solid", 4, 6);
+	//SolverTests::TestSolverErrorSolid("sphere_solid", 5, 7);
 	 
 	//SolverTests::TestRecoveryNew("sphere_solid", 2, 4);
 	//SolverTests::TestRecoveryNew("sphere_solid", 3, 5);

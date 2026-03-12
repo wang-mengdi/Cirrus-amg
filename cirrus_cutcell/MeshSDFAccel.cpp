@@ -1,14 +1,12 @@
 #include "MeshSDFAccel.h"
 #include <cmath>
 
-// oneTBB
 #include <tbb/parallel_for.h>
 #include <tbb/blocked_range.h>
 
 #include <igl/per_face_normals.h>
-#include <igl/per_vertex_normals.h>
+#include <igl/fast_winding_number.h>
 #include <igl/signed_distance.h>
-
 
 void AssertRigidTransform(const Eigen::Transform<T, 3, Eigen::Affine>& xform)
 {
@@ -19,34 +17,29 @@ void AssertRigidTransform(const Eigen::Transform<T, 3, Eigen::Affine>& xform)
 
 void MeshSDFAccel::init(const fs::path& obj_path)
 {
-	//fmt::print("current working directory: {}\n", fs::current_path().string());
-	//fmt::print("MeshSDFAccel::init: Checking if file exists at {}\n", obj_path.string());
-	// Check if file exists
-    if (!fs::exists(obj_path)) {
-        throw std::runtime_error("MeshSDFAccel::init: File does not exist: " + obj_path.string());
-	}
-	//fmt::print("MeshSDFAccel::init: Reading mesh from {}\n", obj_path.string());
+    ASSERT(fs::exists(obj_path));
 
     Eigen::MatrixXd Vd;
     Eigen::MatrixXi Fi;
-    if (!igl::readOBJ(obj_path.string(), Vd, Fi)) {
-        throw std::runtime_error("MeshSDFAccel::init: Failed to read OBJ file " + obj_path.string());
-    }
-    // Convert to T
+    ASSERT(igl::readOBJ(obj_path.string(), Vd, Fi));
+
     Eigen::Matrix<T, -1, 3> V = Vd.cast<T>();
     Eigen::Matrix<int, -1, 3> F = Fi;
     build(V, F);
 }
 
-void MeshSDFAccel::build(const Eigen::Matrix<T, -1, 3>& V_in, const Eigen::Matrix<int, -1, 3>& F_in)
+void MeshSDFAccel::build(const Eigen::Matrix<T, -1, 3>& V_in,
+    const Eigen::Matrix<int, -1, 3>& F_in)
 {
     V_ = V_in;
     F_ = F_in;
 
     ASSERT(V_.cols() == 3);
     ASSERT(F_.cols() == 3);
+    ASSERT(V_.rows() > 0);
+    ASSERT(F_.rows() > 0);
 
-    // Build AABB once (read-only after this).
+    // Build AABB once. Reused by all future distance queries.
     tree_.init(V_, F_);
 
     // Per-face unit normals.
@@ -67,76 +60,46 @@ void MeshSDFAccel::build(const Eigen::Matrix<T, -1, 3>& V_in, const Eigen::Matri
         face_area_(i) = area;
         total_area_ += area;
     }
+
+    // Build fast winding number BVH once.
+    // libigl's precompute path uses FastWindingNumberBVH as the reusable hierarchy.
+    igl::fast_winding_number(V_.template cast<float>().eval(), F_, 2, fwn_bvh_);
+    has_fwn_ = true;
 }
 
-////self version use tbb but face some sign flipping issues
-//std::vector<T> MeshSDFAccel::querySDF(const std::vector<Vec>& points, const Eigen::Transform<T, 3, Eigen::Affine>& xform) const
-//{
-//    AssertRigidTransform(xform);
-//
-//    const int N = static_cast<int>(points.size());
-//    std::vector<T> sdf(N);
-//
-//    // Inverse transform: world -> mesh-local
-//    const Eigen::Transform<T, 3, Eigen::Affine> invX = xform.inverse();
-//    const Eigen::Matrix<T, 4, 4> M = invX.matrix();
-//
-//    tbb::parallel_for(
-//        tbb::blocked_range<int>(0, N, 2048),
-//        [&](const tbb::blocked_range<int>& r) {
-//            for (int i = r.begin(); i != r.end(); ++i) {
-//                // Read point (Vec must support .x()/.y()/.z() or [0],[1],[2])
-//                const T px = static_cast<T>(points[i][0]);
-//                const T py = static_cast<T>(points[i][1]);
-//                const T pz = static_cast<T>(points[i][2]);
-//
-//                // Homogeneous transform
-//                Eigen::Matrix<T, 4, 1> pw; pw << px, py, pz, T(1);
-//                Eigen::Matrix<T, 4, 1> pl4 = M * pw;
-//                Eigen::Matrix<T, 1, 3> p = pl4.template head<3>().transpose();
-//
-//                // Closest point in mesh-local
-//                int fid = -1;
-//                Eigen::Matrix<T, 1, 3> c;
-//                const T d2 = tree_.squared_distance(V_, F_, p, fid, c);
-//                const T d = std::sqrt(std::max<T>(d2, T(0)));
-//
-//                // Pseudonormal sign
-//                int s = 1;
-//                if (fid >= 0) {
-//                    const Eigen::Matrix<T, 1, 3> n = FN_.row(fid);
-//                    const T dot = (p - c).dot(n);
-//                    s = (dot >= T(0)) ? +1 : -1;
-//                }
-//                sdf[i] = s * d;
-//            }
-//        });
-//
-//    return sdf;
-//}
-
-std::vector<T> MeshSDFAccel::querySDF(const std::vector<Vec>& points,
+std::vector<T> MeshSDFAccel::querySDF(
+    const std::vector<Vec>& points,
     const Eigen::Transform<T, 3, Eigen::Affine>& xform) const
 {
     AssertRigidTransform(xform);
+    ASSERT(has_fwn_);
+
     const int N = static_cast<int>(points.size());
     std::vector<T> sdf(N);
     if (N == 0) return sdf;
 
     const auto invX = xform.inverse();
-    Eigen::Matrix<T, Eigen::Dynamic, 3> P(N, 3);
-    for (int i = 0; i < N; ++i) {
-        Eigen::Matrix<T, 3, 1> pw(points[i][0], points[i][1], points[i][2]);
-        Eigen::Matrix<T, 3, 1> pl = invX * pw;
-        P.row(i) = pl.transpose();
-    }
+    const auto R = invX.linear();
+    const auto t = invX.translation();
 
-    Eigen::Matrix<T, Eigen::Dynamic, 1> S;
-    Eigen::VectorXi I;
-    Eigen::Matrix<T, Eigen::Dynamic, 3> C, Nrm;
+    tbb::parallel_for(
+        tbb::blocked_range<int>(0, N, 4096),
+        [&](const tbb::blocked_range<int>& r)
+        {
+            for (int i = r.begin(); i != r.end(); ++i) {
+                const T x = static_cast<T>(points[i][0]);
+                const T y = static_cast<T>(points[i][1]);
+                const T z = static_cast<T>(points[i][2]);
 
-    igl::signed_distance(P, V_, F_, igl::SIGNED_DISTANCE_TYPE_WINDING_NUMBER, S, I, C, Nrm);
+                Eigen::Matrix<T, 1, 3> q;
+                q(0) = R(0, 0) * x + R(0, 1) * y + R(0, 2) * z + t(0);
+                q(1) = R(1, 0) * x + R(1, 1) * y + R(1, 2) * z + t(1);
+                q(2) = R(2, 0) * x + R(2, 1) * y + R(2, 2) * z + t(2);
 
-    for (int i = 0; i < N; ++i) sdf[i] = S(i);
+                sdf[i] = igl::signed_distance_fast_winding_number(
+                    q, V_, F_, tree_, fwn_bvh_);
+            }
+        });
+
     return sdf;
 }

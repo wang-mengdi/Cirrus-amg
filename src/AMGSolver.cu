@@ -1146,20 +1146,6 @@ void AMGSolver::muCycleStep(int current_level, int repeat_times, HADeviceGrid<Ti
 
 	ProlongateAndUpdateAMG128(grid, x_channel, x_channel, current_level, prolong_coeff);
 	GaussSeidelAMG(level_iters, 1, grid, current_level, x_channel, coeff_channel, rhs_channel, omega);
-
-    //{
-    //    Info("done with mucycle level {}", current_level);
-    //    polyscope::init();
-    //    auto holder = grid.getHostTileHolder(LEAF | NONLEAF | GHOST);
-    //    IOFunc::AddLeveledPoissonGridCellCentersToPolyscopePointCloud(
-    //        holder,
-    //        { {-1,"type"}, {x_channel,"x"}, { rhs_channel,"rhs" }, {coeff_channel,"offd0"}, {coeff_channel + 1,"offd1"} ,{coeff_channel + 2,"offd2"},{coeff_channel + 3,"diag"} },
-    //        {},
-    //        current_level, FLT_MAX
-    //    );
-    //    polyscope::show();
-    //    polyscope::removeAllStructures();
-    //}
 }
 
 void AMGSolver::muCycle(int repeat_times, HADeviceGrid<Tile>& grid, const int x_channel, const int f_channel, const int rhs_channel, const int coeff_channel, int level_iters, int coarsest_iters)
