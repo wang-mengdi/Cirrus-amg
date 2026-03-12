@@ -15,10 +15,13 @@
 #include <vtkXMLUniformGridAMRWriter.h>
 #include <vtkXMLUniformGridAMRReader.h>
 #include <vtkUniformGrid.h>
-#include <vtkAMRBox.h>
 #include "vtkCompositeDataWriter.h"
 #include "vtkXMLHierarchicalBoxDataWriter.h"
 #include <vtkXMLImageDataWriter.h>
+
+#include <vtkCellData.h>
+#include <vtkNew.h>
+
 
 //#include <zlib.h>
 
@@ -762,6 +765,199 @@ namespace IOFunc {
             mesh->addCellScalarQuantity("Interest Flag", cellInterestFlags);
             mesh->setTransparency(0.2);
         }
+    }
+
+    void OutputPoissonGridAsAMR(std::shared_ptr<HAHostTileHolder<Tile>> holder_ptr, const std::vector<std::pair<int, std::string>>& scalar_channels, const std::vector<std::pair<int, std::string>>& vec_channels, const fs::path& path)
+    {
+        //should output .vthb
+        ASSERT(path.extension() == ".vthb",
+            "OutputPoissonGridAsAMR: path must end with .vthb, got {}", path.string());
+
+        CPUTimer<std::chrono::milliseconds> timer;
+        timer.start();
+
+        auto& holder = *holder_ptr;
+
+        auto acc = holder.coordAccessor();
+        const int max_level = holder.mMaxLevel;
+        const int num_levels = max_level + 1;
+
+        // Collect leaf blocks per level.
+        std::vector<std::vector<HATileInfo<Tile>>> leaf_infos_per_level(num_levels);
+        std::vector<unsigned int> blocks_per_level(num_levels, 0);
+
+        for (int level = 0; level <= max_level; ++level) {
+            for (auto& info : holder.mHostLevels[level]) {
+                if (info.isLeaf()) {
+                    leaf_infos_per_level[level].push_back(info);
+                }
+            }
+            blocks_per_level[level] = static_cast<unsigned int>(leaf_infos_per_level[level].size());
+        }
+
+        unsigned int total_blocks = 0;
+        for (auto n : blocks_per_level) total_blocks += n;
+
+        ASSERT(total_blocks > 0, "OutputPoissonGridAsAMR: no leaf tiles to output");
+
+        vtkNew<vtkOverlappingAMR> amr;
+
+#if VTK_VERSION_NUMBER >= 90520250724ULL
+        amr->Initialize(blocks_per_level);
+#else
+        std::vector<int> blocks_per_level_int(num_levels);
+        for (int i = 0; i < num_levels; ++i) {
+            blocks_per_level_int[i] = static_cast<int>(blocks_per_level[i]);
+        }
+        amr->Initialize(num_levels, blocks_per_level_int.data());
+#endif
+        double amr_origin[3] = { 0.0, 0.0, 0.0 };
+        amr->SetOrigin(amr_origin);
+
+        for (int level = 0; level <= max_level; ++level) {
+            double h = acc.voxelSize(level);
+            double spacing[3] = { h, h, h };
+            amr->SetSpacing(level, spacing);
+        }
+
+
+
+        // Optional but recommended: specify refinement ratio between adjacent levels.
+        // Here we assume standard octree refinement ratio = 2 in each dimension.
+        for (unsigned int level = 0; level + 1 < static_cast<unsigned int>(num_levels); ++level) {
+            amr->SetRefinementRatio(level, 2);
+        }
+
+        // Build one vtkUniformGrid for each leaf tile.
+        for (int level = 0; level <= max_level; ++level) {
+            const auto h = acc.voxelSize(level);
+
+            for (int block_id = 0; block_id < static_cast<int>(leaf_infos_per_level[level].size()); ++block_id) {
+                const auto& info = leaf_infos_per_level[level][block_id];
+                const auto& tile = info.tile();
+
+                // Global cell coordinate of the tile's first cell at THIS level.
+                Coord g0 = acc.localToGlobalCoord(info, Coord(0, 0, 0));
+
+                // AMRBox uses cell-index bounds, inclusive on both ends.
+                int lo[3] = {
+                    static_cast<int>(g0[0]),
+                    static_cast<int>(g0[1]),
+                    static_cast<int>(g0[2])
+                };
+                int hi[3] = {
+                    static_cast<int>(g0[0] + Tile::DIM - 1),
+                    static_cast<int>(g0[1] + Tile::DIM - 1),
+                    static_cast<int>(g0[2] + Tile::DIM - 1)
+                };
+
+                vtkAMRBox box(lo, hi);
+                amr->SetAMRBox(level, block_id, box);
+
+                vtkNew<vtkUniformGrid> ug;
+
+                // UniformGrid dimensions are point dimensions = cell dims + 1.
+                ug->SetDimensions(Tile::DIM + 1, Tile::DIM + 1, Tile::DIM + 1);
+
+                // World-space origin of the block.
+                // Since g0 is the first cell index on this AMR level, the min corner is g0 * h.
+                ug->SetOrigin(
+                    static_cast<double>(g0[0]) * h,
+                    static_cast<double>(g0[1]) * h,
+                    static_cast<double>(g0[2]) * h);
+
+                ug->SetSpacing(h, h, h);
+
+                // -------- Cell data arrays --------
+                std::vector<vtkSmartPointer<vtkFloatArray>> scalar_data;
+                std::vector<vtkSmartPointer<vtkFloatArray>> vec_data;
+                std::vector<float*> scalar_ptrs;
+                std::vector<float*> vec_ptrs;
+
+                scalar_data.reserve(scalar_channels.size());
+                vec_data.reserve(vec_channels.size());
+                scalar_ptrs.reserve(scalar_channels.size());
+                vec_ptrs.reserve(vec_channels.size());
+
+                const vtkIdType num_cells = static_cast<vtkIdType>(Tile::SIZE);
+
+                for (const auto& scalar_channel : scalar_channels) {
+                    auto data = vtkSmartPointer<vtkFloatArray>::New();
+                    data->SetName(scalar_channel.second.c_str());
+                    data->SetNumberOfComponents(1);
+                    data->SetNumberOfTuples(num_cells);
+                    scalar_ptrs.push_back(data->GetPointer(0));
+                    scalar_data.push_back(data);
+                }
+
+                for (const auto& vec_channel : vec_channels) {
+                    auto data = vtkSmartPointer<vtkFloatArray>::New();
+                    data->SetName(vec_channel.second.c_str());
+                    data->SetNumberOfComponents(3);
+                    data->SetNumberOfTuples(num_cells);
+                    vec_ptrs.push_back(data->GetPointer(0));
+                    vec_data.push_back(data);
+                }
+
+                // Fill per-cell data. Here cell ordering is tile-local ordering.
+                for (int cell_idx = 0; cell_idx < Tile::SIZE; ++cell_idx) {
+                    Coord l_ijk = acc.localOffsetToCoord(cell_idx);
+                    const vtkIdType cid = static_cast<vtkIdType>(cell_idx);
+
+                    for (int i = 0; i < static_cast<int>(scalar_channels.size()); ++i) {
+                        int channel = scalar_channels[i].first;
+                        T value;
+                        if (channel == -1) value = static_cast<T>(tile.type(l_ijk));
+                        else if (channel == -2) value = static_cast<T>(level);
+                        else value = tile(channel, l_ijk);
+
+                        ASSERT(std::isfinite(value),
+                            "Non-finite scalar value at channel {}, l_ijk={}, level={}",
+                            channel, l_ijk, level);
+
+                        scalar_ptrs[i][cid] = static_cast<float>(value);
+                    }
+
+                    for (int i = 0; i < static_cast<int>(vec_channels.size()); ++i) {
+                        int u_channel = vec_channels[i].first;
+                        T u = tile(u_channel, l_ijk);
+                        T v = tile(u_channel + 1, l_ijk);
+                        T w = tile(u_channel + 2, l_ijk);
+
+                        ASSERT(std::isfinite(u) && std::isfinite(v) && std::isfinite(w),
+                            "Non-finite vector value at channels [{}, {}, {}], l_ijk={}, level={}",
+                            u_channel, u_channel + 1, u_channel + 2, l_ijk, level);
+
+                        float* ptr = vec_ptrs[i] + 3 * cid;
+                        ptr[0] = static_cast<float>(u);
+                        ptr[1] = static_cast<float>(v);
+                        ptr[2] = static_cast<float>(w);
+                    }
+                }
+
+                for (auto& data : scalar_data) {
+                    ug->GetCellData()->AddArray(data);
+                }
+                for (auto& data : vec_data) {
+                    ug->GetCellData()->AddArray(data);
+                }
+
+                amr->SetDataSet(level, block_id, ug);
+            }
+        }
+
+        vtkNew<vtkXMLUniformGridAMRWriter> writer;
+        writer->SetFileName(path.string().c_str());
+        writer->SetInputData(amr);
+        writer->SetDataModeToBinary();
+        // writer->SetCompressorTypeToZLib(); // 先关掉，优先追求输出速度
+
+        const int ok = writer->Write();
+        ASSERT(ok == 1, "vtkXMLUniformGridAMRWriter failed to write {}", path.string());
+
+        double elapsed = timer.stop();
+        Pass("Finished writing Poisson grid to AMR file: {} ({} ms, {} blocks)",
+            path.string(), elapsed, total_blocks);
     }
 
     void AddLeveledPoissonGridCellCentersToPolyscopePointCloud(std::shared_ptr<HAHostTileHolder<Tile>> holder_ptr, const std::vector<std::pair<int, std::string>> scalar_channels, std::vector<std::pair<int, std::string>> vec_channels, int level, const double invalid_value) {
