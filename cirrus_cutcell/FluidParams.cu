@@ -262,9 +262,12 @@ __hostdev__ Eigen::Transform<T, 3, Eigen::Affine> FluidParams::meshToWorldTransf
 		if (t < (T)0) t = (T)0;
 		if (t > (T)2) t = (T)2;
 
+		// -----------------------------
+		// Trajectory: same as SPHERECIRCLING
+		// -----------------------------
 		const T center_x = (T)0.5;
 		const T center_y = (T)0.5;
-		const T orbit_r = (T)0.2;
+		const T orbit_r = (T)0.3;
 
 		const T z0 = (T)1.7;
 		const T z1 = (T)0.3;
@@ -278,44 +281,46 @@ __hostdev__ Eigen::Transform<T, 3, Eigen::Affine> FluidParams::meshToWorldTransf
 
 		Vec3 pos(x, y, z);
 
-		// Up points toward orbit center in x-y plane
-		Vec3 up_dir(center_x - x, center_y - y, (T)0);
-		up_dir.normalize();
+		// -----------------------------
+		// Orientation
+		// Body convention:
+		//   local -z = nose/forward
+		//   local +x = up
+		// -----------------------------
 
-		// Forward follows trajectory tangent
-		const T dtheta_dt = (T)(2.0 * M_PI / 2.0); // pi rad/s
-		const T dxdt = -orbit_r * std::sin(theta) * dtheta_dt;
-		const T dydt = orbit_r * std::cos(theta) * dtheta_dt;
-		const T dzdt = (z1 - z0) / (T)2.0;
+		// Forward should remain roughly pointing toward world -z
+		Vec3 forward_base((T)0, (T)0, (T)-1);
 
-		Vec3 forward_dir(dxdt, dydt, dzdt);
-		forward_dir.normalize();
+		// Up points toward the orbit center in x-y plane
+		Vec3 up_base(center_x - x, center_y - y, (T)0);
+		up_base.normalize();
 
-		// IMPORTANT:
-		// local +x = up
-		// local +y = right
-		// local -z = forward
-		// therefore we need up x right = -forward
-		Vec3 right_dir = up_dir.cross(forward_dir).normalized();
-		up_dir = forward_dir.cross(right_dir).normalized();
+		// Build right-handed orthonormal basis
+		Vec3 right_base = up_base.cross(forward_base).normalized();
+		up_base = forward_base.cross(right_base).normalized();
 
-		// Barrel roll around forward axis: 360 deg in 2s
+		// -----------------------------
+		// Barrel roll: 360 degrees in 2s
+		// Roll around the missile forward axis
+		// -----------------------------
 		const T roll = s * (T)(2.0 * M_PI);
 		Eigen::Matrix<T, 3, 3> R_roll =
-			AngleAxisT(roll, forward_dir).toRotationMatrix();
+			AngleAxisT(roll, forward_base).toRotationMatrix();
 
-		Vec3 up_rolled = (R_roll * up_dir).normalized();
-		Vec3 right_rolled = up_rolled.cross(forward_dir).normalized();
-		up_rolled = forward_dir.cross(right_rolled).normalized();
+		Vec3 up_rolled = (R_roll * up_base).normalized();
+		Vec3 right_rolled = up_rolled.cross(forward_base).normalized();
+		up_rolled = forward_base.cross(right_rolled).normalized();
 
+		// -----------------------------
 		// Optional angle of attack
-		const T alpha_deg = (T)0; // or 10
+		// -----------------------------
+		const T alpha_deg = (T)0; // set to 10 if desired
 		const T alpha = alpha_deg * (T)M_PI / (T)180.0;
 
 		Eigen::Matrix<T, 3, 3> R_attack =
-			AngleAxisT(alpha, right_rolled).toRotationMatrix();
+			AngleAxisT(-alpha, right_rolled).toRotationMatrix();
 
-		Vec3 forward_final = (R_attack * forward_dir).normalized();
+		Vec3 forward_final = (R_attack * forward_base).normalized();
 		Vec3 up_final = (R_attack * up_rolled).normalized();
 		Vec3 right_final = up_final.cross(forward_final).normalized();
 		up_final = forward_final.cross(right_final).normalized();
