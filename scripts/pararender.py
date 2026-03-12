@@ -52,27 +52,82 @@ def read_driver_stats(frame_number, logs_dir):
     return runtime, iters
 
 
-def get_color_range_from_vti(vti_file_path, array_name):
+def print_arrays_in_vti(vti_file_path):
     """
-    Get the color range (min and max values) from a VTI file for a specified data array.
+    Print all point-data and cell-data arrays in a VTI file for debugging.
     """
     data = OpenDataFile(vti_file_path)
     data.UpdatePipeline()
     vtk_data = Fetch(data)
 
-    if vtk_data.IsA("vtkImageData"):
+    try:
+        if not vtk_data.IsA("vtkImageData"):
+            print(f"[DEBUG] {vti_file_path} is not vtkImageData.")
+            return
+
         point_data = vtk_data.GetPointData()
-        array = point_data.GetArray(array_name)
-        if array:
-            value_range = array.GetRange()
-            Delete(data)
-            return value_range
-        else:
-            Delete(data)
-            raise ValueError(f"Array '{array_name}' not found in {vti_file_path}.")
-    else:
+        cell_data = vtk_data.GetCellData()
+
+        point_arrays = []
+        for i in range(point_data.GetNumberOfArrays()):
+            arr = point_data.GetArray(i)
+            if arr:
+                point_arrays.append(arr.GetName())
+
+        cell_arrays = []
+        for i in range(cell_data.GetNumberOfArrays()):
+            arr = cell_data.GetArray(i)
+            if arr:
+                cell_arrays.append(arr.GetName())
+
+        print(f"[DEBUG] Arrays in {vti_file_path}")
+        print(f"[DEBUG]   Point arrays ({len(point_arrays)}): {point_arrays}")
+        print(f"[DEBUG]   Cell arrays  ({len(cell_arrays)}): {cell_arrays}")
+    finally:
         Delete(data)
-        raise TypeError(f"The file '{vti_file_path}' is not a valid VTI file.")
+
+
+def get_color_range_from_vti(vti_file_path, array_name):
+    """
+    Get the color range (min and max values) from a VTI file for a specified CELL data array.
+    Also print all point-data and cell-data arrays for debugging.
+    """
+    data = OpenDataFile(vti_file_path)
+    data.UpdatePipeline()
+    vtk_data = Fetch(data)
+
+    try:
+        if not vtk_data.IsA("vtkImageData"):
+            raise TypeError(f"The file '{vti_file_path}' is not a valid VTI file.")
+
+        point_data = vtk_data.GetPointData()
+        cell_data = vtk_data.GetCellData()
+
+        point_arrays = []
+        for i in range(point_data.GetNumberOfArrays()):
+            arr = point_data.GetArray(i)
+            if arr:
+                point_arrays.append(arr.GetName())
+
+        cell_arrays = []
+        for i in range(cell_data.GetNumberOfArrays()):
+            arr = cell_data.GetArray(i)
+            if arr:
+                cell_arrays.append(arr.GetName())
+
+        print(f"[DEBUG] Arrays in {vti_file_path}")
+        print(f"[DEBUG]   Point arrays ({len(point_arrays)}): {point_arrays}")
+        print(f"[DEBUG]   Cell arrays  ({len(cell_arrays)}): {cell_arrays}")
+
+        array = cell_data.GetArray(array_name)
+        if array:
+            return array.GetRange()
+
+        raise ValueError(
+            f"Cell array '{array_name}' not found in {vti_file_path}."
+        )
+    finally:
+        Delete(data)
 
 
 def extract_frame_number_from_path(vti_file_path):
@@ -85,9 +140,10 @@ def extract_frame_number_from_path(vti_file_path):
         return stem[len("fluid"):]
     return stem
 
-def get_point_array_range_from_vti(vti_file_path, array_name):
+
+def get_cell_array_range_from_vti(vti_file_path, array_name):
     """
-    Get range of a point-data array from a VTI file.
+    Get range of a CELL-data array from a VTI file.
     Returns (min_value, max_value), or None if the array does not exist.
     """
     data = OpenDataFile(vti_file_path)
@@ -95,20 +151,22 @@ def get_point_array_range_from_vti(vti_file_path, array_name):
     vtk_data = Fetch(data)
 
     result = None
-    if vtk_data.IsA("vtkImageData"):
-        point_data = vtk_data.GetPointData()
-        array = point_data.GetArray(array_name)
-        if array:
-            result = array.GetRange()
+    try:
+        if vtk_data.IsA("vtkImageData"):
+            cell_data = vtk_data.GetCellData()
+            array = cell_data.GetArray(array_name)
+            if array:
+                result = array.GetRange()
+    finally:
+        Delete(data)
 
-    Delete(data)
     return result
 
 
 def build_masked_source_if_needed(vti_data, vti_file_path, array_name, mask_non_finest):
     """
-    If mask_non_finest is enabled and 'level' exists, create a Calculator
-    that masks out points whose level is not the maximum level.
+    If mask_non_finest is enabled and CELL array 'level' exists, create a Calculator
+    that masks out cells whose level is not the maximum level.
     Returns:
         source_to_show, array_name_to_render
     Otherwise returns:
@@ -117,19 +175,21 @@ def build_masked_source_if_needed(vti_data, vti_file_path, array_name, mask_non_
     if not mask_non_finest:
         return vti_data, array_name
 
-    level_range = get_point_array_range_from_vti(vti_file_path, "level")
+    level_range = get_cell_array_range_from_vti(vti_file_path, "level")
     if level_range is None:
-        print(f"Warning: 'level' array not found in {vti_file_path}, skip masking.")
+        print(f"Warning: CELL array 'level' not found in {vti_file_path}, skip masking.")
         return vti_data, array_name
 
     max_level = int(level_range[1])
     masked_array_name = f"{array_name}_finest_only"
 
     calc = Calculator(Input=vti_data)
+    calc.AttributeType = "Cell Data"
     calc.ResultArrayName = masked_array_name
     calc.Function = f"{array_name} * (level == {max_level})"
 
     return calc, masked_array_name
+
 
 def render_vti_to_png(frame_number, vti_file_path, png_file_path,
                       array_name, color_range, info,
@@ -137,6 +197,7 @@ def render_vti_to_png(frame_number, vti_file_path, png_file_path,
                       mask_non_finest):
     _DisableFirstRenderCameraReset()
 
+    render_view = GetActiveViewOrCreate("RenderView")
     vti_data = None
     display_source = None
     text = None
@@ -144,7 +205,6 @@ def render_vti_to_png(frame_number, vti_file_path, png_file_path,
 
     try:
         vti_data = OpenDataFile(vti_file_path)
-        render_view = GetActiveViewOrCreate("RenderView")
 
         display_source, masked_array_name = build_masked_source_if_needed(
             vti_data, vti_file_path, array_name, mask_non_finest
@@ -153,7 +213,7 @@ def render_vti_to_png(frame_number, vti_file_path, png_file_path,
         vti_representation = Show(display_source, render_view)
         vti_representation.Representation = "Volume"
 
-        ColorBy(vti_representation, ("POINT_DATA", masked_array_name))
+        ColorBy(vti_representation, ("CELL_DATA", masked_array_name))
 
         lut = GetColorTransferFunction(masked_array_name)
         lut.AutomaticRescaleRangeMode = "Never"
@@ -223,6 +283,7 @@ def render_all_vti_files(input_path, array_name, slice_spec, info,
                          cam_pos, cam_focal, cam_up, mask_non_finest):
     """
     Render selected fluid*.vti files in the specified directory and save them as PNG images.
+    Assumes all render arrays are stored as CELL arrays.
     """
     output_dir = os.path.join(input_path, f"render_{array_name}")
     os.makedirs(output_dir, exist_ok=True)
@@ -266,7 +327,7 @@ if __name__ == "__main__":
         "--name",
         type=str,
         default="dye_density",
-        help="Name of the data array to visualize (default: dye_density)."
+        help="Name of the CELL data array to visualize (default: dye_density)."
     )
     parser.add_argument(
         "--slice",
@@ -282,7 +343,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--mask-non-finest",
         action="store_true",
-        help="If set, and if point-data array 'level' exists, set the render field to 0 for points whose level is not the maximum."
+        help="If set, and if CELL-data array 'level' exists, set the render field to 0 for cells whose level is not the maximum."
     )
 
     args = parser.parse_args()
