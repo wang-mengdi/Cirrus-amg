@@ -49,9 +49,10 @@ FluidParams::FluidParams(json& j)
 	if (test == "meshmotion") mTestCase = MESHMOTION;
 	else if (test == "aircraft") mTestCase = AIRCRAFT;
 	else if (test == "sphere_circling") mTestCase = SPHERECIRCLING;
+	else if (test == "jassm") mTestCase = JASSM;
 	else ASSERT(false, "invalid test {}", test);
 
-	if (mTestCase == MESHMOTION || mTestCase == AIRCRAFT || mTestCase == SPHERECIRCLING) {
+	if (mTestCase == MESHMOTION || mTestCase == AIRCRAFT || mTestCase == SPHERECIRCLING || mTestCase == JASSM) {
 		mIsPureNeumann = true;
 		mesh_motion_inflow = Json::Value<T>(j, "inflow_velocity", 1.0);
 	}
@@ -104,7 +105,7 @@ __hostdev__ int FluidParams::initialLevelTarget(const HATileAccessor<Tile>& acc,
 
 __hostdev__ uint8_t FluidParams::wallCellType(const T current_time, const HATileAccessor<Tile>& acc, const int level, const Coord& g_ijk) const
 {
-	if (mTestCase == MESHMOTION || mTestCase == AIRCRAFT || mTestCase == SPHERECIRCLING) {
+	if (mTestCase == MESHMOTION || mTestCase == AIRCRAFT || mTestCase == SPHERECIRCLING || mTestCase == JASSM) {
 		//uses 1 layer of solid walls on the coarse level
 
 		//z+ air
@@ -252,6 +253,107 @@ __hostdev__ Eigen::Transform<T, 3, Eigen::Affine> FluidParams::meshToWorldTransf
 
 		return transform;
 	}
+	else if (mTestCase == JASSM) {
+		using Vec3 = Eigen::Matrix<T, 3, 1>;
+		using AngleAxisT = Eigen::AngleAxis<T>;
+		using TransformT = Eigen::Transform<T, 3, Eigen::Affine>;
+
+		T t = current_time;
+		if (t < (T)0) t = (T)0;
+		if (t > (T)2) t = (T)2;
+
+		// -----------------------------
+		// Trajectory parameters
+		// -----------------------------
+		const T center_x = (T)0.5;
+		const T center_y = (T)0.5;
+		const T orbit_r = (T)0.2;
+
+		const T z0 = (T)1.7;
+		const T z1 = (T)0.3;
+
+		const T s = t / (T)2.0;
+		const T theta = (T)(2.0 * M_PI) * s;   // one full revolution in 2s
+
+		const T x = center_x + orbit_r * std::cos(theta);
+		const T y = center_y + orbit_r * std::sin(theta);
+		const T z = ((T)1 - s) * z0 + s * z1;
+
+		// Current position
+		Vec3 pos(x, y, z);
+
+		// -----------------------------
+		// Build desired body orientation
+		// Body convention:
+		//   nose  -> local -z
+		//   up    -> local +x
+		// -----------------------------
+
+		// 1) Up direction points toward the orbit center line in x-y plane
+		Vec3 to_center(center_x - x, center_y - y, (T)0);
+		Vec3 up_dir = to_center.normalized();
+
+		// 2) Forward direction follows the trajectory tangent
+		// Orbit tangent in x-y plus descending z motion
+		const T dtheta_dt = (T)(2.0 * M_PI / 2.0);   // pi rad/s
+		const T dxdt = -orbit_r * std::sin(theta) * dtheta_dt;
+		const T dydt = orbit_r * std::cos(theta) * dtheta_dt;
+		const T dzdt = (z1 - z0) / (T)2.0;
+
+		Vec3 vel(dxdt, dydt, dzdt);
+		Vec3 forward_dir = vel.normalized();
+
+		// 3) Construct right direction, then re-orthogonalize
+		Vec3 right_dir = forward_dir.cross(up_dir).normalized();
+		up_dir = right_dir.cross(forward_dir).normalized();
+
+		// -----------------------------
+		// Barrel roll: 360 degrees in 2s
+		// rotate body around its forward axis
+		// -----------------------------
+		const T roll = s * (T)(2.0 * M_PI);
+		Eigen::Matrix<T, 3, 3> R_roll =
+			AngleAxisT(roll, forward_dir).toRotationMatrix();
+
+		Vec3 up_rolled = R_roll * up_dir;
+		Vec3 right_rolled = R_roll * right_dir;
+
+		// Rebuild orthonormal basis after roll
+		right_rolled = forward_dir.cross(up_rolled).normalized();
+		up_rolled = right_rolled.cross(forward_dir).normalized();
+
+		// -----------------------------
+		// Optional small angle of attack
+		// Positive alpha means nose pitches upward relative to velocity.
+		// Since local +x is up, rotate forward around body right axis.
+		// -----------------------------
+		const T alpha_deg = (T)0;   // change to 10 if needed
+		const T alpha = alpha_deg * (T)M_PI / (T)180.0;
+
+		Eigen::Matrix<T, 3, 3> R_attack =
+			AngleAxisT(alpha, right_rolled).toRotationMatrix();
+
+		Vec3 forward_final = (R_attack * forward_dir).normalized();
+		Vec3 up_final = (R_attack * up_rolled).normalized();
+		Vec3 right_final = forward_final.cross(up_final).normalized();
+		up_final = right_final.cross(forward_final).normalized();
+
+		// -----------------------------
+		// Map body local axes to world axes:
+		//   local +x -> up_final
+		//   local +y -> right_final
+		//   local +z -> -forward_final   (because nose is local -z)
+		// -----------------------------
+		Eigen::Matrix<T, 3, 3> R;
+		R.col(0) = up_final;
+		R.col(1) = right_final;
+		R.col(2) = -forward_final;
+
+		TransformT transform = TransformT::Identity();
+		transform.linear() = R;
+		transform.translation() = pos;
+		return transform;
+	}
 	else {
 		CUDA_ASSERT(false, "meshToWorldTransform not implemented for test case %d", int(mTestCase));
 	}
@@ -259,7 +361,7 @@ __hostdev__ Eigen::Transform<T, 3, Eigen::Affine> FluidParams::meshToWorldTransf
 
 __device__ T FluidParams::solidFaceCenterVelocity(const T current_time, const T dt, const HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const Coord& l_ijk, const int axis) const
 {
-	if (mTestCase == MESHMOTION || mTestCase == AIRCRAFT || mTestCase == SPHERECIRCLING) {
+	if (mTestCase == MESHMOTION || mTestCase == AIRCRAFT || mTestCase == SPHERECIRCLING || mTestCase == JASSM) {
 		Vec wall_vel(0, 0, mesh_motion_inflow);
 		auto g_ijk = acc.localToGlobalCoord(info, l_ijk);
 		auto ng_ijk = g_ijk; ng_ijk[axis]--;
