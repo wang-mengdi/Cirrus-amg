@@ -322,8 +322,8 @@ __hostdev__ Eigen::Transform<T, 3, Eigen::Affine> FluidParams::meshToWorldTransf
 
 		Vec3 forward_final = (R_attack * forward_rolled).normalized();
 		Vec3 up_final = (R_attack * up_rolled).normalized();
-		Vec3 right_final = up_final.cross(forward_final).normalized();
-		up_final = forward_final.cross(right_final).normalized();
+		Vec3 right_final = forward_final.cross(up_final).normalized();
+		up_final = right_final.cross(forward_final).normalized();
 
 		// Map local axes to world axes:
 		// local +X -> right
