@@ -226,7 +226,7 @@ namespace IOFunc {
         writer->Write();
         
 		auto elapsed = timer.stop();
-		Info("Finished writing particle system to VTU file: {} ({} ms)", path.string(), elapsed);
+		Pass("Finished writing particle system to VTU file: {} ({} ms)", path.string(), elapsed);
     }
 
   //  void OutputMarkerParticleSystemAsVTU(const thrust::device_vector<MarkerParticle>& particles_d, const fs::path& path) {
@@ -686,7 +686,7 @@ namespace IOFunc {
         ASSERT(ok == 1, "vtkXMLImageDataWriter failed to write {}", path.string());
 
         double elapsed = timer.stop();
-		Info("Finished writing Poisson grid to structured VTI file: {} ({} ms)", path.string(), elapsed);
+        Pass("Finished writing Poisson grid to structured VTI file: {} ({} ms)", path.string(), elapsed);
     }
 
     void AddTilesToPolyscopeVolumetricMesh(HADeviceGrid<Tile>& grid, const uint8_t types, std::string name) {
