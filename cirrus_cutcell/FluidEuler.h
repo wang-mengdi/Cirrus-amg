@@ -356,26 +356,28 @@ public:
 		fs::path output_path = metadata.base_path / "logs";
 		fs::create_directories(output_path);
 		fs::path output_file = output_path / fmt::format("simulator_stat_{:04d}.txt", metadata.current_frame);
+
 		std::ofstream out(output_file);
+
 		fmt::print(out,
 			"frame {}\n"
 			"total particles {}\n"
 			"total leaf cells {}\n"
-			"reseeding time {} ms\n"
-			"particle_advection_time {} ms\n"
-			"adaptive_time {} ms\n"
-			"projection_time {} ms\n"
-			"nfm_advection_time {} ms\n"
-			"advance_time {} ms\n",
+			"adapt_and_advect_time {} ms\n"
+			"grid_adaptation_time {} ms\n"
+			"total_projection_time {} ms\n"
+			"projection_solve_time {} ms\n"
+			"total_advance_time {} ms\n",
 			metadata.current_frame,
 			pfm_particles_d.size(),
 			grid_ptrs.back()->numTotalLeafTiles() * Tile::SIZE,
-			reseeding_time,
-			particle_advection_time,
-			adaptive_time,
-			projection_time,
-			nfm_advection_time,
-			advance_time);
+			adapt_and_advect_time,
+			grid_adaptation_time,
+			total_projection_time,
+			projection_solve_time,
+			total_advance_time
+		);
+
 		out.close();
 	}
 
