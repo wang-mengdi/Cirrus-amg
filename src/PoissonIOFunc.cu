@@ -456,70 +456,96 @@ namespace IOFunc {
         timer.stop(fmt::format("Output grid to unstructured .vtu file: {}", path.string()));
     }
 
-    void OutputPoissonGridAsStructuredVTI(std::shared_ptr<HAHostTileHolder<Tile>> holder_ptr, const std::vector<std::pair<int, std::string>> scalar_channels, std::vector<std::pair<int, std::string>> vec_channels, const fs::path& path) {
+    void OutputPoissonGridAsStructuredVTI(
+        std::shared_ptr<HAHostTileHolder<Tile>> holder_ptr,
+        const std::vector<std::pair<int, std::string>> scalar_channels,
+        std::vector<std::pair<int, std::string>> vec_channels,
+        const fs::path& path)
+    {
         CPUTimer<std::chrono::milliseconds> timer;
         timer.start();
 
         auto& holder = *holder_ptr;
         std::vector<HATileInfo<Tile>> leaf_infos;
 
-        for (int i = 0; i <= holder.mMaxLevel; i++) {
-            for (auto& info : holder.mHostLevels[i]) {
+        for (int level = 0; level <= holder.mMaxLevel; level++) {
+            for (auto& info : holder.mHostLevels[level]) {
                 if (info.isLeaf()) {
                     leaf_infos.push_back(info);
                 }
             }
         }
 
+        ASSERT(!leaf_infos.empty(), "OutputPoissonGridAsStructuredVTI: no leaf tiles to output");
+
         using Coord = typename Tile::CoordType;
         auto acc = holder.coordAccessor();
-        int max_level = holder.mMaxLevel;
+        const int max_level = holder.mMaxLevel;
 
-        // Step 1: Find the global coordinate range at the finest level
-        Coord global_min = Coord(
+        // Step 1: Find the global fine-cell coordinate range [global_min, global_max)
+        Coord global_min(
             std::numeric_limits<int>::max(),
             std::numeric_limits<int>::max(),
             std::numeric_limits<int>::max()
         );
-        Coord global_max = Coord(
+        Coord global_max(
             std::numeric_limits<int>::lowest(),
             std::numeric_limits<int>::lowest(),
             std::numeric_limits<int>::lowest()
         );
 
         for (auto& info : leaf_infos) {
-            if (info.isLeaf()) {
-                auto& tile = info.tile();
-                int level = info.mLevel;
-                int shift = holder.mMaxLevel - level;
+            const int level = info.mLevel;
+            const int shift = holder.mMaxLevel - level;
 
-                for (Coord l_ijk : {Coord(0, 0, 0), Coord(Tile::DIM - 1, Tile::DIM - 1, Tile::DIM - 1)}) {
-                    Coord g_ijk = acc.localToGlobalCoord(info, l_ijk);
+            for (Coord l_ijk : {Coord(0, 0, 0), Coord(Tile::DIM - 1, Tile::DIM - 1, Tile::DIM - 1)}) {
+                Coord g_ijk = acc.localToGlobalCoord(info, l_ijk);
 
-                    Coord min_fine_coord(g_ijk[0] << shift, g_ijk[1] << shift, g_ijk[2] << shift);
-                    Coord max_fine_coord((g_ijk[0] + 1) << shift, (g_ijk[1] + 1) << shift, (g_ijk[2] + 1) << shift);
+                Coord min_fine_coord(
+                    g_ijk[0] << shift,
+                    g_ijk[1] << shift,
+                    g_ijk[2] << shift
+                );
+                Coord max_fine_coord(
+                    (g_ijk[0] + 1) << shift,
+                    (g_ijk[1] + 1) << shift,
+                    (g_ijk[2] + 1) << shift
+                );
 
-                    global_min[0] = std::min(global_min[0], min_fine_coord[0]);
-                    global_min[1] = std::min(global_min[1], min_fine_coord[1]);
-                    global_min[2] = std::min(global_min[2], min_fine_coord[2]);
+                global_min[0] = std::min(global_min[0], min_fine_coord[0]);
+                global_min[1] = std::min(global_min[1], min_fine_coord[1]);
+                global_min[2] = std::min(global_min[2], min_fine_coord[2]);
 
-                    global_max[0] = std::max(global_max[0], max_fine_coord[0]);
-                    global_max[1] = std::max(global_max[1], max_fine_coord[1]);
-                    global_max[2] = std::max(global_max[2], max_fine_coord[2]);
-                }
+                global_max[0] = std::max(global_max[0], max_fine_coord[0]);
+                global_max[1] = std::max(global_max[1], max_fine_coord[1]);
+                global_max[2] = std::max(global_max[2], max_fine_coord[2]);
             }
         }
 
+        // cell dimensions
+        Coord cell_dims = global_max - global_min;
 
-        // Step 2: Determine the structured grid dimensions and allocate points
-        Coord grid_dimensions = (global_max - global_min);
+        ASSERT(cell_dims[0] > 0 && cell_dims[1] > 0 && cell_dims[2] > 0,
+            "OutputPoissonGridAsStructuredVTI: invalid cell dims [{}, {}, {}], global_min={}, global_max={}",
+            cell_dims[0], cell_dims[1], cell_dims[2], global_min, global_max);
+
+        const int64_t nx = static_cast<int64_t>(cell_dims[0]);
+        const int64_t ny = static_cast<int64_t>(cell_dims[1]);
+        const int64_t nz = static_cast<int64_t>(cell_dims[2]);
+        const int64_t num_cells = nx * ny * nz;
+
+        ASSERT(num_cells > 0,
+            "OutputPoissonGridAsStructuredVTI: num_cells must be positive, got {}", num_cells);
+
+        // Step 2: vtkImageData dimensions are point dimensions = cell dims + 1
         vtkNew<vtkImageData> structuredGrid;
-        structuredGrid->SetDimensions(grid_dimensions[0], grid_dimensions[1], grid_dimensions[2]);
+        structuredGrid->SetDimensions(cell_dims[0] + 1, cell_dims[1] + 1, cell_dims[2] + 1);
         structuredGrid->SetOrigin(global_min[0], global_min[1], global_min[2]);
-		auto h = acc.voxelSize(max_level);
+
+        auto h = acc.voxelSize(max_level);
         structuredGrid->SetSpacing(h, h, h);
 
-        // Step 3: Allocate scalar and vector data arrays for structured grid
+        // Step 3: Allocate cell data arrays
         std::vector<vtkSmartPointer<vtkFloatArray>> scalar_data;
         std::vector<vtkSmartPointer<vtkFloatArray>> vec_data;
 
@@ -527,7 +553,7 @@ namespace IOFunc {
             auto data = vtkSmartPointer<vtkFloatArray>::New();
             data->SetName(scalar_channel.second.c_str());
             data->SetNumberOfComponents(1);
-            data->SetNumberOfTuples(grid_dimensions[0] * grid_dimensions[1] * grid_dimensions[2]);
+            data->SetNumberOfTuples(num_cells);
             scalar_data.push_back(data);
         }
 
@@ -535,48 +561,101 @@ namespace IOFunc {
             auto data = vtkSmartPointer<vtkFloatArray>::New();
             data->SetName(vec_channel.second.c_str());
             data->SetNumberOfComponents(3);
-            data->SetNumberOfTuples(grid_dimensions[0] * grid_dimensions[1] * grid_dimensions[2]);
+            data->SetNumberOfTuples(num_cells);
             vec_data.push_back(data);
         }
 
+        // Optional: initialize arrays to 0 for safety/debug readability
+        for (auto& data : scalar_data) {
+            data->Fill(0.0f);
+        }
+        for (auto& data : vec_data) {
+            data->FillComponent(0, 0.0);
+            data->FillComponent(1, 0.0);
+            data->FillComponent(2, 0.0);
+        }
+
+        // Step 4: Fill cell data
         for (auto& info : leaf_infos) {
-            if (info.isLeaf()) {
-                auto& tile = info.tile();
-                int level = info.mLevel;
-                int shift = holder.mMaxLevel - level;
+            const auto& tile = info.tile();
+            const int level = info.mLevel;
+            const int shift = holder.mMaxLevel - level;
 
-                for (int cell_idx = 0; cell_idx < Tile::SIZE; cell_idx++) {
-                    Coord l_ijk = acc.localOffsetToCoord(cell_idx);
-                    Coord g_ijk = acc.localToGlobalCoord(info, l_ijk);
+            ASSERT(shift >= 0, "OutputPoissonGridAsStructuredVTI: negative shift {}", shift);
 
-                    Coord min_fine_coord(g_ijk[0] << shift, g_ijk[1] << shift, g_ijk[2] << shift);
-                    Coord max_fine_coord((g_ijk[0] + 1) << shift, (g_ijk[1] + 1) << shift, (g_ijk[2] + 1) << shift);
+            for (int cell_idx = 0; cell_idx < Tile::SIZE; cell_idx++) {
+                Coord l_ijk = acc.localOffsetToCoord(cell_idx);
+                Coord g_ijk = acc.localToGlobalCoord(info, l_ijk);
 
-                    for (int x = min_fine_coord[0]; x < max_fine_coord[0]; ++x) {
-                        for (int y = min_fine_coord[1]; y < max_fine_coord[1]; ++y) {
-                            for (int z = min_fine_coord[2]; z < max_fine_coord[2]; ++z) {
-                                int flat_index = (x - global_min[0]) +
-                                    (y - global_min[1]) * grid_dimensions[0] +
-                                    (z - global_min[2]) * grid_dimensions[0] * grid_dimensions[1];
+                Coord min_fine_coord(
+                    g_ijk[0] << shift,
+                    g_ijk[1] << shift,
+                    g_ijk[2] << shift
+                );
+                Coord max_fine_coord(
+                    (g_ijk[0] + 1) << shift,
+                    (g_ijk[1] + 1) << shift,
+                    (g_ijk[2] + 1) << shift
+                );
 
+                ASSERT(min_fine_coord[0] < max_fine_coord[0] &&
+                    min_fine_coord[1] < max_fine_coord[1] &&
+                    min_fine_coord[2] < max_fine_coord[2],
+                    "Invalid fine coord range: min={} max={}", min_fine_coord, max_fine_coord);
 
-                                for (int i = 0; i < scalar_channels.size(); i++) {
-                                    int channel = scalar_channels[i].first;
-                                    T value;
-                                    if (channel == -1) value = tile.type(l_ijk);
-                                    else if (channel == -2) value = level;
-                                    else value = tile(channel, l_ijk);
+                for (int x = min_fine_coord[0]; x < max_fine_coord[0]; ++x) {
+                    for (int y = min_fine_coord[1]; y < max_fine_coord[1]; ++y) {
+                        for (int z = min_fine_coord[2]; z < max_fine_coord[2]; ++z) {
 
-                                    scalar_data[i]->SetValue(flat_index, value);
-                                }
+                            const int64_t ix = static_cast<int64_t>(x) - global_min[0];
+                            const int64_t iy = static_cast<int64_t>(y) - global_min[1];
+                            const int64_t iz = static_cast<int64_t>(z) - global_min[2];
 
-                                for (int i = 0; i < vec_channels.size(); i++) {
-                                    int u_channel = vec_channels[i].first;
-                                    auto u = tile(u_channel, l_ijk);
-                                    auto v = tile(u_channel + 1, l_ijk);
-                                    auto w = tile(u_channel + 2, l_ijk);
-                                    vec_data[i]->SetTuple3(flat_index, u, v, w);
-                                }
+                            ASSERT(0 <= ix && ix < nx,
+                                "ix out of range: ix={}, nx={}, x={}, global_min_x={}",
+                                ix, nx, x, global_min[0]);
+                            ASSERT(0 <= iy && iy < ny,
+                                "iy out of range: iy={}, ny={}, y={}, global_min_y={}",
+                                iy, ny, y, global_min[1]);
+                            ASSERT(0 <= iz && iz < nz,
+                                "iz out of range: iz={}, nz={}, z={}, global_min_z={}",
+                                iz, nz, z, global_min[2]);
+
+                            const int64_t flat_index_64 = ix + iy * nx + iz * nx * ny;
+
+                            ASSERT(0 <= flat_index_64 && flat_index_64 < num_cells,
+                                "flat_index out of range: flat_index={}, num_cells={}, (ix,iy,iz)=({}, {}, {}), dims=({}, {}, {})",
+                                flat_index_64, num_cells, ix, iy, iz, nx, ny, nz);
+
+                            const vtkIdType flat_index = static_cast<vtkIdType>(flat_index_64);
+
+                            for (int i = 0; i < static_cast<int>(scalar_channels.size()); i++) {
+                                int channel = scalar_channels[i].first;
+                                T value;
+                                if (channel == -1) value = tile.type(l_ijk);
+                                else if (channel == -2) value = static_cast<T>(level);
+                                else value = tile(channel, l_ijk);
+
+                                ASSERT(std::isfinite(value),
+                                    "Non-finite scalar value at channel {}, l_ijk={}, level={}", channel, l_ijk, level);
+
+                                scalar_data[i]->SetValue(flat_index, static_cast<float>(value));
+                            }
+
+                            for (int i = 0; i < static_cast<int>(vec_channels.size()); i++) {
+                                int u_channel = vec_channels[i].first;
+                                T u = tile(u_channel, l_ijk);
+                                T v = tile(u_channel + 1, l_ijk);
+                                T w = tile(u_channel + 2, l_ijk);
+
+                                ASSERT(std::isfinite(u) && std::isfinite(v) && std::isfinite(w),
+                                    "Non-finite vector value at channels [{}, {}, {}], l_ijk={}, level={}",
+                                    u_channel, u_channel + 1, u_channel + 2, l_ijk, level);
+
+                                vec_data[i]->SetTuple3(flat_index,
+                                    static_cast<float>(u),
+                                    static_cast<float>(v),
+                                    static_cast<float>(w));
                             }
                         }
                     }
@@ -584,22 +663,23 @@ namespace IOFunc {
             }
         }
 
-
-        // Step 5: Add the scalar and vector data to the structured grid
+        // Step 5: Attach as CELL DATA
         for (auto& data : scalar_data) {
-            structuredGrid->GetPointData()->AddArray(data);
+            structuredGrid->GetCellData()->AddArray(data);
         }
         for (auto& data : vec_data) {
-            structuredGrid->GetPointData()->AddArray(data);
+            structuredGrid->GetCellData()->AddArray(data);
         }
 
-        // Step 6: Write the structured grid to a .vti file
+        // Step 6: Write .vti
         vtkSmartPointer<vtkXMLImageDataWriter> writer = vtkSmartPointer<vtkXMLImageDataWriter>::New();
         writer->SetFileName(path.string().c_str());
         writer->SetInputData(structuredGrid);
         writer->SetDataModeToBinary();
         writer->SetCompressorTypeToZLib();
-        writer->Write();
+
+        const int ok = writer->Write();
+        ASSERT(ok == 1, "vtkXMLImageDataWriter failed to write {}", path.string());
 
         timer.stop(fmt::format("Output grid to structured .vti file: {}", path.string()));
     }

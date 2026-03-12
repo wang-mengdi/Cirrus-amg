@@ -30,7 +30,7 @@ void DriverMetaData::init(const fs::path& json_path, json& j) {
 }
 
 void DriverMetaData::Append_Output_Thread(std::shared_ptr<std::thread> thread_ptr) {
-	while (output_threads.size() > output_queue_size) {
+	while (output_threads.size() >= output_queue_size) {
 		auto join_ptr = output_threads.front();
 		output_threads.pop();
 		join_ptr->join();

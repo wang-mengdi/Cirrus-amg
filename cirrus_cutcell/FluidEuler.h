@@ -292,13 +292,23 @@ public:
 			//metadata.Append_Output_Thread(std::make_shared<std::thread>(IOFunc::OutputTilesAsVTU, holder, metadata.base_path / fmt::format("tiles{:04d}.vtu", metadata.current_frame)));
 			//IOFunc::OutputTilesAsVTU(holder, metadata.base_path / fmt::format("tiles{:04d}.vtu", metadata.current_frame));
 
-			metadata.Append_Output_Thread(std::make_shared<std::thread>(IOFunc::OutputPoissonGridAsStructuredVTI, holder,
+			IOFunc::OutputPoissonGridAsStructuredVTI(
+				holder,
 				std::vector<std::pair<int, std::string>>{ {-1, "type"}, { -2, "level" }, { BufChnls::vor, "vorticity" }},
 				//std::vector<std::pair<int, std::string>>{ },
 				std::vector<std::pair<int, std::string>>{ {BufChnls::u, "fluid_velocity"} },
 				//std::vector<std::pair<int, std::string>>{ { -1, "type" }, { Tile::vor_channel, "vorticity" }, { Tile::dye_channel, "dye_density" } },
 				//std::vector<std::pair<int, std::string>>{ {Tile::u_channel, "velocity"} },
-				metadata.base_path / fmt::format("fluid{:04d}.vti", metadata.current_frame)));
+				metadata.base_path / fmt::format("fluid{:04d}.vti", metadata.current_frame)
+			);
+
+			//metadata.Append_Output_Thread(std::make_shared<std::thread>(IOFunc::OutputPoissonGridAsStructuredVTI, holder,
+			//	std::vector<std::pair<int, std::string>>{ {-1, "type"}, { -2, "level" }, { BufChnls::vor, "vorticity" }},
+			//	//std::vector<std::pair<int, std::string>>{ },
+			//	std::vector<std::pair<int, std::string>>{ {BufChnls::u, "fluid_velocity"} },
+			//	//std::vector<std::pair<int, std::string>>{ { -1, "type" }, { Tile::vor_channel, "vorticity" }, { Tile::dye_channel, "dye_density" } },
+			//	//std::vector<std::pair<int, std::string>>{ {Tile::u_channel, "velocity"} },
+			//	metadata.base_path / fmt::format("fluid{:04d}.vti", metadata.current_frame)));
 
 		}
 
