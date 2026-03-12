@@ -1,4 +1,4 @@
-#include "MeshSDFAccel.h"
+#include "SDFAccel.h"
 #include <cmath>
 
 #include <tbb/parallel_for.h>
@@ -14,6 +14,41 @@ void AssertRigidTransform(const Eigen::Transform<T, 3, Eigen::Affine>& xform)
     ASSERT(R.isUnitary(T(1e-6)));
     ASSERT(std::abs(R.determinant() - T(1)) < T(1e-6));
 }
+
+
+std::vector<T> SphereSDFAccel::querySDF(const std::vector<Vec>& points, const Eigen::Transform<T, 3, Eigen::Affine>& xform) const {
+    AssertRigidTransform(xform);
+
+    const int N = static_cast<int>(points.size());
+    std::vector<T> sdf(N);
+    if (N == 0) return sdf;
+
+    const auto invX = xform.inverse();
+    const auto R = invX.linear();
+    const auto t = invX.translation();
+
+    tbb::parallel_for(
+        tbb::blocked_range<int>(0, N, 4096),
+        [&](const tbb::blocked_range<int>& r)
+        {
+            for (int i = r.begin(); i != r.end(); ++i) {
+                const auto& p = points[i];
+
+                const T qx = R(0, 0) * p[0] + R(0, 1) * p[1] + R(0, 2) * p[2] + t(0);
+                const T qy = R(1, 0) * p[0] + R(1, 1) * p[1] + R(1, 2) * p[2] + t(1);
+                const T qz = R(2, 0) * p[0] + R(2, 1) * p[1] + R(2, 2) * p[2] + t(2);
+
+                const T dx = qx - center_[0];
+                const T dy = qy - center_[1];
+                const T dz = qz - center_[2];
+
+                sdf[i] = std::sqrt(dx * dx + dy * dy + dz * dz) - radius_;
+            }
+        });
+
+    return sdf;
+}
+
 
 void MeshSDFAccel::init(const fs::path& obj_path)
 {

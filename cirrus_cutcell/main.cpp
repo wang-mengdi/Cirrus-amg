@@ -2,7 +2,6 @@
 #include "FluidEulerInitializer.h"
 #include <vector>
 #include <fmt/core.h>
-#include "MeshSDFAccel.h"
 #include <random>
 
 

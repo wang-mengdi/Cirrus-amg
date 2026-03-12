@@ -16,7 +16,6 @@
 #include "MarkerParticles.h"
 #include "PoissonGrid.h"
 
-
 #include <polyscope/polyscope.h>
 #include <polyscope/point_cloud.h>
 #include "polyscope/surface_mesh.h"
@@ -96,7 +95,7 @@ public:
 	thrust::device_vector<Particle> pfm_particles_d;
 
 	FluidParams mParams;
-	std::shared_ptr<MeshSDFAccel> mMeshSDFAccel = nullptr;
+	std::shared_ptr<SDFAccelBase> mMeshSDFAccel = nullptr;
 
 
 	RandomGenerator mRamdonGenerator;
@@ -175,7 +174,12 @@ public:
 		//fmt::print("current path: {}\n", fs::current_path().string());
 
 		std::string mesh_file = Json::Value<std::string>(j, "mesh_file", "mesh.obj");
-		if (mesh_file != "") {
+
+		if (mesh_file == "SPHERE") {
+			T sphere_radius = Json::Value<T>(j, "sphere_radius", (T)0.1);
+			mMeshSDFAccel = std::make_shared<SphereSDFAccel>(sphere_radius);
+		}
+		else if (mesh_file != "") {
 			mMeshSDFAccel = std::make_shared<MeshSDFAccel>(mesh_file);
 		}
 		else {
