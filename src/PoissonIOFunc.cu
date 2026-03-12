@@ -183,7 +183,8 @@ namespace IOFunc {
     }
 
     void OutputParticleSystemAsVTU(std::shared_ptr<thrust::host_vector<Particle>> particles_ptr, fs::path path) {
-        fmt::print("Output Particle System to vtu file: {}\n", path.string());
+        CPUTimer timer;
+        //fmt::print("Output Particle System to vtu file: {}\n", path.string());
         auto& particles = *particles_ptr;
 
         // setup VTK
@@ -223,6 +224,9 @@ namespace IOFunc {
         writer->SetInputData(unstructured_grid);
         writer->SetDataModeToBinary();  // Optional: Use binary mode for smaller file size
         writer->Write();
+        
+		auto elapsed = timer.stop();
+		Info("Finished writing particle system to VTU file: {} ({} ms)", path.string(), elapsed);
     }
 
   //  void OutputMarkerParticleSystemAsVTU(const thrust::device_vector<MarkerParticle>& particles_d, const fs::path& path) {
@@ -681,7 +685,8 @@ namespace IOFunc {
         const int ok = writer->Write();
         ASSERT(ok == 1, "vtkXMLImageDataWriter failed to write {}", path.string());
 
-        timer.stop(fmt::format("Output grid to structured .vti file: {}", path.string()));
+        double elapsed = timer.stop();
+		Info("Finished writing Poisson grid to structured VTI file: {} ({} ms)", path.string(), elapsed);
     }
 
     void AddTilesToPolyscopeVolumetricMesh(HADeviceGrid<Tile>& grid, const uint8_t types, std::string name) {
