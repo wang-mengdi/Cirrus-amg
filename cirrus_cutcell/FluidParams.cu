@@ -267,7 +267,7 @@ __hostdev__ Eigen::Transform<T, 3, Eigen::Affine> FluidParams::meshToWorldTransf
 		// -----------------------------
 		const T center_x = (T)0.5;
 		const T center_y = (T)0.5;
-		const T orbit_r = (T)0.2;
+		const T orbit_r = (T)0.25;
 
 		const T z0 = (T)1.7;
 		const T z1 = (T)0.3;
@@ -302,7 +302,7 @@ __hostdev__ Eigen::Transform<T, 3, Eigen::Affine> FluidParams::meshToWorldTransf
 		// True barrel roll: 360 deg in 2 seconds
 		// So at t = 1, roll = 180 deg
 		// -----------------------------
-		const T roll = s * (T)(2.0 * M_PI);
+		const T roll = s * (T)(2.0 * M_PI) + (T)(M_PI * 0.5); // initial +y up
 		Eigen::Matrix<T, 3, 3> R_roll =
 			AngleAxisT(roll, forward_base).toRotationMatrix();
 
@@ -314,7 +314,7 @@ __hostdev__ Eigen::Transform<T, 3, Eigen::Affine> FluidParams::meshToWorldTransf
 		// Optional small angle of attack
 		// Positive alpha should make the nose pitch upward relative to body up.
 		// -----------------------------
-		const T alpha_deg = (T)0;   // change to 10 if desired
+		const T alpha_deg = (T)10;   // change to 10 if desired
 		const T alpha = alpha_deg * (T)M_PI / (T)180.0;
 
 		Eigen::Matrix<T, 3, 3> R_attack =
