@@ -3,70 +3,164 @@
 #include <tbb/parallel_for.h>
 #include "CPUTimer.h"
 
-void CalculateSDFOnGivenTiles(HADeviceGrid<Tile>& grid, const thrust::host_vector<HATileInfo<Tile>>& tile_infos, int node_sdf_channel, const MeshSDFAccel& mesh_sdf, const Eigen::Transform<T, 3, Eigen::Affine>& xform)
+void CalculateTSDFOnGivenTiles(HADeviceGrid<Tile>& grid,	const thrust::host_vector<HATileInfo<Tile>>& tile_infos, int node_sdf_channel, const MeshSDFAccel& mesh_sdf, const Eigen::Transform<T, 3, Eigen::Affine>& xform, T truncation)
 {
-	cudaDeviceSynchronize();  CPUTimer timer; timer.start();
+	cudaDeviceSynchronize();
+	CPUTimer timer;
+	timer.start();
+
 	if (tile_infos.empty()) return;
+	ASSERT(truncation > 0, "truncation should be positive, got {}", truncation);
 
 	auto h_acc = grid.hostAccessor();
 
-	// 1. gather corners on host
-	std::vector<Vec> corners(tile_infos.size() * Tile::NODESIZE);
+	const int num_tiles = static_cast<int>(tile_infos.size());
+
+	// -------------------------------------------------------------------------
+	// Step 1: query tile center sdf, then classify tiles
+	// -------------------------------------------------------------------------
+	std::vector<Vec> centers(num_tiles);
 
 	tbb::parallel_for(
-		tbb::blocked_range<size_t>(0, tile_infos.size()),
-		[&](const tbb::blocked_range<size_t>& r) {
-			for (size_t local_tile_idx = r.begin(); local_tile_idx != r.end(); ++local_tile_idx) {
+		tbb::blocked_range<int>(0, num_tiles),
+		[&](const tbb::blocked_range<int>& r) {
+			for (int local_tile_idx = r.begin(); local_tile_idx != r.end(); ++local_tile_idx) {
 				const auto& info = tile_infos[local_tile_idx];
-				for (int node_idx = 0; node_idx < Tile::NODESIZE; ++node_idx) {
-					Coord r_ijk = h_acc.localNodeOffsetToCoord(node_idx);
-					corners[local_tile_idx * Tile::NODESIZE + node_idx] = h_acc.cellCorner(info, r_ijk);
-				}
+
+				Coord min_node_coord(0, 0, 0);
+				Coord max_node_coord(Tile::DIM, Tile::DIM, Tile::DIM);
+
+				Vec pmin = h_acc.cellCorner(info, min_node_coord);
+				Vec pmax = h_acc.cellCorner(info, max_node_coord);
+				centers[local_tile_idx] = (pmin + pmax) * (T)0.5;
 			}
 		});
 
-	// 2. query sdf on host
-	std::vector<T> h_sdfs = mesh_sdf.querySDF(corners, xform);
-	ASSERT(h_sdfs.size() == tile_infos.size() * Tile::NODESIZE,
-		"h_sdfs size {} mismatch expected {}", h_sdfs.size(), tile_infos.size() * Tile::NODESIZE);
+	std::vector<T> center_sdfs = mesh_sdf.querySDF(centers, xform);
+	ASSERT(static_cast<int>(center_sdfs.size()) == num_tiles,
+		"center_sdfs size {} mismatch expected {}", center_sdfs.size(), num_tiles);
 
-	// 3. move tile infos and sdfs to device
-	thrust::device_vector<HATileInfo<Tile>> d_infos = tile_infos;
-	thrust::device_vector<T> d_sdfs = h_sdfs;
+	thrust::host_vector<HATileInfo<Tile>> far_pos_tiles;
+	thrust::host_vector<HATileInfo<Tile>> far_neg_tiles;
+	thrust::host_vector<HATileInfo<Tile>> near_tiles;
 
-	auto d_infos_ptr = thrust::raw_pointer_cast(d_infos.data());
-	auto d_sdfs_ptr = thrust::raw_pointer_cast(d_sdfs.data());
-	const int num_tiles = static_cast<int>(tile_infos.size());
-	const int total_nodes = num_tiles * Tile::NODESIZE;
-	const T h0 = grid.mH0;
+	far_pos_tiles.reserve(num_tiles);
+	far_neg_tiles.reserve(num_tiles);
+	near_tiles.reserve(num_tiles);
 
-	// 4. scatter back on device
-	auto acc_d = grid.deviceAccessor();
-	LaunchIndexFunc(
-		[=] __device__(int seq_idx) {
-		const int local_tile_idx = seq_idx / Tile::NODESIZE;
-		const int node_idx = seq_idx % Tile::NODESIZE;
+	for (int local_tile_idx = 0; local_tile_idx < num_tiles; ++local_tile_idx) {
+		const auto& info = tile_infos[local_tile_idx];
 
-		HATileInfo<Tile> info = d_infos_ptr[local_tile_idx];
-		auto& tile = info.tile();
+		const T dx = h_acc.voxelSize(info.mLevel);
+		const T tile_extent = dx * (T)Tile::DIM;
+		const T r = (T)std::sqrt((T)3) * (T)0.5 * tile_extent;
 
-		Coord r_ijk = acc_d.localNodeOffsetToCoord(node_idx);
+		const T phi_c = center_sdfs[local_tile_idx];
 
-		tile.node(node_sdf_channel, r_ijk) = d_sdfs_ptr[seq_idx];
-	},
-		total_nodes
-	);
+		if (phi_c > truncation + r) {
+			far_pos_tiles.push_back(info);
+		}
+		else if (phi_c < -truncation - r) {
+			far_neg_tiles.push_back(info);
+		}
+		else {
+			near_tiles.push_back(info);
+		}
+	}
 
-	//print sdf calc time and throughput
-	cudaDeviceSynchronize(); double elapsed = timer.stop();
+	// -------------------------------------------------------------------------
+	// Step 2: fill far tiles directly with +/- truncation
+	// -------------------------------------------------------------------------
+	auto FillTilesWithConstantTSDF =
+		[&](const thrust::host_vector<HATileInfo<Tile>>& fill_tiles, T value) {
+		if (fill_tiles.empty()) return;
 
-	Info("CalculateSDFOnGivenTiles: calculated sdf on {}M nodes in {} ms, throughput: {}M nodes/s", total_nodes / 1e6, elapsed, total_nodes / elapsed / 1000.0);
+		thrust::device_vector<HATileInfo<Tile>> d_infos = fill_tiles;
+		auto d_infos_ptr = thrust::raw_pointer_cast(d_infos.data());
+		const int total_nodes = static_cast<int>(fill_tiles.size()) * Tile::NODESIZE;
+
+		LaunchIndexFunc(
+			[=] __device__(int seq_idx) {
+			const int local_tile_idx = seq_idx / Tile::NODESIZE;
+			const int node_idx = seq_idx % Tile::NODESIZE;
+
+			HATileInfo<Tile> info = d_infos_ptr[local_tile_idx];
+			auto& tile = info.tile();
+			tile.node(node_sdf_channel, node_idx) = value;
+		},
+			total_nodes
+		);
+		};
+
+	FillTilesWithConstantTSDF(far_pos_tiles, truncation);
+	FillTilesWithConstantTSDF(far_neg_tiles, -truncation);
+
+	// -------------------------------------------------------------------------
+	// Step 3: compute exact sdf only on near tiles, then clamp to [-trunc, trunc]
+	// -------------------------------------------------------------------------
+	if (!near_tiles.empty()) {
+		std::vector<Vec> corners(near_tiles.size() * Tile::NODESIZE);
+
+		tbb::parallel_for(
+			tbb::blocked_range<size_t>(0, near_tiles.size()),
+			[&](const tbb::blocked_range<size_t>& r) {
+				for (size_t local_tile_idx = r.begin(); local_tile_idx != r.end(); ++local_tile_idx) {
+					const auto& info = near_tiles[local_tile_idx];
+					for (int node_idx = 0; node_idx < Tile::NODESIZE; ++node_idx) {
+						Coord r_ijk = h_acc.localNodeOffsetToCoord(node_idx);
+						corners[local_tile_idx * Tile::NODESIZE + node_idx] = h_acc.cellCorner(info, r_ijk);
+					}
+				}
+			});
+
+		std::vector<T> h_sdfs = mesh_sdf.querySDF(corners, xform);
+		ASSERT(h_sdfs.size() == near_tiles.size() * Tile::NODESIZE,
+			"h_sdfs size {} mismatch expected {}", h_sdfs.size(), near_tiles.size() * Tile::NODESIZE);
+
+		thrust::device_vector<HATileInfo<Tile>> d_infos = near_tiles;
+		thrust::device_vector<T> d_sdfs = h_sdfs;
+
+		auto d_infos_ptr = thrust::raw_pointer_cast(d_infos.data());
+		auto d_sdfs_ptr = thrust::raw_pointer_cast(d_sdfs.data());
+		const int total_nodes = static_cast<int>(near_tiles.size()) * Tile::NODESIZE;
+
+		LaunchIndexFunc(
+			[=] __device__(int seq_idx) {
+			const int local_tile_idx = seq_idx / Tile::NODESIZE;
+			const int node_idx = seq_idx % Tile::NODESIZE;
+
+			HATileInfo<Tile> info = d_infos_ptr[local_tile_idx];
+			auto& tile = info.tile();
+
+			T sdf = d_sdfs_ptr[seq_idx];
+			if (sdf > truncation) sdf = truncation;
+			if (sdf < -truncation) sdf = -truncation;
+
+			tile.node(node_sdf_channel, node_idx) = sdf;
+		},
+			total_nodes
+		);
+	}
+
+	cudaDeviceSynchronize();
+	double elapsed = timer.stop();
+
+	const int total_nodes_all = num_tiles * Tile::NODESIZE;
+	const int total_nodes_near = static_cast<int>(near_tiles.size()) * Tile::NODESIZE;
+
+	Info("CalculateSDFOnGivenTiles: total {} tiles, near {} tiles, far+ {} tiles, far- {} tiles",
+		num_tiles, near_tiles.size(), far_pos_tiles.size(), far_neg_tiles.size());
+	Info("CalculateSDFOnGivenTiles: wrote TSDF on {}M nodes in {} ms, exact queries on {}M nodes, throughput: {}M nodes/s",
+		total_nodes_all / 1e6,
+		elapsed,
+		total_nodes_near / 1e6,
+		total_nodes_all / elapsed / 1000.0);
 }
 
 // xform is the affine transform from mesh-local to world coordinates.
 // launch on launch_types
-void CalculateSDFOnNodes(HADeviceGrid<Tile>& grid, int node_sdf_channel, const MeshSDFAccel& mesh_sdf, const uint8_t launch_types, const Eigen::Transform<T, 3, Eigen::Affine>& xform) {
-	CalculateSDFOnGivenTiles(grid, grid.hAllTiles, node_sdf_channel, mesh_sdf, xform);
+void CalculateTSDFOnNodes(HADeviceGrid<Tile>& grid, int node_sdf_channel, const MeshSDFAccel& mesh_sdf, const uint8_t launch_types, const Eigen::Transform<T, 3, Eigen::Affine>& xform, const T truncation) {
+	CalculateTSDFOnGivenTiles(grid, grid.hAllTiles, node_sdf_channel, mesh_sdf, xform, truncation);
 
 	////step 1: gather tile corners to a std::vector<Vec>
 	//std::vector<Vec> corners(grid.hAllTiles.size() * Tile::NODESIZE);

@@ -69,7 +69,10 @@ public:
     }
 
     __hostdev__ T& node(const int channel, const Coord& l_ijk) { return mData[channel][l_ijk[0] * (DIM + 1) * (DIM + 1) + l_ijk[1] * (DIM + 1) + l_ijk[2]]; }
+	__hostdev__ T& node(const int channel, const int idx) { return mData[channel][idx]; }
     __hostdev__ const T& node(const int channel, const Coord& l_ijk) const { return mData[channel][l_ijk[0] * (DIM + 1) * (DIM + 1) + l_ijk[1] * (DIM + 1) + l_ijk[2]]; }
+	__hostdev__ const T& node(const int channel, const int idx) const { return mData[channel][idx]; }
+
 
     __hostdev__ uint8_t& type(const Coord& l_ijk) { return mCellType[CoordAcc::localCoordToOffset(l_ijk)]; }
 	__hostdev__ uint8_t& type(const int idx) { return mCellType[idx]; }

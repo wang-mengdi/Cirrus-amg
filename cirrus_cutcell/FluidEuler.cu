@@ -628,7 +628,10 @@ void FluidEuler::iterativeNodeSDFAndRefineNarrowBand(HADeviceGrid<Tile>& grid, c
 {
 	auto params = mParams;
 	auto xform = params.meshToWorldTransform(current_time);
-	CalculateSDFOnNodes(grid, BufChnls::sdf, *mMeshSDFAccel, LEAF | NONLEAF | GHOST, xform);
+	auto h_acc = grid.hostAccessor();
+	auto truncation = h_acc.voxelSize(params.mFineLevel) * (max(solid_relative_bandwidth, fluid_relative_bandwidth) + 1);//should be slightly larger than dx*bandwidth, because the refinment predicate uses > and <
+	ASSERT(max(solid_relative_bandwidth, fluid_relative_bandwidth) > sqrt(3));
+	CalculateTSDFOnNodes(grid, BufChnls::sdf, *mMeshSDFAccel, LEAF | NONLEAF | GHOST, xform, truncation);
 	while (true) {
 		auto levelTarget = [=]__device__(const HATileAccessor<Tile> &acc, const HATileInfo<Tile> &info) ->int {
 			auto h = acc.voxelSize(params.mFineLevel);
@@ -661,7 +664,7 @@ void FluidEuler::iterativeNodeSDFAndRefineNarrowBand(HADeviceGrid<Tile>& grid, c
 		std::vector<HATileInfo<Tile>> refined_tiles;
 		auto refine_cnts = grid.refineStep(levelTarget, false, &refined_tiles);
 		grid.spawnGhostTiles(false, &refined_tiles);
-		CalculateSDFOnGivenTiles(grid, refined_tiles, BufChnls::sdf, *mMeshSDFAccel, xform);
+		CalculateTSDFOnGivenTiles(grid, refined_tiles, BufChnls::sdf, *mMeshSDFAccel, xform, truncation);
 
 		auto cnt = std::accumulate(refine_cnts.begin(), refine_cnts.end(), 0);
 		if (cnt == 0) break;
