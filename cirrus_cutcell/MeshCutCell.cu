@@ -1,9 +1,11 @@
 #include "MeshCutCell.h"
 #include "AMGSolver.h"
 #include <tbb/parallel_for.h>
+#include "CPUTimer.h"
 
 void CalculateSDFOnGivenTiles(HADeviceGrid<Tile>& grid, const thrust::host_vector<HATileInfo<Tile>>& tile_infos, int node_sdf_channel, const MeshSDFAccel& mesh_sdf, const Eigen::Transform<T, 3, Eigen::Affine>& xform)
 {
+	cudaDeviceSynchronize();  CPUTimer timer; timer.start();
 	if (tile_infos.empty()) return;
 
 	auto h_acc = grid.hostAccessor();
@@ -54,6 +56,11 @@ void CalculateSDFOnGivenTiles(HADeviceGrid<Tile>& grid, const thrust::host_vecto
 	},
 		total_nodes
 	);
+
+	//print sdf calc time and throughput
+	cudaDeviceSynchronize(); double elapsed = timer.stop();
+
+	Info("CalculateSDFOnGivenTiles: calculated sdf on {}M nodes in {} ms, throughput: {}M nodes/s", total_nodes / 1e6, elapsed, total_nodes / elapsed / 1000.0);
 }
 
 // xform is the affine transform from mesh-local to world coordinates.
