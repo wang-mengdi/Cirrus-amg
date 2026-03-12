@@ -460,11 +460,7 @@ namespace IOFunc {
         timer.stop(fmt::format("Output grid to unstructured .vtu file: {}", path.string()));
     }
 
-    void OutputPoissonGridAsStructuredVTI(
-        std::shared_ptr<HAHostTileHolder<Tile>> holder_ptr,
-        const std::vector<std::pair<int, std::string>> scalar_channels,
-        std::vector<std::pair<int, std::string>> vec_channels,
-        const fs::path& path)
+    void OutputPoissonGridAsStructuredVTI(std::shared_ptr<HAHostTileHolder<Tile>> holder_ptr, const std::vector<std::pair<int, std::string>> scalar_channels, std::vector<std::pair<int, std::string>> vec_channels, const fs::path& path)
     {
         CPUTimer<std::chrono::milliseconds> timer;
         timer.start();
@@ -482,11 +478,9 @@ namespace IOFunc {
 
         ASSERT(!leaf_infos.empty(), "OutputPoissonGridAsStructuredVTI: no leaf tiles to output");
 
-        using Coord = typename Tile::CoordType;
         auto acc = holder.coordAccessor();
         const int max_level = holder.mMaxLevel;
 
-        // Step 1: Find the global fine-cell coordinate range [global_min, global_max)
         Coord global_min(
             std::numeric_limits<int>::max(),
             std::numeric_limits<int>::max(),
@@ -500,7 +494,7 @@ namespace IOFunc {
 
         for (auto& info : leaf_infos) {
             const int level = info.mLevel;
-            const int shift = holder.mMaxLevel - level;
+            const int shift = max_level - level;
 
             for (Coord l_ijk : {Coord(0, 0, 0), Coord(Tile::DIM - 1, Tile::DIM - 1, Tile::DIM - 1)}) {
                 Coord g_ijk = acc.localToGlobalCoord(info, l_ijk);
@@ -526,7 +520,6 @@ namespace IOFunc {
             }
         }
 
-        // cell dimensions
         Coord cell_dims = global_max - global_min;
 
         ASSERT(cell_dims[0] > 0 && cell_dims[1] > 0 && cell_dims[2] > 0,
@@ -541,7 +534,6 @@ namespace IOFunc {
         ASSERT(num_cells > 0,
             "OutputPoissonGridAsStructuredVTI: num_cells must be positive, got {}", num_cells);
 
-        // Step 2: vtkImageData dimensions are point dimensions = cell dims + 1
         vtkNew<vtkImageData> structuredGrid;
         structuredGrid->SetDimensions(cell_dims[0] + 1, cell_dims[1] + 1, cell_dims[2] + 1);
         structuredGrid->SetOrigin(global_min[0], global_min[1], global_min[2]);
@@ -549,15 +541,23 @@ namespace IOFunc {
         auto h = acc.voxelSize(max_level);
         structuredGrid->SetSpacing(h, h, h);
 
-        // Step 3: Allocate cell data arrays
         std::vector<vtkSmartPointer<vtkFloatArray>> scalar_data;
         std::vector<vtkSmartPointer<vtkFloatArray>> vec_data;
+        std::vector<float*> scalar_ptrs;
+        std::vector<float*> vec_ptrs;
+
+        scalar_data.reserve(scalar_channels.size());
+        vec_data.reserve(vec_channels.size());
+        scalar_ptrs.reserve(scalar_channels.size());
+        vec_ptrs.reserve(vec_channels.size());
 
         for (const auto& scalar_channel : scalar_channels) {
             auto data = vtkSmartPointer<vtkFloatArray>::New();
             data->SetName(scalar_channel.second.c_str());
             data->SetNumberOfComponents(1);
-            data->SetNumberOfTuples(num_cells);
+            data->SetNumberOfTuples(static_cast<vtkIdType>(num_cells));
+            data->Fill(0.0f);
+            scalar_ptrs.push_back(data->GetPointer(0));
             scalar_data.push_back(data);
         }
 
@@ -565,25 +565,25 @@ namespace IOFunc {
             auto data = vtkSmartPointer<vtkFloatArray>::New();
             data->SetName(vec_channel.second.c_str());
             data->SetNumberOfComponents(3);
-            data->SetNumberOfTuples(num_cells);
-            vec_data.push_back(data);
-        }
-
-        // Optional: initialize arrays to 0 for safety/debug readability
-        for (auto& data : scalar_data) {
-            data->Fill(0.0f);
-        }
-        for (auto& data : vec_data) {
+            data->SetNumberOfTuples(static_cast<vtkIdType>(num_cells));
             data->FillComponent(0, 0.0);
             data->FillComponent(1, 0.0);
             data->FillComponent(2, 0.0);
+            vec_ptrs.push_back(data->GetPointer(0));
+            vec_data.push_back(data);
         }
 
-        // Step 4: Fill cell data
+        struct Vec3f {
+            float x, y, z;
+        };
+
+        std::vector<float> scalar_vals(scalar_channels.size());
+        std::vector<Vec3f> vec_vals(vec_channels.size());
+
         for (auto& info : leaf_infos) {
             const auto& tile = info.tile();
             const int level = info.mLevel;
-            const int shift = holder.mMaxLevel - level;
+            const int shift = max_level - level;
 
             ASSERT(shift >= 0, "OutputPoissonGridAsStructuredVTI: negative shift {}", shift);
 
@@ -591,75 +591,68 @@ namespace IOFunc {
                 Coord l_ijk = acc.localOffsetToCoord(cell_idx);
                 Coord g_ijk = acc.localToGlobalCoord(info, l_ijk);
 
-                Coord min_fine_coord(
-                    g_ijk[0] << shift,
-                    g_ijk[1] << shift,
-                    g_ijk[2] << shift
-                );
-                Coord max_fine_coord(
-                    (g_ijk[0] + 1) << shift,
-                    (g_ijk[1] + 1) << shift,
-                    (g_ijk[2] + 1) << shift
-                );
+                const int x0 = (g_ijk[0] << shift) - global_min[0];
+                const int y0 = (g_ijk[1] << shift) - global_min[1];
+                const int z0 = (g_ijk[2] << shift) - global_min[2];
+                const int span = 1 << shift;
 
-                ASSERT(min_fine_coord[0] < max_fine_coord[0] &&
-                    min_fine_coord[1] < max_fine_coord[1] &&
-                    min_fine_coord[2] < max_fine_coord[2],
-                    "Invalid fine coord range: min={} max={}", min_fine_coord, max_fine_coord);
+                const int x1 = x0 + span;
+                const int y1 = y0 + span;
+                const int z1 = z0 + span;
 
-                for (int x = min_fine_coord[0]; x < max_fine_coord[0]; ++x) {
-                    for (int y = min_fine_coord[1]; y < max_fine_coord[1]; ++y) {
-                        for (int z = min_fine_coord[2]; z < max_fine_coord[2]; ++z) {
+                ASSERT(0 <= x0 && x0 < x1 && x1 <= nx, "x range invalid: [{}, {}) nx={}", x0, x1, nx);
+                ASSERT(0 <= y0 && y0 < y1 && y1 <= ny, "y range invalid: [{}, {}) ny={}", y0, y1, ny);
+                ASSERT(0 <= z0 && z0 < z1 && z1 <= nz, "z range invalid: [{}, {}) nz={}", z0, z1, nz);
 
-                            const int64_t ix = static_cast<int64_t>(x) - global_min[0];
-                            const int64_t iy = static_cast<int64_t>(y) - global_min[1];
-                            const int64_t iz = static_cast<int64_t>(z) - global_min[2];
+                for (int i = 0; i < static_cast<int>(scalar_channels.size()); i++) {
+                    int channel = scalar_channels[i].first;
+                    T value;
+                    if (channel == -1) value = static_cast<T>(tile.type(l_ijk));
+                    else if (channel == -2) value = static_cast<T>(level);
+                    else value = tile(channel, l_ijk);
 
-                            ASSERT(0 <= ix && ix < nx,
-                                "ix out of range: ix={}, nx={}, x={}, global_min_x={}",
-                                ix, nx, x, global_min[0]);
-                            ASSERT(0 <= iy && iy < ny,
-                                "iy out of range: iy={}, ny={}, y={}, global_min_y={}",
-                                iy, ny, y, global_min[1]);
-                            ASSERT(0 <= iz && iz < nz,
-                                "iz out of range: iz={}, nz={}, z={}, global_min_z={}",
-                                iz, nz, z, global_min[2]);
+                    ASSERT(std::isfinite(value),
+                        "Non-finite scalar value at channel {}, l_ijk={}, level={}", channel, l_ijk, level);
 
-                            const int64_t flat_index_64 = ix + iy * nx + iz * nx * ny;
+                    scalar_vals[i] = static_cast<float>(value);
+                }
 
-                            ASSERT(0 <= flat_index_64 && flat_index_64 < num_cells,
-                                "flat_index out of range: flat_index={}, num_cells={}, (ix,iy,iz)=({}, {}, {}), dims=({}, {}, {})",
-                                flat_index_64, num_cells, ix, iy, iz, nx, ny, nz);
+                for (int i = 0; i < static_cast<int>(vec_channels.size()); i++) {
+                    int u_channel = vec_channels[i].first;
+                    T u = tile(u_channel, l_ijk);
+                    T v = tile(u_channel + 1, l_ijk);
+                    T w = tile(u_channel + 2, l_ijk);
 
-                            const vtkIdType flat_index = static_cast<vtkIdType>(flat_index_64);
+                    ASSERT(std::isfinite(u) && std::isfinite(v) && std::isfinite(w),
+                        "Non-finite vector value at channels [{}, {}, {}], l_ijk={}, level={}",
+                        u_channel, u_channel + 1, u_channel + 2, l_ijk, level);
 
-                            for (int i = 0; i < static_cast<int>(scalar_channels.size()); i++) {
-                                int channel = scalar_channels[i].first;
-                                T value;
-                                if (channel == -1) value = tile.type(l_ijk);
-                                else if (channel == -2) value = static_cast<T>(level);
-                                else value = tile(channel, l_ijk);
+                    vec_vals[i] = Vec3f{ static_cast<float>(u), static_cast<float>(v), static_cast<float>(w) };
+                }
 
-                                ASSERT(std::isfinite(value),
-                                    "Non-finite scalar value at channel {}, l_ijk={}, level={}", channel, l_ijk, level);
+                for (int z = z0; z < z1; ++z) {
+                    const int64_t z_base = static_cast<int64_t>(z) * nx * ny;
+                    for (int y = y0; y < y1; ++y) {
+                        const int64_t row_base = static_cast<int64_t>(y) * nx + z_base;
+                        const int64_t begin = row_base + x0;
+                        const int64_t end = row_base + x1;
 
-                                scalar_data[i]->SetValue(flat_index, static_cast<float>(value));
-                            }
+                        for (int i = 0; i < static_cast<int>(scalar_ptrs.size()); i++) {
+                            std::fill(scalar_ptrs[i] + begin, scalar_ptrs[i] + end, scalar_vals[i]);
+                        }
 
-                            for (int i = 0; i < static_cast<int>(vec_channels.size()); i++) {
-                                int u_channel = vec_channels[i].first;
-                                T u = tile(u_channel, l_ijk);
-                                T v = tile(u_channel + 1, l_ijk);
-                                T w = tile(u_channel + 2, l_ijk);
+                        const int row_len = x1 - x0;
+                        for (int i = 0; i < static_cast<int>(vec_ptrs.size()); i++) {
+                            float* ptr = vec_ptrs[i] + 3 * begin;
+                            const float vx = vec_vals[i].x;
+                            const float vy = vec_vals[i].y;
+                            const float vz = vec_vals[i].z;
 
-                                ASSERT(std::isfinite(u) && std::isfinite(v) && std::isfinite(w),
-                                    "Non-finite vector value at channels [{}, {}, {}], l_ijk={}, level={}",
-                                    u_channel, u_channel + 1, u_channel + 2, l_ijk, level);
-
-                                vec_data[i]->SetTuple3(flat_index,
-                                    static_cast<float>(u),
-                                    static_cast<float>(v),
-                                    static_cast<float>(w));
+                            for (int k = 0; k < row_len; ++k) {
+                                ptr[0] = vx;
+                                ptr[1] = vy;
+                                ptr[2] = vz;
+                                ptr += 3;
                             }
                         }
                     }
@@ -667,7 +660,6 @@ namespace IOFunc {
             }
         }
 
-        // Step 5: Attach as CELL DATA
         for (auto& data : scalar_data) {
             structuredGrid->GetCellData()->AddArray(data);
         }
@@ -675,73 +667,17 @@ namespace IOFunc {
             structuredGrid->GetCellData()->AddArray(data);
         }
 
-        // Step 6: Write .vti
         vtkSmartPointer<vtkXMLImageDataWriter> writer = vtkSmartPointer<vtkXMLImageDataWriter>::New();
         writer->SetFileName(path.string().c_str());
         writer->SetInputData(structuredGrid);
         writer->SetDataModeToBinary();
-        writer->SetCompressorTypeToZLib();
+        // writer->SetCompressorTypeToZLib();
 
         const int ok = writer->Write();
         ASSERT(ok == 1, "vtkXMLImageDataWriter failed to write {}", path.string());
 
         double elapsed = timer.stop();
         Pass("Finished writing Poisson grid to structured VTI file: {} ({} ms)", path.string(), elapsed);
-    }
-
-    void AddTilesToPolyscopeVolumetricMesh(HADeviceGrid<Tile>& grid, const uint8_t types, std::string name) {
-        using Coord = typename Tile::CoordType;
-
-        int hex_offs[8][3] = {
-            {0,0,0}, {1,0,0}, {1,1,0}, {0,1,0},
-            {0,0,1}, {1,0,1}, {1,1,1}, {0,1,1}
-        };
-
-        std::vector<Vec> vertices;
-        std::vector<std::array<size_t, 8>> hexCells;
-        std::vector<int> cellLevels;
-        std::vector<Coord> cellCoords;
-        std::vector<int> cellInterestFlags;
-
-        auto acc = grid.hostAccessor();
-
-        for (int level = 0; level < grid.mNumLevels; level++) {
-            for (int i = 0; i < grid.hNumTiles[level]; i++) {
-                auto& info = grid.hTileArrays[level][i];
-                if (info.mType & types) {
-                    auto bbox = acc.tileBBox(info);
-                    std::array<size_t, 8> hexCell;
-
-                    for (int s = 0; s < 8; s++) {
-                        Coord off(hex_offs[s][0], hex_offs[s][1], hex_offs[s][2]);
-                        auto p = bbox.min() + Vec(off[0], off[1], off[2]) * bbox.dim();
-                        Vec vertex(p[0], p[1], p[2]);
-
-                        auto it = std::find(vertices.begin(), vertices.end(), vertex);
-                        if (it != vertices.end()) {
-                            hexCell[s] = std::distance(vertices.begin(), it);
-                        }
-                        else {
-                            vertices.push_back(vertex);
-                            hexCell[s] = vertices.size() - 1;
-                        }
-                    }
-
-                    hexCells.push_back(hexCell);
-                    cellLevels.push_back(level);
-                    cellCoords.push_back(info.mTileCoord);
-
-                    auto tile = info.getTile(DEVICE);
-                    cellInterestFlags.push_back(tile.mIsInterestArea);
-                }
-            }
-        }
-
-        auto mesh = polyscope::registerVolumeMesh(name, vertices, hexCells);
-        mesh->addCellScalarQuantity("Level", cellLevels);
-        mesh->addCellVectorQuantity("Tile Coord", cellCoords);
-		mesh->addCellScalarQuantity("Interest Flag", cellInterestFlags);
-        mesh->setTransparency(0.2);
     }
 
     void AddLeveledTilesToPolyscopeVolumetricMesh(HADeviceGrid<Tile>& grid, const uint8_t types, const std::string& base_name) {
