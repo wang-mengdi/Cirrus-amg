@@ -51,8 +51,14 @@ public:
     }
     __hostdev__ T& operator ()(const int channel, const int idx) {
 		return mData[channel][idx];
-
     }
+    __hostdev__ const T& operator()(const uint32_t channel, const Coord& l_ijk) const {
+        return mData[channel][CoordAcc::localCoordToOffset(l_ijk)];
+    }
+    __hostdev__ const T& operator()(const int channel, const int idx) const {
+        return mData[channel][idx];
+    }
+
 	__hostdev__ T value(const uint32_t channel, const Coord& l_ijk) const {
 		return mData[channel][CoordAcc::localCoordToOffset(l_ijk)];
 	}
@@ -67,6 +73,8 @@ public:
 
     __hostdev__ uint8_t& type(const Coord& l_ijk) { return mCellType[CoordAcc::localCoordToOffset(l_ijk)]; }
 	__hostdev__ uint8_t& type(const int idx) { return mCellType[idx]; }
+    __hostdev__ const uint8_t& type(const Coord& l_ijk) const { return mCellType[CoordAcc::localCoordToOffset(l_ijk)]; }
+    __hostdev__ const uint8_t& type(const int idx) const { return mCellType[idx]; }
 
     __hostdev__ T cellInterp(const uint32_t cell_channel, const uint32_t node_channel, const Coord& l_ijk, const VecType& frac) const {
         T node_intp = 0, node_avg = 0;
