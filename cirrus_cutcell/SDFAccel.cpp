@@ -4,6 +4,7 @@
 #include <tbb/parallel_for.h>
 #include <tbb/blocked_range.h>
 
+#include <igl/readPLY.h>
 #include <igl/per_face_normals.h>
 #include <igl/fast_winding_number.h>
 #include <igl/signed_distance.h>
@@ -50,16 +51,36 @@ std::vector<T> SphereSDFAccel::querySDF(const std::vector<Vec>& points, const Ei
 }
 
 
-void MeshSDFAccel::init(const fs::path& obj_path)
+void MeshSDFAccel::init(const fs::path& mesh_path)
 {
-    ASSERT(fs::exists(obj_path));
+    ASSERT(fs::exists(mesh_path));
 
     Eigen::MatrixXd Vd;
     Eigen::MatrixXi Fi;
-    ASSERT(igl::readOBJ(obj_path.string(), Vd, Fi));
+
+    std::string ext = mesh_path.extension().string();
+    std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+
+    bool ok = false;
+
+    if (ext == ".obj")
+    {
+        ok = igl::readOBJ(mesh_path.string(), Vd, Fi);
+    }
+    else if (ext == ".ply")
+    {
+        ok = igl::readPLY(mesh_path.string(), Vd, Fi);
+    }
+    else
+    {
+        ASSERT(false && "Unsupported mesh format (only OBJ and PLY supported)");
+    }
+
+    ASSERT(ok);
 
     Eigen::Matrix<T, -1, 3> V = Vd.cast<T>();
     Eigen::Matrix<int, -1, 3> F = Fi;
+
     build(V, F);
 }
 
