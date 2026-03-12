@@ -39,6 +39,7 @@ void CalculateSDFOnGivenTiles(HADeviceGrid<Tile>& grid, const thrust::host_vecto
 	const T h0 = grid.mH0;
 
 	// 4. scatter back on device
+	auto acc_d = grid.deviceAccessor();
 	LaunchIndexFunc(
 		[=] __device__(int seq_idx) {
 		const int local_tile_idx = seq_idx / Tile::NODESIZE;
@@ -47,8 +48,7 @@ void CalculateSDFOnGivenTiles(HADeviceGrid<Tile>& grid, const thrust::host_vecto
 		HATileInfo<Tile> info = d_infos_ptr[local_tile_idx];
 		auto& tile = info.tile();
 
-		HACoordAccessor<Tile> acc(h0);
-		Coord r_ijk = acc.localNodeOffsetToCoord(node_idx);
+		Coord r_ijk = acc_d.localNodeOffsetToCoord(node_idx);
 
 		tile.node(node_sdf_channel, r_ijk) = d_sdfs_ptr[seq_idx];
 	},
