@@ -48,9 +48,10 @@ FluidParams::FluidParams(json& j)
 	std::string test = Json::Value<std::string>(j, "test", "meshmotion");
 	if (test == "meshmotion") mTestCase = MESHMOTION;
 	else if (test == "aircraft") mTestCase = AIRCRAFT;
+	else if (test == "sphere_circling") mTestCase = SPHERECIRCLING;
 	else ASSERT(false, "invalid test {}", test);
 
-	if (mTestCase == MESHMOTION || mTestCase == AIRCRAFT) {
+	if (mTestCase == MESHMOTION || mTestCase == AIRCRAFT || mTestCase == SPHERECIRCLING) {
 		mIsPureNeumann = true;
 		mesh_motion_inflow = Json::Value<T>(j, "inflow_velocity", 1.0);
 	}
@@ -103,7 +104,7 @@ __hostdev__ int FluidParams::initialLevelTarget(const HATileAccessor<Tile>& acc,
 
 __hostdev__ uint8_t FluidParams::wallCellType(const T current_time, const HATileAccessor<Tile>& acc, const int level, const Coord& g_ijk) const
 {
-	if (mTestCase == MESHMOTION || mTestCase == AIRCRAFT) {
+	if (mTestCase == MESHMOTION || mTestCase == AIRCRAFT || mTestCase == SPHERECIRCLING) {
 		//uses 1 layer of solid walls on the coarse level
 
 		//z+ air
@@ -221,6 +222,36 @@ __hostdev__ Eigen::Transform<T, 3, Eigen::Affine> FluidParams::meshToWorldTransf
 
 		return transform;
 	}
+	if (mTestCase == SPHERECIRCLING) {
+		// Motion duration: 2 seconds
+		// z: 1.7 -> 0.3
+		// x-y: circle around (0.5, 0.5) with radius 0.15, one full revolution in 2s
+
+		T t = current_time;
+		if (t < (T)0) t = (T)0;
+		if (t > (T)2) t = (T)2;
+
+		const T center_x = (T)0.5;
+		const T center_y = (T)0.5;
+		const T orbit_r = (T)0.2;
+
+		const T z0 = (T)1.7;
+		const T z1 = (T)0.3;
+		const T s = t / (T)2.0;
+
+		const T theta = (T)(2.0 * M_PI) * s;
+
+		const T x = center_x + orbit_r * std::cos(theta);
+		const T y = center_y + orbit_r * std::sin(theta);
+		const T z = ((T)1 - s) * z0 + s * z1;
+
+		Eigen::Transform<T, 3, Eigen::Affine> transform =
+			Eigen::Transform<T, 3, Eigen::Affine>::Identity();
+
+		transform.translation() = Eigen::Matrix<T, 3, 1>(x, y, z);
+
+		return transform;
+	}
 	else {
 		CUDA_ASSERT(false, "meshToWorldTransform not implemented for test case %d", int(mTestCase));
 	}
@@ -228,7 +259,7 @@ __hostdev__ Eigen::Transform<T, 3, Eigen::Affine> FluidParams::meshToWorldTransf
 
 __device__ T FluidParams::solidFaceCenterVelocity(const T current_time, const T dt, const HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const Coord& l_ijk, const int axis) const
 {
-	if (mTestCase == MESHMOTION || mTestCase == AIRCRAFT) {
+	if (mTestCase == MESHMOTION || mTestCase == AIRCRAFT || mTestCase == SPHERECIRCLING) {
 		Vec wall_vel(0, 0, mesh_motion_inflow);
 		auto g_ijk = acc.localToGlobalCoord(info, l_ijk);
 		auto ng_ijk = g_ijk; ng_ijk[axis]--;

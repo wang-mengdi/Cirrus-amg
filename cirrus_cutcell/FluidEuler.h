@@ -101,12 +101,11 @@ public:
 
 	RandomGenerator mRamdonGenerator;
 
-	double advance_time = 0;
-	double particle_advection_time = 0;
-	double reseeding_time = 0;
-	double adaptive_time = 0;
-	double nfm_advection_time = 0;
-	double projection_time = 0;
+	double total_advance_time = 0; // total advance time
+	double adapt_and_advect_time = 0; // adapt + advection
+	double grid_adaptation_time = 0; // only adaptation (including particle adaptation and sdf calc/adapt)
+	double total_projection_time = 0; // total projection time (including building system and solving)
+	double projection_solve_time = 0; // only the linear solver time in projection
 
 
 	//void addSolidVelocityWithFractionsToFaces(HADeviceGrid<Tile>& grid, const double current_time, const double dt) {

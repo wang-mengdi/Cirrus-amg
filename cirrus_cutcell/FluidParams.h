@@ -64,7 +64,7 @@ namespace ViscChnls {
 
 //TVORTEX: tornado-like vortex, reference: Physically-based Simulation of Tornadoes
 //enum TestCase { KARMAN = 0, SMOKESPHERE };
-enum TestCase { MESHMOTION = 0, AIRCRAFT };
+enum TestCase { MESHMOTION = 0, AIRCRAFT, SPHERECIRCLING };
 
 class FluidParams {
 public:

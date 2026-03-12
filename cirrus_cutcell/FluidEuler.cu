@@ -668,20 +668,7 @@ void FluidEuler::iterativeNodeSDFAndRefineNarrowBand(HADeviceGrid<Tile>& grid, c
 void FluidEuler::project(HADeviceGrid<Tile>& grid, const T current_time, const T dt) {
 	//will use u_mix as a temporary channel
 
-
-	//auto c0_channel = ProjChnls::c0;
-
-	//{
-	//	//contaminate channels for debugging
-	//	grid.launchVoxelFuncOnAllTiles(
-	//		[=] __device__(HATileAccessor<Tile>&acc, HATileInfo<Tile>&info, const Coord & l_ijk) {
-	//		info.tile()(ProjChnls::b, l_ijk) = NODATA;
-	//	}, LEAF | GHOST | NONLEAF, 4
-	//	);
-	//	CUDA_CHECK(cudaGetLastError());
-	//	CUDA_CHECK(cudaDeviceSynchronize());
-
-	//}
+	CPUTimer total_projection_timer; total_projection_timer.start();
 
 	//AMG
 	{
@@ -695,15 +682,12 @@ void FluidEuler::project(HADeviceGrid<Tile>& grid, const T current_time, const T
 		AMGSolver solver(ProjChnls::c0, 0.5, 1, 1);
 		//solver.prepareTypesAndCoeffs(grid);
 
-		CPUTimer timer;
-		timer.start();
+		cudaDeviceSynchronize(); CPUTimer projection_solve_timer; projection_solve_timer.start();
 		auto [iters, err] = solver.solve(grid, false, 100, 1e-7, 2, 10, 1, mParams.mIsPureNeumann);
-		cudaDeviceSynchronize();
-		double elapsed = timer.stop("AMGPCG");
+		cudaDeviceSynchronize(); projection_solve_time = projection_solve_timer.stop();
 		double total_cells = grid.numTotalTiles() * Tile::SIZE;
-		double cells_per_second = (total_cells + 0.0) / (elapsed / 1000.0);
+		double cells_per_second = (total_cells + 0.0) / (projection_solve_time / 1000.0);
 		Info("Total {:.5}M cells, AMGPCG speed {:.5} M cells /s at {} iters", total_cells / (1024.0 * 1024), cells_per_second / (1024.0 * 1024), iters);
-		projection_time = elapsed;
 
 		//Info("pressure pt l2: {}", NormSync(grid, 2, ProjChnls::x, false));
 
@@ -724,6 +708,8 @@ void FluidEuler::project(HADeviceGrid<Tile>& grid, const T current_time, const T
 		}
 	}
 
+	cudaDeviceSynchronize();  total_projection_time = total_projection_timer.stop("total projection");
+
 	//{
 	//	//show velocity on polyscope before proj
 	//	polyscope::init();
@@ -741,6 +727,8 @@ void FluidEuler::project(HADeviceGrid<Tile>& grid, const T current_time, const T
 	//	auto* psMesh = polyscope::registerSurfaceMesh("mesh", V_world, mMeshSDFAccel->F_);
 	//	polyscope::show();
 	//}
+
+
 }
 
 void FluidEuler::adaptAndAdvect(DriverMetaData& metadata, std::vector<std::shared_ptr<HADeviceGrid<Tile>>> grid_ptrs) {
@@ -748,7 +736,7 @@ void FluidEuler::adaptAndAdvect(DriverMetaData& metadata, std::vector<std::share
 	const double current_time = metadata.current_time;
 
 
-	CPUTimer timer; timer.start();
+	cudaDeviceSynchronize(); CPUTimer adapt_and_advect_timer; adapt_and_advect_timer.start();
 
 	int advection_u_channel = BufChnls::u;
 
@@ -774,11 +762,6 @@ void FluidEuler::adaptAndAdvect(DriverMetaData& metadata, std::vector<std::share
 	//cudaDeviceSynchronize(); timer.stop("Reseeding particles"); timer.start();
 
 
-
-
-	cudaDeviceSynchronize(); reseeding_time = timer.stop("reseeding and remove particles in solid"); timer.start();
-	Info("total {:.5f}M particles, time step counter {}", pfm_particles_d.size() / (1024 * 1024 + 0.f), time_step_counter);
-
 	//{
 	//	polyscope::init();
 	//	IOFunc::AddTilesToPolyscopeVolumetricMesh(last_grid, LEAF, "leaf tiles");
@@ -798,8 +781,6 @@ void FluidEuler::adaptAndAdvect(DriverMetaData& metadata, std::vector<std::share
 		//without midpoint velocity, we can directly use the last grid
 		//nfm_query_grid_ptr = grid_ptrs[n - 1];
 		ResetParticleImpulse(last_grid, mParams.mFineLevel, mParams.mCoarseLevel, advection_u_channel, pfm_particles_d);
-
-		cudaDeviceSynchronize(); timer.stop("reset all particles impulse"); timer.start();
 	}
 	else {
 		int fine_level = mParams.mFineLevel;
@@ -826,8 +807,6 @@ void FluidEuler::adaptAndAdvect(DriverMetaData& metadata, std::vector<std::share
 				particle.matT() = matT;
 			}
 		}, pfm_particles_d.size(), 128);
-
-		cudaDeviceSynchronize(); timer.stop("reset newly sampled particles impulse"); timer.start();
 	}
 
 
@@ -839,16 +818,6 @@ void FluidEuler::adaptAndAdvect(DriverMetaData& metadata, std::vector<std::share
 	EraseInvalidParticles(pfm_particles_d);
 
 	Warn("after particle advection {} particles", pfm_particles_d.size());
-
-
-
-
-	cudaDeviceSynchronize(); double adv_elapsed = timer.stop("Advect particles"); timer.start(); particle_advection_time = adv_elapsed;
-	{
-		double num_particles_M = pfm_particles_d.size() / (1024. * 1024.);
-		Info("Particle advection time: {} ms, {}M particles, throughput {}M particles/s", adv_elapsed, num_particles_M, num_particles_M / adv_elapsed * 1000);
-	}
-	CheckCudaError("adv particle");
 
 	//Info("end here");
 	//exit(-1);
@@ -862,22 +831,13 @@ void FluidEuler::adaptAndAdvect(DriverMetaData& metadata, std::vector<std::share
 	//	polyscope::show();
 	//}
 
+	cudaDeviceSynchronize(); CPUTimer grid_adaptation_timer; grid_adaptation_timer.start();
+
 	auto& grid = *grid_ptrs[n];
 
 	RefineWithParticles(grid, pfm_particles_d, mParams.mCoarseLevel, mParams.mFineLevel, BufChnls::counter, false);
-
-	//cudaDeviceSynchronize(); timer.stop("Refine with particles"); timer.start();
-
-
 	CoarsenWithParticles(grid, pfm_particles_d, mParams.mCoarseLevel, mParams.mFineLevel, BufChnls::counter, false);
 	CheckCudaError("adapt with particles");
-
-
-	cudaDeviceSynchronize(); adaptive_time = timer.stop("adapt with particles"); timer.start();
-
-
-
-
 	{
 		//after the grid structure is set, calculate type and initialize AMG coeffs
 		iterativeNodeSDFAndRefineNarrowBand(grid, current_time, mParams.mRelativeRefineBandwidth, mParams.mRelativeRefineBandwidth);
@@ -903,6 +863,7 @@ void FluidEuler::adaptAndAdvect(DriverMetaData& metadata, std::vector<std::share
 	//	polyscope::show();
 	//}
 
+	cudaDeviceSynchronize(); grid_adaptation_time = grid_adaptation_timer.stop("Grid adaptation");
 
 	//ParticleImpulseToGridMACIntp(grid, particles, u_channel, next_uw_channel);
 	HistogramSortParticlesAtGivenLevel(grid, mParams.mFineLevel, BufChnls::counter, pfm_particles_d, tile_prefix_sum_d, records_d);
@@ -911,13 +872,6 @@ void FluidEuler::adaptAndAdvect(DriverMetaData& metadata, std::vector<std::share
 
 	CheckCudaError("pfm p2g");
 	//Info("max impulse after pfm: {}", VelocityLinf(grid, u_channel, -1, LEAF, LAUNCH_SUBTREE));
-
-
-	cudaDeviceSynchronize(); auto p2g_time = timer.stop("P2G"); timer.start();
-	{
-		double num_particles_M = pfm_particles_d.size() / (1024. * 1024.);
-		Info("P2G time: {} ms, {}M particles, throughput {}M particles/s", p2g_time, num_particles_M, num_particles_M / p2g_time * 1000);
-	}
 
 	//advect dye and NFM
 	{
@@ -965,7 +919,7 @@ void FluidEuler::adaptAndAdvect(DriverMetaData& metadata, std::vector<std::share
 
 	CalcCellTypesFromLeafs(grid);
 
-	cudaDeviceSynchronize(); nfm_advection_time = timer.stop("NFM advection"); timer.start();
+	cudaDeviceSynchronize(); adapt_and_advect_time = adapt_and_advect_timer.stop("Adaptation and advection");
 	CheckCudaError("nfm advection");
 
 	//Info("max impulse after nfm: {}", VelocityLinf(grid, u_channel, -1, LEAF, LAUNCH_SUBTREE));
@@ -980,8 +934,7 @@ void FluidEuler::applyViscosity(HADeviceGrid<Tile>& grid, const T dt, const T nu
 
 void FluidEuler::Advance(DriverMetaData& metadata) {
 
-	CPUTimer timer;
-	timer.start();
+	cudaDeviceSynchronize(); CPUTimer total_advance_timer; total_advance_timer.start();
 
 	//Info("before advance"); PrintMemoryInfo();
 
@@ -1050,5 +1003,5 @@ void FluidEuler::Advance(DriverMetaData& metadata) {
 
 	PrintMemoryInfo();
 
-	cudaDeviceSynchronize(); advance_time = timer.stop();
+	cudaDeviceSynchronize(); total_advance_time = total_advance_timer.stop("Total advance");
 }
