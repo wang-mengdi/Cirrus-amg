@@ -295,8 +295,8 @@ __hostdev__ Eigen::Transform<T, 3, Eigen::Affine> FluidParams::meshToWorldTransf
 		Vec3 up_base((T)0, (T)1, (T)0);
 
 		// Right-handed basis
-		Vec3 right_base = up_base.cross(forward_base).normalized();
-		up_base = forward_base.cross(right_base).normalized();
+		Vec3 right_base = forward_base.cross(up_base).normalized();
+		up_base = right_base.cross(forward_base).normalized();
 
 		// -----------------------------
 		// True barrel roll: 360 deg in 2 seconds
