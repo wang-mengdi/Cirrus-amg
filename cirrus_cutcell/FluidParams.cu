@@ -294,8 +294,8 @@ __hostdev__ Eigen::Transform<T, 3, Eigen::Affine> FluidParams::meshToWorldTransf
 		//   right   -> world +X
 		// -----------------------------
 		Vec3 forward_base((T)0, (T)0, (T)-1);
-		Vec3 up_base((T)0, (T)1, (T)0);
-		Vec3 right_base((T)1, (T)0, (T)0);
+		Vec3 up_base((T)1, (T)0, (T)0);
+		Vec3 right_base((T)0, (T)-1, (T)0);
 
 		// -----------------------------
 		// True barrel roll: 360 deg in 2 seconds
@@ -332,7 +332,7 @@ __hostdev__ Eigen::Transform<T, 3, Eigen::Affine> FluidParams::meshToWorldTransf
 		// -----------------------------
 		Mat3 R;
 		R.col(0) = up_final;
-		R.col(1) = right_final;
+		R.col(1) = -right_final;
 		R.col(2) = -forward_final;
 
 		TransformT transform = TransformT::Identity();
