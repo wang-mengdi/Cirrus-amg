@@ -19,7 +19,7 @@
         "flowmap_stride": 5,
         "gravity": 0.0,
         "inflow_velocity": 1.0,
-        "mesh_file": "D:/mengdi/tai_0.474_0.426_0.348.ply",
+        "mesh_file": "D:/mengdi/tie_0.474_0.426_0.348.ply",
         "particle_life": 2.0,
         "sample_num_per_cell": 8,
         "particle_sample_relative_bandwidth": 5.0,
