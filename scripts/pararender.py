@@ -258,8 +258,9 @@ def render_vti_to_png(frame_number, vti_file_path, png_file_path,
             text_representation.VerticalJustification = "Top"
 
         Render()
-        print(f"Saving PNG image to {png_file_path} ...")
+        print(f"[Frame {frame_number}] Saving PNG image to {png_file_path} ...")
         SaveScreenshot(png_file_path, render_view, ImageResolution=[1920, 1080])
+        print(f"[Frame {frame_number}] Saved.")
 
     except Exception as e:
         print(f"Error rendering frame {frame_number}: {e}")
@@ -310,12 +311,6 @@ def render_all_vti_files(args):
     cam_focal = [0.526026, 0.492487, 1.11681]
     cam_up = [0.348582, 0.936099, -0.0470125]
 
-    # last_folder = os.path.basename(os.path.normpath(input_path))
-    # if "smokesphere" in last_folder:
-    #     cam_pos = [-1, 0.5, 0.5]
-    #     cam_focal = [0.5, 0.5, 0.5]
-    #     cam_up = [0, 0, 1]
-
     output_dir = os.path.join(input_path, f"render_{array_name}")
     os.makedirs(output_dir, exist_ok=True)
 
@@ -334,10 +329,15 @@ def render_all_vti_files(args):
         vti_files = vti_files[slice_indices]
         print(f"Selected {len(vti_files)} files after slice {slice_spec}")
 
-    for vti_file in vti_files:
+    total_frames = len(vti_files)
+    print(f"Total frames to render: {total_frames}")
+
+    for i, vti_file in enumerate(vti_files, start=1):
         frame_number = extract_frame_number_from_path(vti_file)
         png_file_name = f"frame.{frame_number}.png"
         png_file_path = os.path.join(output_dir, png_file_name)
+
+        print(f"[{i}/{total_frames}] Rendering frame {frame_number}: {vti_file}")
 
         render_vti_to_png(
             frame_number=frame_number,
@@ -352,6 +352,8 @@ def render_all_vti_files(args):
             mask_non_finest=mask_non_finest,
             render_outline=render_outline
         )
+
+        print(f"[{i}/{total_frames}] Done frame {frame_number}")
 
 
 if __name__ == "__main__":
