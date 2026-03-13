@@ -302,7 +302,7 @@ __hostdev__ Eigen::Transform<T, 3, Eigen::Affine> FluidParams::meshToWorldTransf
 		// True barrel roll: 360 deg in 2 seconds
 		// So at t = 1, roll = 180 deg
 		// -----------------------------
-		const T roll = s * (T)(2.0 * M_PI) + (T)(M_PI * 0.5); // initial +y up
+		const T roll = s * (T)(2.0 * M_PI) - (T)(M_PI * 0.5); // initial +y up
 		Eigen::Matrix<T, 3, 3> R_roll =
 			AngleAxisT(roll, forward_base).toRotationMatrix();
 
