@@ -276,6 +276,7 @@ __hostdev__ Eigen::Transform<T, 3, Eigen::Affine> FluidParams::meshToWorldTransf
 		const T s = t / (T)2.0;
 		const T theta = (T)(2.0 * M_PI) * s - (M_PI / 2);
 
+		//motion is + rotation around z-axis
 		const T x = center_x + orbit_r * std::cos(theta);
 		const T y = center_y + orbit_r * std::sin(theta);
 		const T z = ((T)1 - s) * z0 + s * z1;
@@ -286,7 +287,8 @@ __hostdev__ Eigen::Transform<T, 3, Eigen::Affine> FluidParams::meshToWorldTransf
 		// Model local frame:
 		//   local -Z = forward
 		//   local +X = up
-		//   local +Y = right
+		//   local -Y = right
+		// Can use other models
 		//
 		// Desired initial world frame:
 		//   forward -> world -Z
@@ -301,8 +303,9 @@ __hostdev__ Eigen::Transform<T, 3, Eigen::Affine> FluidParams::meshToWorldTransf
 		// True barrel roll: 360 deg in 2 seconds
 		// t = 1 -> 180 deg
 		// -----------------------------
-		const T theta_fuselag = theta;
-		Mat3 roll_fuselag = AngleAxisT(theta_fuselag, forward_base).toRotationMatrix();
+		//fuselag motion is same as the overall motion, + rotation around z-axis
+		const T theta_fuselag = theta + M_PI;
+		Mat3 roll_fuselag = AngleAxisT(theta_fuselag, Vec3(0, 0, 1)).toRotationMatrix();
 		Vec3 up_rolled = (roll_fuselag * up_base).normalized();
 		Vec3 right_rolled = (roll_fuselag * right_base).normalized();
 		Vec3 forward_rolled = forward_base;
@@ -333,6 +336,10 @@ __hostdev__ Eigen::Transform<T, 3, Eigen::Affine> FluidParams::meshToWorldTransf
 		R.col(0) = up_final;
 		R.col(1) = -right_final;
 		R.col(2) = -forward_final;
+
+		//print up_final, right_final, forward_final and pos for dbg
+		//python-like format
+		//Info("current_time {} theta {} up_final {} right_final {} forward_final {} pos {}", current_time, theta, up_final, right_final, forward_final, pos);
 
 		TransformT transform = TransformT::Identity();
 		transform.linear() = R;

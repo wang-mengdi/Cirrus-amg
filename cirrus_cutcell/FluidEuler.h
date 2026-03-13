@@ -187,6 +187,14 @@ public:
 		}
 
 		mParams = FluidParams(j);
+
+		//mParams.meshToWorldTransform(0.0);
+		//mParams.meshToWorldTransform(0.5);
+		//mParams.meshToWorldTransform(1.0);
+		//mParams.meshToWorldTransform(2.0);
+		//exit(0);
+
+
 		//ASSERT(mParams.mFlowMapStride == 1, "SL only supports 1-step advection");
 
 		if (metadata.first_frame != 0) return;
