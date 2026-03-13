@@ -274,7 +274,7 @@ __hostdev__ Eigen::Transform<T, 3, Eigen::Affine> FluidParams::meshToWorldTransf
 		const T z1 = (T)0.3;
 
 		const T s = t / (T)2.0;
-		const T theta = (T)(2.0 * M_PI) * s;
+		const T theta = (T)(2.0 * M_PI) * s - (M_PI / 2);
 
 		const T x = center_x + orbit_r * std::cos(theta);
 		const T y = center_y + orbit_r * std::sin(theta);
@@ -301,11 +301,10 @@ __hostdev__ Eigen::Transform<T, 3, Eigen::Affine> FluidParams::meshToWorldTransf
 		// True barrel roll: 360 deg in 2 seconds
 		// t = 1 -> 180 deg
 		// -----------------------------
-		const T roll = s * (T)(2.0 * M_PI);
-		Mat3 R_roll = AngleAxisT(roll, forward_base).toRotationMatrix();
-
-		Vec3 up_rolled = (R_roll * up_base).normalized();
-		Vec3 right_rolled = (R_roll * right_base).normalized();
+		const T theta_fuselag = theta;
+		Mat3 roll_fuselag = AngleAxisT(theta_fuselag, forward_base).toRotationMatrix();
+		Vec3 up_rolled = (roll_fuselag * up_base).normalized();
+		Vec3 right_rolled = (roll_fuselag * right_base).normalized();
 		Vec3 forward_rolled = forward_base;
 
 		// -----------------------------
@@ -315,7 +314,7 @@ __hostdev__ Eigen::Transform<T, 3, Eigen::Affine> FluidParams::meshToWorldTransf
 		const T alpha_deg = (T)10;   // set to 0 if you want no attack angle
 		const T alpha = alpha_deg * (T)M_PI / (T)180.0;
 
-		Mat3 R_attack = AngleAxisT(-alpha, right_rolled).toRotationMatrix();
+		Mat3 R_attack = AngleAxisT(alpha, right_rolled).toRotationMatrix();
 
 		Vec3 forward_final = (R_attack * forward_rolled).normalized();
 		Vec3 up_final = (R_attack * up_rolled).normalized();
@@ -323,7 +322,7 @@ __hostdev__ Eigen::Transform<T, 3, Eigen::Affine> FluidParams::meshToWorldTransf
 		// Rebuild right to avoid tiny drift, keeping a right-handed frame
 		Vec3 right_final = forward_final.cross(up_final).normalized();
 		up_final = right_final.cross(forward_final).normalized();
-
+		
 		// -----------------------------
 		// Map model local axes to world axes
 		// local +X -> up
