@@ -123,9 +123,7 @@ def get_color_range_from_vti(vti_file_path, array_name):
         if array:
             return array.GetRange()
 
-        raise ValueError(
-            f"Cell array '{array_name}' not found in {vti_file_path}."
-        )
+        raise ValueError(f"Cell array '{array_name}' not found in {vti_file_path}.")
     finally:
         Delete(data)
 
@@ -194,13 +192,14 @@ def build_masked_source_if_needed(vti_data, vti_file_path, array_name, mask_non_
 def render_vti_to_png(frame_number, vti_file_path, png_file_path,
                       array_name, color_range, info,
                       cam_pos, cam_focal, cam_up,
-                      mask_non_finest):
+                      mask_non_finest, render_outline):
     _DisableFirstRenderCameraReset()
 
     render_view = GetActiveViewOrCreate("RenderView")
     vti_data = None
     display_source = None
     text = None
+    outline = None
     masked_array_name = array_name
 
     try:
@@ -226,6 +225,13 @@ def render_vti_to_png(frame_number, vti_file_path, png_file_path,
             color_range[0], 0.0, 0.5, 0.0,
             color_range[1], 1.0, 0.5, 0.0
         ]
+
+        if render_outline:
+            outline = Outline(Input=vti_data)
+            outline_display = Show(outline, render_view)
+            outline_display.Representation = "Wireframe"
+            outline_display.LineWidth = 2.0
+            outline_display.DiffuseColor = [1.0, 1.0, 1.0]
 
         camera = render_view.GetActiveCamera()
         camera.SetPosition(cam_pos)
@@ -262,10 +268,16 @@ def render_vti_to_png(frame_number, vti_file_path, png_file_path,
         if text is not None:
             Hide(text, render_view)
             Delete(text)
+
+        if outline is not None:
+            Hide(outline, render_view)
+            Delete(outline)
+
         if display_source is not None:
             Hide(display_source, render_view)
             if display_source is not vti_data:
                 Delete(display_source)
+
         if vti_data is not None:
             Hide(vti_data, render_view)
             Delete(vti_data)
@@ -279,12 +291,31 @@ def parse_slice(slice_spec):
     return slice(*parts)
 
 
-def render_all_vti_files(input_path, array_name, slice_spec, info,
-                         cam_pos, cam_focal, cam_up, mask_non_finest):
+def render_all_vti_files(args):
     """
     Render selected fluid*.vti files in the specified directory and save them as PNG images.
     Assumes all render arrays are stored as CELL arrays.
     """
+    input_path = args.input_path
+    array_name = args.name
+    slice_spec = args.slice
+    info = not args.noinfo
+    mask_non_finest = args.mask_non_finest
+    render_outline = args.outline
+
+    # cam_pos = [-0.5206968888777139, 1.185731530874039, 3.2695103418850517]
+    # cam_focal = [0.965593201751042, 0.42536166799965003, 0.5020286511739026]
+    # cam_up = [0.10359017000732675, 0.9718954402396329, -0.2113961445231755]
+    cam_pos = [-1.47342, 1.2625, 1.62391]
+    cam_focal = [0.526026, 0.492487, 1.11681]
+    cam_up = [0.348582, 0.936099, -0.0470125]
+
+    # last_folder = os.path.basename(os.path.normpath(input_path))
+    # if "smokesphere" in last_folder:
+    #     cam_pos = [-1, 0.5, 0.5]
+    #     cam_focal = [0.5, 0.5, 0.5]
+    #     cam_up = [0, 0, 1]
+
     output_dir = os.path.join(input_path, f"render_{array_name}")
     os.makedirs(output_dir, exist_ok=True)
 
@@ -307,10 +338,19 @@ def render_all_vti_files(input_path, array_name, slice_spec, info,
         frame_number = extract_frame_number_from_path(vti_file)
         png_file_name = f"frame.{frame_number}.png"
         png_file_path = os.path.join(output_dir, png_file_name)
+
         render_vti_to_png(
-            frame_number, vti_file, png_file_path,
-            array_name, first_frame_color_range, info,
-            cam_pos, cam_focal, cam_up, mask_non_finest
+            frame_number=frame_number,
+            vti_file_path=vti_file,
+            png_file_path=png_file_path,
+            array_name=array_name,
+            color_range=first_frame_color_range,
+            info=info,
+            cam_pos=cam_pos,
+            cam_focal=cam_focal,
+            cam_up=cam_up,
+            mask_non_finest=mask_non_finest,
+            render_outline=render_outline
         )
 
 
@@ -345,30 +385,11 @@ if __name__ == "__main__":
         action="store_true",
         help="If set, and if CELL-data array 'level' exists, set the render field to 0 for cells whose level is not the maximum."
     )
+    parser.add_argument(
+        "--outline",
+        action="store_true",
+        help="If set, render the outline of the VTI domain."
+    )
 
     args = parser.parse_args()
-
-    last_folder = os.path.basename(os.path.normpath(args.input_path))
-
-    # cam_pos = [-0.5206968888777139, 1.185731530874039, 3.2695103418850517]
-    # cam_focal = [0.965593201751042, 0.42536166799965003, 0.5020286511739026]
-    # cam_up = [0.10359017000732675, 0.9718954402396329, -0.2113961445231755]
-    cam_pos = [-1.47342, 1.2625, 1.62391]
-    cam_focal = [0.526026, 0.492487, 1.11681]
-    cam_up = [0.348582, 0.936099, -0.0470125]
-
-    # if "smokesphere" in last_folder:
-    #     cam_pos = [-1, 0.5, 0.5]
-    #     cam_focal = [0.5, 0.5, 0.5]
-    #     cam_up = [0, 0, 1]
-
-    render_all_vti_files(
-        args.input_path,
-        args.name,
-        slice_spec=args.slice,
-        info=not args.noinfo,
-        cam_pos=cam_pos,
-        cam_focal=cam_focal,
-        cam_up=cam_up,
-        mask_non_finest=args.mask_non_finest
-    )
+    render_all_vti_files(args)
