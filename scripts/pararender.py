@@ -407,9 +407,15 @@ def render_all_vti_files(args):
     mesh_path = args.mesh
     xform_dir = args.xform_dir
 
-    cam_pos = [-1.47342, 1.2625, 1.62391]
-    cam_focal = [0.526026, 0.492487, 1.11681]
-    cam_up = [0.348582, 0.936099, -0.0470125]
+    # cam_pos = [-1.47342, 1.2625, 1.62391]
+    # cam_focal = [0.526026, 0.492487, 1.11681]
+    # cam_up = [0.348582, 0.936099, -0.0470125]
+
+    # kind of "regular" view
+    cam_pos   = [3.17067, 0.5, 1.0]
+    cam_focal = [0.5,     0.5, 1.0]
+    cam_up    = [0.0,     1.0, 0.0]
+
 
     output_dir = os.path.join(input_path, "render_mesh" if array_name is None else f"render_{array_name}")
     os.makedirs(output_dir, exist_ok=True)
