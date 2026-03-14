@@ -262,8 +262,8 @@ def build_render_jobs(vti_files, slice_spec):
         jobs = []
 
         for idx, frame_id in enumerate(target_ids):
-            if idx < len(vti_files):
-                vti_file = vti_files[idx]
+            if frame_id < len(vti_files):
+                vti_file = vti_files[frame_id]
             else:
                 vti_file = vti_files[-1]
 
