@@ -53,6 +53,7 @@ namespace DriverFunc {
 			int last_snapshot = meta_data.Last_Snapshot_Frame(meta_data.first_frame);
 			if (last_snapshot != 0) {
 				Pass("Found snapshot at frame {}, load snapshot from {} and run from frame {}", last_snapshot, meta_data.Snapshot_Path(last_snapshot).string(), last_snapshot + 1);
+				meta_data.first_frame = last_snapshot + 1;
 				meta_data.current_frame = last_snapshot;
 				//load the frame before first frame
 				simulator.Load_Frame(meta_data);

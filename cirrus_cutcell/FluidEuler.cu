@@ -701,7 +701,7 @@ void FluidEuler::project(HADeviceGrid<Tile>& grid, const T current_time, const T
 		cudaDeviceSynchronize(); projection_solve_time = projection_solve_timer.stop();
 		double total_cells = grid.numTotalTiles() * Tile::SIZE;
 		double cells_per_second = (total_cells + 0.0) / (projection_solve_time / 1000.0);
-		Info("Total {:.5}M cells, AMGPCG speed {:.5} M cells /s at {} iters", total_cells / (1024.0 * 1024), cells_per_second / (1024.0 * 1024), iters);
+		Info("Total {:.5}M cells, {}ms, AMGPCG speed {:.5} M cells /s at {} iters", total_cells / (1024.0 * 1024), projection_solve_time, cells_per_second / (1024.0 * 1024), iters);
 
 		//Info("pressure pt l2: {}", NormSync(grid, 2, ProjChnls::x, false));
 
