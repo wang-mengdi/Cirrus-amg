@@ -111,9 +111,9 @@ namespace DriverFunc {
 			}
 
 			// output current frame
-			double frame_time = Print_Frame_Info(frame_timer, meta_data, num_steps);
 			Info("Output frame {} to {}", meta_data.current_frame, meta_data.base_path.string());
 			simulator.Output(meta_data);
+			double frame_time = Print_Frame_Info(frame_timer, meta_data, num_steps);
 
 			// log frame information
 			fs::path log_dir = meta_data.base_path / "logs";
