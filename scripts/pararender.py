@@ -284,6 +284,7 @@ def render_vti_to_png(frame_number, vti_file_path, png_file_path,
     _DisableFirstRenderCameraReset()
 
     render_view = GetActiveViewOrCreate("RenderView")
+    render_view.OrientationAxesVisibility = 0 # switch off the small orientation axes in the corner
     vti_data = None
     display_source = None
     text = None
@@ -411,10 +412,14 @@ def render_all_vti_files(args):
     # cam_focal = [0.526026, 0.492487, 1.11681]
     # cam_up = [0.348582, 0.936099, -0.0470125]
 
-    # kind of "regular" view
+    # # kind of "regular" view
     cam_pos   = [3.17067, 0.5, 1.0]
     cam_focal = [0.5,     0.5, 1.0]
     cam_up    = [0.0,     1.0, 0.0]
+    # kind of "regular" view
+    # cam_pos   = [0.5, 3.17067, 1.0]
+    # cam_focal = [0.5,     0.5, 1.0]
+    # cam_up    = [-1.0,     0.0, 0.0]
 
 
     output_dir = os.path.join(input_path, "render_mesh" if array_name is None else f"render_{array_name}")

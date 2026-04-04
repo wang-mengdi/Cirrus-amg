@@ -34,7 +34,7 @@ target("src")
     -- end
 
     add_cugencodes("native")
-    add_cuflags("-extended-lambda --std=c++17 -lineinfo")
+    add_cuflags("-extended-lambda --std=c++17 -lineinfo --allow-unsupported-compiler")
     add_cuflags("-rdc=true")
 
 
