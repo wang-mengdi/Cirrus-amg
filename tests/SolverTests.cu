@@ -1390,29 +1390,29 @@ namespace SolverTests
 
 		fmt::print("\n");
 
-		{
-		    auto holder = grid.getHostTileHolderForLeafs();
+		//{
+		//    auto holder = grid.getHostTileHolderForLeafs();
 
-			IOFunc::OutputTilesAsVTU(holder, fmt::format("output/analytical_{}_levels{}_{}_{}_{}_tiles.vtu", grid_name, min_level, max_level, bc_name, algorithm));
+		//	IOFunc::OutputTilesAsVTU(holder, fmt::format("output/analytical_{}_levels{}_{}_{}_{}_tiles.vtu", grid_name, min_level, max_level, bc_name, algorithm));
 
-		    IOFunc::OutputPoissonGridAsStructuredVTI(
-		        holder,
-		        { {-2,"level"}, { -1, "type" }, {rhs_channel, "rhs"}, {grdt_channel, "grdt"}, {Tile::x_channel, "x"}, {error_channel, "error"} },
-		        {  },
-		        fmt::format("output/analytical_{}_levels{}_{}_{}_{}.vti", grid_name, min_level, max_level, bc_name, algorithm)
-		    );
+		//    IOFunc::OutputPoissonGridAsStructuredVTI(
+		//        holder,
+		//        { {-2,"level"}, { -1, "type" }, {rhs_channel, "rhs"}, {grdt_channel, "grdt"}, {Tile::x_channel, "x"}, {error_channel, "error"} },
+		//        {  },
+		//        fmt::format("output/analytical_{}_levels{}_{}_{}_{}.vti", grid_name, min_level, max_level, bc_name, algorithm)
+		//    );
 
-			//polyscope::init();
-			//IOFunc::AddPoissonGridCellCentersToPolyscopePointCloud(
-			//	holder,
-			//	{ {-1, "type"}, {rhs_channel, "rhs"}, {grdt_channel, "grdt"}, {Tile::x_channel, "x"}, {error_channel, "error"} },
-			//	{}
-			//);
-			//polyscope::show();
+		//	//polyscope::init();
+		//	//IOFunc::AddPoissonGridCellCentersToPolyscopePointCloud(
+		//	//	holder,
+		//	//	{ {-1, "type"}, {rhs_channel, "rhs"}, {grdt_channel, "grdt"}, {Tile::x_channel, "x"}, {error_channel, "error"} },
+		//	//	{}
+		//	//);
+		//	//polyscope::show();
 
-			//Info("test: {}", holder->cellValue(6, Coord(331,371,331), grdt_channel));//0.0670311
+		//	//Info("test: {}", holder->cellValue(6, Coord(331,371,331), grdt_channel));//0.0670311
 
-		}
+		//}
 
 		// IOFunc::OutputTilesAsVTU(holder, "output/tiles.vtu");
 	}
