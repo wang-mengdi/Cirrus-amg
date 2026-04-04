@@ -1098,6 +1098,7 @@ namespace SolverTests
 			solver.mu_cycle_repeat_times = params.mu_repeat_times;
 			solver.prepareTypesAndCoeffs(grid);
 
+			cudaDeviceSynchronize();
 			CPUTimer<std::chrono::microseconds> timer;
 			timer.start();
 			auto [iters, err] = solver.solve(grid, verbose, max_iters, rel_tolerance, params.level_iters, params.bottom_iters, sync_stride, is_pure_neumann);
@@ -1226,8 +1227,8 @@ namespace SolverTests
 		params.bottom_iters = 10;
 
 
-		auto [iters, err, elapsed] = SolveLinearSystem(grid, coeff_channel, is_pure_neumann, 1000, 1e-8, 1, params, true);
-		//auto [iters, err, elapsed] = SolveLinearSystem(grid, coeff_channel, is_pure_neumann, 30, 1e-6, 1, params, true);
+		//auto [iters, err, elapsed] = SolveLinearSystem(grid, coeff_channel, is_pure_neumann, 1000, 1e-8, 1, params, true);
+		auto [iters, err, elapsed] = SolveLinearSystem(grid, coeff_channel, is_pure_neumann, 30, 1e-7, 1, params, true);
 		//auto [iters, err, elapsed] = SolveLinearSystem(grid, coeff_channel, is_pure_neumann, 6, 1e-6, -1, params, false);
 		int total_cells = grid.numTotalLeafTiles() * Tile::SIZE;
 		float cells_per_second = (total_cells + 0.0) / (elapsed / 1e6);
@@ -1453,7 +1454,8 @@ namespace SolverTests
 		},
 			LEAF);
 
-		for (int max_iters = 0; max_iters <= 10; max_iters++)
+		//for (int max_iters = 0; max_iters <= 10; max_iters++)
+		for (int max_iters : {0,10,20,30,40,50,60,70,80,90,100})
 		{
 			CalculateNeighborTiles(grid);
 
