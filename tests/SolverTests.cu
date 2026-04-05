@@ -1097,7 +1097,7 @@ namespace SolverTests
 			solver.omega = params.omega;
 			solver.mu_cycle_repeat_times = params.mu_repeat_times;
 			solver.prepareTypesAndCoeffs(grid);
-
+			
 			cudaDeviceSynchronize();
 			CPUTimer<std::chrono::microseconds> timer;
 			timer.start();
@@ -1381,10 +1381,13 @@ namespace SolverTests
 		// x:0
 		int error_channel = 2;
 
-		auto [grid_ptr, is_pure_neumann] = CreateNeumannProblem(grid_name, min_level, max_level, bc_name, rhs_channel, grdt_channel);
+		auto [grid_ptr, is_pure_neumann] = CreateNeumannProblem(grid_name, min_level, max_level, bc_name, b0_channel, grdt_channel);
 		auto& grid = *grid_ptr;
 
-		TestSolverWithAnalyticalSolution(grid, algorithm, omega, coeff_channel, grdt_channel, error_channel, is_pure_neumann);
+		for (int repeat = 0; repeat < 10; repeat++) {
+			Copy(grid, b0_channel, Tile::b_channel, -1, LEAF, LAUNCH_SUBTREE, LEAF | NONLEAF | NEUMANN);
+			TestSolverWithAnalyticalSolution(grid, algorithm, omega, coeff_channel, grdt_channel, error_channel, is_pure_neumann);
+		}
 		// TestIterativeConvergenceWithAnalyticalSolution(grid, algorithm, coeff_channel, b0_channel, grdt_channel, error_channel, is_pure_neumann);
 
 
