@@ -48,23 +48,6 @@ namespace DriverFunc {
 		fs::create_directories(meta_data.base_path);
 		//FileFunc::CreateDirectory(meta_data.base_path);
 
-		//try to load snapshot
-		if (meta_data.first_frame != 0) {
-			int last_snapshot = meta_data.Last_Snapshot_Frame(meta_data.first_frame);
-			if (last_snapshot != 0) {
-				Pass("Found snapshot at frame {}, load snapshot from {} and run from frame {}", last_snapshot, meta_data.Snapshot_Path(last_snapshot).string(), last_snapshot + 1);
-				meta_data.first_frame = last_snapshot + 1;
-				meta_data.current_frame = last_snapshot;
-				//load the frame before first frame
-				simulator.Load_Frame(meta_data);
-				meta_data.current_frame++;
-			}
-			else {
-				Warn("No snapshots are found, automaitcally run from frame 0");
-				meta_data.first_frame = 0;
-			}
-		}
-
 		//run from 0
 		if (meta_data.first_frame == 0) {
 			//output first frame
@@ -73,6 +56,11 @@ namespace DriverFunc {
 			Info("Output frame {} to {}", meta_data.current_frame, meta_data.base_path.string());
 			simulator.Output(meta_data);
 			meta_data.current_frame = 1;
+		}
+		else {
+			//load the frame before first frame
+			simulator.Load_Frame(meta_data);
+			meta_data.current_frame++;
 		}
 
 		//run frames

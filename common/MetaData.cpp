@@ -23,6 +23,21 @@ void DriverMetaData::init(const fs::path& json_path, json& j) {
 	min_step_frame_fraction = Json::Value(j, "min_step_frame_fraction", (double)0);
 
 	first_frame = Json::Value(j, "first_frame", 0);
+
+	//try to load snapshot
+	if (first_frame != 0) {
+		int last_snapshot = Last_Snapshot_Frame(first_frame);
+		if (last_snapshot != 0) {
+			Pass("Found snapshot at frame {}, load snapshot from {} and run from frame {}", last_snapshot, Snapshot_Path(last_snapshot).string(), last_snapshot + 1);
+			first_frame = last_snapshot + 1;
+			current_frame = last_snapshot;
+		}
+		else {
+			Warn("No snapshots are found, automaitcally run from frame 0");
+			first_frame = 0;
+		}
+	}
+
 	last_frame = Json::Value(j, "last_frame", fps * 10);
 	snapshot_stride = Json::Value(j, "snapshot_stride", 0);
 
