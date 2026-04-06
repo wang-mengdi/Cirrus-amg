@@ -45,6 +45,7 @@ namespace DriverFunc {	//will change timer
 
 		DriverMetaData meta_data;
 		meta_data.init(json_path, j.at("driver"));
+		Info("Initialized driver metadata: \n{}", j.at("driver").dump(2));
 		scene.Apply(j, simulator, meta_data);
 		fs::create_directories(meta_data.base_path);
 		//FileFunc::CreateDirectory(meta_data.output_base_dir);

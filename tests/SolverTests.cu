@@ -1228,8 +1228,8 @@ namespace SolverTests
 
 
 		//auto [iters, err, elapsed] = SolveLinearSystem(grid, coeff_channel, is_pure_neumann, 1000, 1e-8, 1, params, true);
-		auto [iters, err, elapsed] = SolveLinearSystem(grid, coeff_channel, is_pure_neumann, 30, 1e-6, 1, params, false);
-		//auto [iters, err, elapsed] = SolveLinearSystem(grid, coeff_channel, is_pure_neumann, 6, 1e-6, -1, params, false);
+		//auto [iters, err, elapsed] = SolveLinearSystem(grid, coeff_channel, is_pure_neumann, 30, 1e-6, 1, params, false);
+		auto [iters, err, elapsed] = SolveLinearSystem(grid, coeff_channel, is_pure_neumann, 6, 1e-6, -1, params, false);
 		int total_cells = grid.numTotalLeafTiles() * Tile::SIZE;
 		float cells_per_second = (total_cells + 0.0) / (elapsed / 1e6);
 		Info("Total {:.5}M cells, {} speed {:.5} M cells /s", total_cells / (1024.0 * 1024), algorithm, cells_per_second / (1024.0 * 1024));

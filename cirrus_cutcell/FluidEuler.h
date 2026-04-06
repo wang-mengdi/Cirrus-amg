@@ -171,7 +171,7 @@ public:
 	}
 
 	void init(json &j, DriverMetaData &metadata) {
-		//fmt::print("current path: {}\n", fs::current_path().string());
+		Info("Initializing FluidEuler Simulator...");
 
 		std::string mesh_file = Json::Value<std::string>(j, "mesh_file", "mesh.obj");
 
@@ -294,52 +294,55 @@ public:
 			}
 		}
 
-		//return;
-		auto& grid = *grid_ptrs.back();
-
-		{
-
-			auto holder = grid.getHostTileHolderForLeafs();
-
-			//metadata.Append_Output_Thread(std::make_shared<std::thread>(IOFunc::OutputTilesAsVTU, holder, metadata.base_path / fmt::format("tiles{:04d}.vtu", metadata.current_frame)));
-			//IOFunc::OutputTilesAsVTU(holder, metadata.base_path / fmt::format("tiles{:04d}.vtu", metadata.current_frame));
-
-			IOFunc::OutputPoissonGridAsStructuredVTI(
-				holder,
-				std::vector<std::pair<int, std::string>>{ {-1, "type"}, { -2, "level" }, { BufChnls::vor, "vorticity" }},
-				std::vector<std::pair<int, std::string>>{ {BufChnls::u, "fluid_velocity"} },
-				metadata.base_path / fmt::format("fluid{:04d}.vti", metadata.current_frame)
-			);
-
-			//IOFunc::OutputPoissonGridAsAMR(
-			//	holder,
-			//	std::vector<std::pair<int, std::string>>{ {-1, "type"}, { -2, "level" }, { BufChnls::vor, "vorticity" }},
-			//	std::vector<std::pair<int, std::string>>{ {BufChnls::u, "fluid_velocity"} },
-			//	metadata.base_path / fmt::format("fluid{:04d}.vthb", metadata.current_frame)
-			//);
-
-			//metadata.Append_Output_Thread(std::make_shared<std::thread>(IOFunc::OutputPoissonGridAsStructuredVTI, holder,
-			//	std::vector<std::pair<int, std::string>>{ {-1, "type"}, { -2, "level" }, { BufChnls::vor, "vorticity" }},
-			//	//std::vector<std::pair<int, std::string>>{ },
-			//	std::vector<std::pair<int, std::string>>{ {BufChnls::u, "fluid_velocity"} },
-			//	//std::vector<std::pair<int, std::string>>{ { -1, "type" }, { Tile::vor_channel, "vorticity" }, { Tile::dye_channel, "dye_density" } },
-			//	//std::vector<std::pair<int, std::string>>{ {Tile::u_channel, "velocity"} },
-			//	metadata.base_path / fmt::format("fluid{:04d}.vti", metadata.current_frame)));
-
-		}
 
 		{
 			WriteStatToFile(metadata);
 		}
 
-			auto particles_h_ptr = std::make_shared<thrust::host_vector<Particle>>(pfm_particles_d);
-			//metadata.Append_Output_Thread(std::make_shared<std::thread>(IOFunc::OutputParticleSystemAsVTU,
-			//	particles_h_ptr, metadata.base_path / fmt::format("particles{:04d}.vtu", metadata.current_frame)
-			//));
+		//return;
+		auto& grid = *grid_ptrs.back();
 
-			IOFunc::OutputParticleSystemAsVTU(
-				particles_h_ptr, metadata.base_path / fmt::format("particles{:04d}.vtu", metadata.current_frame)
-			);
+		//{
+
+		//	auto holder = grid.getHostTileHolderForLeafs();
+
+		//	//metadata.Append_Output_Thread(std::make_shared<std::thread>(IOFunc::OutputTilesAsVTU, holder, metadata.base_path / fmt::format("tiles{:04d}.vtu", metadata.current_frame)));
+		//	//IOFunc::OutputTilesAsVTU(holder, metadata.base_path / fmt::format("tiles{:04d}.vtu", metadata.current_frame));
+
+		//	IOFunc::OutputPoissonGridAsStructuredVTI(
+		//		holder,
+		//		std::vector<std::pair<int, std::string>>{ {-1, "type"}, { -2, "level" }, { BufChnls::vor, "vorticity" }},
+		//		std::vector<std::pair<int, std::string>>{ {BufChnls::u, "fluid_velocity"} },
+		//		metadata.base_path / fmt::format("fluid{:04d}.vti", metadata.current_frame)
+		//	);
+
+		//	//IOFunc::OutputPoissonGridAsAMR(
+		//	//	holder,
+		//	//	std::vector<std::pair<int, std::string>>{ {-1, "type"}, { -2, "level" }, { BufChnls::vor, "vorticity" }},
+		//	//	std::vector<std::pair<int, std::string>>{ {BufChnls::u, "fluid_velocity"} },
+		//	//	metadata.base_path / fmt::format("fluid{:04d}.vthb", metadata.current_frame)
+		//	//);
+
+		//	//metadata.Append_Output_Thread(std::make_shared<std::thread>(IOFunc::OutputPoissonGridAsStructuredVTI, holder,
+		//	//	std::vector<std::pair<int, std::string>>{ {-1, "type"}, { -2, "level" }, { BufChnls::vor, "vorticity" }},
+		//	//	//std::vector<std::pair<int, std::string>>{ },
+		//	//	std::vector<std::pair<int, std::string>>{ {BufChnls::u, "fluid_velocity"} },
+		//	//	//std::vector<std::pair<int, std::string>>{ { -1, "type" }, { Tile::vor_channel, "vorticity" }, { Tile::dye_channel, "dye_density" } },
+		//	//	//std::vector<std::pair<int, std::string>>{ {Tile::u_channel, "velocity"} },
+		//	//	metadata.base_path / fmt::format("fluid{:04d}.vti", metadata.current_frame)));
+
+		//}
+
+		//{
+		//	auto particles_h_ptr = std::make_shared<thrust::host_vector<Particle>>(pfm_particles_d);
+		//	//metadata.Append_Output_Thread(std::make_shared<std::thread>(IOFunc::OutputParticleSystemAsVTU,
+		//	//	particles_h_ptr, metadata.base_path / fmt::format("particles{:04d}.vtu", metadata.current_frame)
+		//	//));
+
+		//	IOFunc::OutputParticleSystemAsVTU(
+		//		particles_h_ptr, metadata.base_path / fmt::format("particles{:04d}.vtu", metadata.current_frame)
+		//	);
+		//	//}
 		//}
 	}
 

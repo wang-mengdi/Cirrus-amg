@@ -697,7 +697,7 @@ void FluidEuler::project(HADeviceGrid<Tile>& grid, const T current_time, const T
 		//solver.prepareTypesAndCoeffs(grid);
 
 		cudaDeviceSynchronize(); CPUTimer projection_solve_timer; projection_solve_timer.start();
-		auto [iters, err] = solver.solve(grid, false, 100, 1e-7, 2, 10, 1, mParams.mIsPureNeumann);
+		auto [iters, err] = solver.solve(grid, false, 100, 1e-6, 2, 10, 1, mParams.mIsPureNeumann);
 		cudaDeviceSynchronize(); projection_solve_time = projection_solve_timer.stop();
 		double total_cells = grid.numTotalTiles() * Tile::SIZE;
 		double cells_per_second = (total_cells + 0.0) / (projection_solve_time / 1000.0);
