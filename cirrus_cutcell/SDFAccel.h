@@ -5,7 +5,7 @@
 #include <igl/readOBJ.h>
 #include <igl/fast_winding_number.h>
 
-#include "PoissonTile.h"
+#include "Common.h"
 
 void AssertRigidTransform(const Eigen::Transform<T, 3, Eigen::Affine>& xform);
 
