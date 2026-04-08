@@ -9,8 +9,6 @@ add_requires("vtk >=9.5.1", {configs = {cuda = true}})
 add_requires("polyscope", {version = "2.5.0"})
 add_requireconfs("polyscope.glm", {override = true, version = "0.9.9+8"})
 
-add_requires("openvdb >=12.1.1")
-
 
 add_defines("FMT_UNICODE=0")
 
@@ -30,6 +28,4 @@ target("src")
     add_packages("eigen", {public = true})
     add_packages("vtk", {public = true})
     add_packages("polyscope")
-    add_packages("openvdb", {public = true})
-
     add_deps("common")
