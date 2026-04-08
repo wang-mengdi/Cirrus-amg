@@ -7,6 +7,7 @@
 
 #include "Simulator.h"
 #include "MetaData.h"
+#include <fstream>
 
 class DriverTimer {
 public:
