@@ -6,7 +6,6 @@
 
 
 #if defined(__CUDACC__) || defined(__HIP__)
-// Only define __hostdev__ when using NVIDIA CUDA or HIP compiler
 #define __hostdev__ __host__ __device__
 #else
 #define __hostdev__
@@ -36,7 +35,6 @@ do { \
 
 #endif
 
-// CUDA float4 / double4 mapping
 template<typename T>
 struct cuda_vec4;
 
@@ -49,7 +47,8 @@ struct cuda_vec4<double> { using type = double4; };
 template<typename T>
 using cuda_vec4_t = typename cuda_vec4<T>::type;
 
-//execuate in range [0, N)
+#if defined(__CUDACC__)
+
 template <typename Func>
 __global__ void ForEachKernel(Func f, const int N, const int numGroups) {
 	int base = blockIdx.x * (blockDim.x * numGroups);
@@ -60,11 +59,6 @@ __global__ void ForEachKernel(Func f, const int N, const int numGroups) {
 			f(idx);
 		}
 	}
-
-	//int idx = blockIdx.x * blockDim.x + threadIdx.x;
-	//if (idx < N) {
-	//	f(idx);
-	//}
 }
 
 template<typename Func>
@@ -92,3 +86,5 @@ void TernaryOnArray(T* d_a, T* d_b, T* d_c, Func3 f, int n = 1, int block_size =
 
 	TernaryOnArrayKernel << <numBlocks, block_size >> > (d_a, d_b, d_c, f, n);
 }
+
+#endif
