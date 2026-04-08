@@ -40,11 +40,11 @@ target("cirrus_cutcell")
     add_files("cirrus_cutcell/*.cpp", "cirrus_cutcell/*.cu")
     add_includedirs("cirrus_cutcell", {public = true})
     add_cugencodes("native")
-    add_cuflags("-std=c++17 --expt-relaxed-constexpr --expt-extended-lambda --allow-unsupported-compiler")
+    add_cuflags("-std=c++17", "--expt-relaxed-constexpr", "--expt-extended-lambda", "--allow-unsupported-compiler", {force = true})
     if is_mode("debug") then
-        add_cuflags("-G -lineinfo")
+        add_cuflags("-G", "-lineinfo", {force = true})
     elseif is_mode("releasedbg") then
-        add_cuflags("-lineinfo")
+        add_cuflags("-lineinfo", {force = true})
     end
     if is_plat("windows") then
         add_cxxflags("/utf-8")
@@ -75,7 +75,7 @@ target("tests")
     add_files("tests/*.cpp", "tests/*.cu")
     add_includedirs("tests", {public = true})
     add_cugencodes("native")
-    add_cuflags("-std=c++17 --expt-relaxed-constexpr --expt-extended-lambda --allow-unsupported-compiler")
+    add_cuflags("-std=c++17", "--expt-relaxed-constexpr", "--expt-extended-lambda", "--allow-unsupported-compiler", {force = true})
     if is_plat("windows") then
         add_cxxflags("/utf-8")
     end

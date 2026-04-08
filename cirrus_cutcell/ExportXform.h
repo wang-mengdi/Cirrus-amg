@@ -1,4 +1,7 @@
+# pragma once
+
 #include <filesystem>
+#include "FluidParams.h"
 namespace fs = std::filesystem;
 
-void ExportMeshTransforms(const fs::path& json_config_path, const fs::path& out_dir);
+void ExportSingleFileTransform(const FluidParams& mParams, const fs::path& out_file, T time);

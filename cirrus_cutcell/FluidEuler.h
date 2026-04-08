@@ -6,7 +6,6 @@
 #pragma once
 
 #include "Simulator.h"
-#include "FluidParams.h"
 //#include "Random.h"
 #include "GPUTimer.h"
 #include "AMGSolver.h"
@@ -15,6 +14,7 @@
 #include "FMParticles.h"
 #include "MarkerParticles.h"
 #include "PoissonGrid.h"
+#include "ExportXform.h"
 
 #include <polyscope/polyscope.h>
 #include <polyscope/point_cloud.h>
@@ -288,7 +288,7 @@ public:
 	}
 	virtual void Output(DriverMetaData& metadata) {
 		{
-			//snapshot  thing
+			//snapshot
 			if (metadata.Should_Snapshot()) {
 				Save_Frame(metadata);
 			}
@@ -296,18 +296,16 @@ public:
 
 
 		{
+			//output stats and xform
 			WriteStatToFile(metadata);
+			ExportSingleFileTransform(mParams, metadata.base_path / fmt::format("xform{:04d}.txt"), metadata.current_time);
 		}
 
-		//return;
-		auto& grid = *grid_ptrs.back();
 
 		{
-
+			//output grid
+			auto& grid = *grid_ptrs.back();
 			auto holder = grid.getHostTileHolderForLeafs();
-
-			//metadata.Append_Output_Thread(std::make_shared<std::thread>(IOFunc::OutputTilesAsVTU, holder, metadata.base_path / fmt::format("tiles{:04d}.vtu", metadata.current_frame)));
-			//IOFunc::OutputTilesAsVTU(holder, metadata.base_path / fmt::format("tiles{:04d}.vtu", metadata.current_frame));
 
 			IOFunc::OutputPoissonGridAsStructuredVTI(
 				holder,
@@ -315,34 +313,14 @@ public:
 				std::vector<std::pair<int, std::string>>{ {BufChnls::u, "fluid_velocity"} },
 				metadata.base_path / fmt::format("fluid{:04d}.vti", metadata.current_frame)
 			);
-
-			//IOFunc::OutputPoissonGridAsAMR(
-			//	holder,
-			//	std::vector<std::pair<int, std::string>>{ {-1, "type"}, { -2, "level" }, { BufChnls::vor, "vorticity" }},
-			//	std::vector<std::pair<int, std::string>>{ {BufChnls::u, "fluid_velocity"} },
-			//	metadata.base_path / fmt::format("fluid{:04d}.vthb", metadata.current_frame)
-			//);
-
-			//metadata.Append_Output_Thread(std::make_shared<std::thread>(IOFunc::OutputPoissonGridAsStructuredVTI, holder,
-			//	std::vector<std::pair<int, std::string>>{ {-1, "type"}, { -2, "level" }, { BufChnls::vor, "vorticity" }},
-			//	//std::vector<std::pair<int, std::string>>{ },
-			//	std::vector<std::pair<int, std::string>>{ {BufChnls::u, "fluid_velocity"} },
-			//	//std::vector<std::pair<int, std::string>>{ { -1, "type" }, { Tile::vor_channel, "vorticity" }, { Tile::dye_channel, "dye_density" } },
-			//	//std::vector<std::pair<int, std::string>>{ {Tile::u_channel, "velocity"} },
-			//	metadata.base_path / fmt::format("fluid{:04d}.vti", metadata.current_frame)));
-
 		}
 
 		{
+			//output particles
 			auto particles_h_ptr = std::make_shared<thrust::host_vector<Particle>>(pfm_particles_d);
-			//metadata.Append_Output_Thread(std::make_shared<std::thread>(IOFunc::OutputParticleSystemAsVTU,
-			//	particles_h_ptr, metadata.base_path / fmt::format("particles{:04d}.vtu", metadata.current_frame)
-			//));
-
 			IOFunc::OutputParticleSystemAsVTU(
 				particles_h_ptr, metadata.base_path / fmt::format("particles{:04d}.vtu", metadata.current_frame)
 			);
-			//}
 		}
 	}
 
@@ -431,20 +409,17 @@ public:
 
 		size_t free_mem, total_mem;
 
-		// 查询设备的内存信息
 		cudaError_t err = cudaMemGetInfo(&free_mem, &total_mem);
 		if (err != cudaSuccess) {
 			std::cerr << "Failed to get CUDA memory info: " << cudaGetErrorString(err) << std::endl;
 			return;
 		}
 
-		// 转换为GB
 		double free_mem_gb = static_cast<double>(free_mem) / (1024 * 1024 * 1024);
 		double total_mem_gb = static_cast<double>(total_mem) / (1024 * 1024 * 1024);
 		double used_mem_gb = total_mem_gb - free_mem_gb;
 		Info("Using CUDA Memory: total {:.3f}G, free {:.3f}G, used {:.3f}G, background {:.3f}({:.3f})G", total_mem_gb, free_mem_gb, used_mem_gb, used_mem_gb - memory_size_gb, used_mem_gb - capacity_size_gb);
 
-		// 查询 CPU 内存信息
 #ifdef _WIN32
 		MEMORYSTATUSEX memInfo;
 		memInfo.dwLength = sizeof(MEMORYSTATUSEX);

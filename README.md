@@ -1,15 +1,37 @@
 # Cirrus: Adaptive Hybrid Particle-Grid Flow Maps on GPU
 
-**Visual Studio**
+### Compilation
+
+Run:
+
+    $ xmake
+
+(Alternative) create `Cirrus-amg\build\vsxmake2022\Cirrus-amg.sln` solution file for Visual Studio:
 
     $ python makesln.py
+
+### Run Simulations
+
+Use `.json` file in `scenes` folder as the argument. Sphere, tie fighter, delta wing simulations are as follows:
+
+    $ xmake r cirrus_cutcell .\scenes\sphere_circling.json
+    $ xmake r cirrus_cutcell .\scenes\tie_fighter.json
+    $ xmake r cirrus_cutcell .\scenes\delta_wing.json
+
+Modify the `.json` file for parameters like total number of frames. The object trajectories are programmed to last for 4s or 400 frames in 100FPS.
+
+The simulator will write results under `./output/` folder. 
+
+You can use `Paraview` for visualization. If it's installed, 
+
+**Visual Studio**
+
 
 Running args: `.\scenes\smokesphere.json`
 
 **xmake**
 
-    $ xmake -v
-    $ xmake r cirrus tests
+
 
 
 ### sl_cutcell

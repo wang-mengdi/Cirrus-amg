@@ -1,10 +1,24 @@
 #include <fstream>
 #include <iomanip>
 #include <cstdio>
+#include "ExportXform.h"
 
-#include "FluidParams.h"
-
-
+void ExportSingleFileTransform(const FluidParams& mParams, const fs::path& out_file, T time)
+{
+    auto xform = mParams.meshToWorldTransform(time);
+    Eigen::Matrix<T, 4, 4> M = xform.matrix();
+    std::ofstream ofs(out_file);
+    ASSERT(ofs.good(), "ExportSingleFileTransform: failed to open {}", out_file.string());
+    ofs << std::setprecision(17);
+    for (int i = 0; i < 4; ++i) {
+        for (int j = 0; j < 4; ++j) {
+            ofs << M(i, j);
+            if (j < 3) ofs << " ";
+        }
+        ofs << "\n";
+    }
+    Info("Exported transform at time {}s to {}", time, out_file.string());
+}
 
 void ExportMeshTransforms(
     const FluidParams& mParams,
@@ -23,26 +37,7 @@ void ExportMeshTransforms(
 
     for (int frame = 0; frame <= n; ++frame) {
         T current_time = static_cast<T>(frame) / fps;
-        auto xform = mParams.meshToWorldTransform(current_time);
-        Eigen::Matrix<T, 4, 4> M = xform.matrix();
-
-		//std::cout << "ExportMeshTransforms: frame " << frame << ", time " << current_time << "s, transform:\n" << M << std::endl;
-
-        char filename[64];
-        std::snprintf(filename, sizeof(filename), "transform_%04d.txt", frame);
-        fs::path filepath = out_dir / filename;
-
-        std::ofstream ofs(filepath);
-        ASSERT(ofs.good(), "ExportMeshTransforms: failed to open {}", filepath.string());
-
-        ofs << std::setprecision(17);
-        for (int i = 0; i < 4; ++i) {
-            for (int j = 0; j < 4; ++j) {
-                ofs << M(i, j);
-                if (j < 3) ofs << " ";
-            }
-            ofs << "\n";
-        }
+		ExportSingleFileTransform(mParams, out_dir / fmt::format("xform_{:04d}.txt", frame), current_time);
     }
 
     Info("Exported transforms for frames 0..{} to {}", n, out_dir.string());

@@ -22,8 +22,8 @@ target("src")
     add_includedirs(".", "../ext", {public=true})
     
     add_cugencodes("native")
-    add_cuflags("-extended-lambda --std=c++17 -lineinfo --allow-unsupported-compiler")
-    add_cuflags("-rdc=true")
+    add_cuflags("--expt-extended-lambda", "--std=c++17", "-lineinfo", "--allow-unsupported-compiler", {force = true})
+    add_cuflags("-rdc=true", {force = true})
 
 
     add_packages("cuda", {public = true})
