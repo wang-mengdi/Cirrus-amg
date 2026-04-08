@@ -193,7 +193,7 @@ __device__ T FluidParams::solidFaceCenterVelocity(const T current_time, const T 
 		}
 	}
 	else {
-		CUDA_ASSERT(false);
+		CUDA_ASSERT(false, "unhandled test case");
 		return 0;
 	}
 }

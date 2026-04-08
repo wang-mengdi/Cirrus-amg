@@ -13,26 +13,22 @@
 
 #if defined(__CUDA_ARCH__)
 
-#define CUDA_ASSERT(cond, ...) \
+#define CUDA_ASSERT(cond, fmt, ...) \
 do { \
     if (!(cond)) { \
-        printf("CUDA_ASSERT: %s (%s:%d) ", \
-               #cond, __FILE__, __LINE__); \
-        printf(__VA_ARGS__); \
-        printf("\n"); \
+        printf("CUDA_ASSERT: %s (%s:%d) " fmt "\n", \
+               #cond, __FILE__, __LINE__, ##__VA_ARGS__); \
         asm volatile("trap;"); \
     } \
 } while(0)
 
 #else
 
-#define CUDA_ASSERT(cond, ...) \
+#define CUDA_ASSERT(cond, fmt, ...) \
 do { \
     if (!(cond)) { \
-        std::fprintf(stderr, "ASSERT: %s (%s:%d) ", \
-                     #cond, __FILE__, __LINE__); \
-        std::fprintf(stderr, __VA_ARGS__); \
-        std::fprintf(stderr, "\n"); \
+        std::fprintf(stderr, "ASSERT: %s (%s:%d) " fmt "\n", \
+                     #cond, __FILE__, __LINE__, ##__VA_ARGS__); \
         std::abort(); \
     } \
 } while(0)
