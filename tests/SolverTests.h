@@ -1,6 +1,6 @@
 #pragma once
 
-#include "TestGrids.h"
+#include "TestGridsStr.h"
 
 
 namespace SolverTests {
