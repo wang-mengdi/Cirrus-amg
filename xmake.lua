@@ -5,7 +5,9 @@ if is_mode("debug") then
     set_symbols("debug")
     set_optimize("none")
     add_defines("CIRRUS_DEBUG")
-    add_cxxflags("/RTC1")
+    if is_plat("windows") then
+        add_cxxflags("/RTC1")
+    end
 end
 
 if is_mode("releasedbg") then
@@ -124,23 +126,27 @@ target("cirrus_cutcell")
     elseif is_mode("releasedbg") then
         add_cuflags("-lineinfo")
     end
-    add_cxxflags("/utf-8")
+    if is_plat("windows") then
+        add_cxxflags("/utf-8")
+    end
     add_packages("libigl", "tbb", "polyscope")
     add_deps("src")
 
-    after_build(function (target)
-        local userprofile = os.getenv("USERPROFILE")
-        local pkgdir = path.join(userprofile, "AppData/Local/.xmake/packages")
+    if is_plat("windows") then
+        after_build(function (target)
+            local userprofile = os.getenv("USERPROFILE")
+            local pkgdir = path.join(userprofile, "AppData/Local/.xmake/packages")
 
-        local pattern = path.join(pkgdir, "t/token/24.09.0", "*", "bin", "token.dll")
+            local pattern = path.join(pkgdir, "t/token/24.09.0", "*", "bin", "token.dll")
 
-        local outdir = target:targetdir()
-        os.mkdir(outdir)
+            local outdir = target:targetdir()
+            os.mkdir(outdir)
 
-        for _, dll in ipairs(os.files(pattern)) do
-            os.cp(dll, outdir)
-        end
-    end)
+            for _, dll in ipairs(os.files(pattern)) do
+                os.cp(dll, outdir)
+            end
+        end)
+    end
 
 
 target("tests")
@@ -150,7 +156,9 @@ target("tests")
     add_includedirs("tests", {public = true})
     add_cugencodes("native")
     add_cuflags("-std=c++17 --expt-relaxed-constexpr --expt-extended-lambda --allow-unsupported-compiler")
-    add_cxxflags("/utf-8")
+    if is_plat("windows") then
+        add_cxxflags("/utf-8")
+    end
     add_deps("src")
     add_packages("magic_enum")
     add_packages("tbb", "polyscope")
