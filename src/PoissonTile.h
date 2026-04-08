@@ -174,12 +174,9 @@ public:
 
 using Tile = PoissonTile<float, 15>;
 using VelTile = PoissonTile<float, 3>;
-#ifndef SDFACCEL_TYPES_DEFINED
-#define SDFACCEL_TYPES_DEFINED
 using T = Tile::T;
 using Coord = typename Tile::Coord;
 using Vec = Tile::VecType;
-#endif
 constexpr T NODATA = FLT_MAX;
 //constexpr T NODATA = std::numeric_limits<T>::quiet_NaN();
 

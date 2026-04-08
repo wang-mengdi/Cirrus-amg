@@ -8,11 +8,8 @@
 #include "Common.h"
 #include <NanoVDB.h>
 
-#ifndef SDFACCEL_TYPES_DEFINED
-#define SDFACCEL_TYPES_DEFINED
 using T = float;
 using Vec = nanovdb::Vec3<T>;
-#endif
 
 void AssertRigidTransform(const Eigen::Transform<T, 3, Eigen::Affine>& xform);
 
