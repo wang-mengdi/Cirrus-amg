@@ -547,7 +547,7 @@ public:
 	}
 
 	void removeTileHost(const int level, const Coord& b_ijk) {
-		auto& h_acc = hostAccessor();
+		auto h_acc = hostAccessor();
 		auto i = h_acc.tileIdx(level, b_ijk);
 		if (hHashTables[level][i].empty()) return;
 		auto j = i;
