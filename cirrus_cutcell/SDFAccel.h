@@ -6,7 +6,7 @@
 #include <igl/fast_winding_number.h>
 
 #include "Common.h"
-#include <nanovdb/util/Coord.h>
+#include <NanoVDB.h>
 
 #ifndef SDFACCEL_TYPES_DEFINED
 #define SDFACCEL_TYPES_DEFINED
