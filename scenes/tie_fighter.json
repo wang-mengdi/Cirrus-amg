@@ -5,7 +5,7 @@
         "fps": 200,
         "last_frame": 400,
         "min_step_frame_fraction": 0.0,
-        "output_base_dir": "C:/mengdi/",
+        "output_base_dir": "output",
         "queue_size": 5,
         "snapshot_stride": 20
     },
@@ -19,7 +19,7 @@
         "flowmap_stride": 5,
         "gravity": 0.0,
         "inflow_velocity": 1.0,
-        "mesh_file": "D:/mengdi/xwing_0.0952_0.282_0.321.ply",
+        "mesh_file": "./scenes/tie_0.32_0.261_0.356.ply",
         "particle_life": 2.0,
         "sample_num_per_cell": 8,
         "particle_sample_relative_bandwidth": 5.0,
