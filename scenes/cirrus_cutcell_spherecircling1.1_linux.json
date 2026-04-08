@@ -1,0 +1,30 @@
+{
+    "driver": {
+        "cfl": 0.5,
+        "first_frame": 0,
+        "fps": 200,
+        "last_frame": 400,
+        "min_step_frame_fraction": 0.0,
+        "output_base_dir": "~/mengdi/",
+        "queue_size": 5,
+        "snapshot_stride": 20
+    },
+    "scene": {
+        "test": "sphere_circling",
+        "initial_grid_size_x": 1,
+        "initial_grid_size_y": 1,
+        "initial_grid_size_z": 2,
+        "coarse_level": 2,
+        "fine_level": 5,
+        "flowmap_stride": 5,
+        "gravity": 0.0,
+        "inflow_velocity": 1.0,
+        "mesh_file": "SPHERE",
+        "sphere_radius": 0.2,
+        "particle_life": 2.5,
+        "sample_num_per_cell": 8,
+        "particle_sample_relative_bandwidth": 5.0,
+        "refine_relative_bandwidth": 10.0
+    },
+    "simulator": "euler"
+}
