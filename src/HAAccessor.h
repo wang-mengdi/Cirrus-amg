@@ -281,7 +281,7 @@ public:
 			return false;
 		}
 		Coord b_ijk;
-		decomposeGlobalCoord(g_ijk, b_ijk, l_ijk);
+		this->decomposeGlobalCoord(g_ijk, b_ijk, l_ijk);
 		tile_info = tileInfo(level, b_ijk);
 		return !tile_info.empty();
 	}
