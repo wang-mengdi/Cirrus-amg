@@ -1323,17 +1323,17 @@ namespace SolverTests
 		//	{}, -1, FLT_MAX);
 		//polyscope::show();
 
-		{
-			auto holder = grid.getHostTileHolderForLeafs();
-			auto file_path = fs::absolute(fmt::format("output/laplacian_test_{}_levels_{}_{}.vti", grid_name, min_level, max_level));
-			//create parent
-			fs::create_directories(file_path.parent_path());
-			IOFunc::OutputPoissonGridAsStructuredVTI(
-				holder,
-				{ {-1, "type"}, {-2, "level"}, {analytical_nlap_channel, "analytical"}, {numerical_nlap_channel, "numerical"}, {residual_channel, "r"}, {x_channel, "x"}},
-				{},
-				file_path);
-		}
+		//{
+		//	auto holder = grid.getHostTileHolderForLeafs();
+		//	auto file_path = fs::absolute(fmt::format("output/laplacian_test_{}_levels_{}_{}.vti", grid_name, min_level, max_level));
+		//	//create parent
+		//	fs::create_directories(file_path.parent_path());
+		//	IOFunc::OutputPoissonGridAsStructuredVTI(
+		//		holder,
+		//		{ {-1, "type"}, {-2, "level"}, {analytical_nlap_channel, "analytical"}, {numerical_nlap_channel, "numerical"}, {residual_channel, "r"}, {x_channel, "x"}},
+		//		{},
+		//		file_path);
+		//}
 
 		Info("Test Laplacian error on grid {} levels {}~{}", grid_name, min_level, max_level);
 		// auto linf_norm = SingleChannelLinfSync(grid, residual_channel, LEAF);

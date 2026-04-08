@@ -38,7 +38,17 @@ int main(int argc, char** argv) {
 	}
 
 	{
+		//Static Pressure Projection Test with Cut Cells
 
+		SolverTests::TestSolverErrorSolid("sphere_solid", 2, 4);
+		SolverTests::TestSolverErrorSolid("sphere_solid", 3, 5);
+		SolverTests::TestSolverErrorSolid("sphere_solid", 4, 6);
+		SolverTests::TestSolverErrorSolid("sphere_solid", 5, 7);
+
+		SolverTests::TestSolverErrorSolid("star_solid", 2, 4);
+		SolverTests::TestSolverErrorSolid("star_solid", 3, 5);
+		SolverTests::TestSolverErrorSolid("star_solid", 4, 6);
+		SolverTests::TestSolverErrorSolid("star_solid", 5, 7);
 	}
 
 
@@ -164,10 +174,7 @@ int main(int argc, char** argv) {
 		//}
 	}
 
-	//SolverTests::TestSolverErrorSolid("sphere_solid", 2, 4);
-	//SolverTests::TestSolverErrorSolid("sphere_solid", 3, 5);
-	//SolverTests::TestSolverErrorSolid("sphere_solid", 4, 6);
-	//SolverTests::TestSolverErrorSolid("sphere_solid", 5, 7);
+
 	 
 	//SolverTests::TestRecoveryNew("sphere_solid", 2, 4);
 	//SolverTests::TestRecoveryNew("sphere_solid", 3, 5);
