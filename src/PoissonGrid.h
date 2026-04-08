@@ -6,6 +6,9 @@
 #include <cub/block/block_reduce.cuh>
 #include <thrust/execution_policy.h>
 
+struct CubMin { template<typename T> __device__ T operator()(const T& a, const T& b) const { return a < b ? a : b; } };
+struct CubMax { template<typename T> __device__ T operator()(const T& a, const T& b) const { return a > b ? a : b; } };
+
 void SanityCheckChannelCellValues(HADeviceGrid<Tile>& grid, const int channel, uint8_t launch_types = LEAF);
 void SanityCheckChannelNodeValues(HADeviceGrid<Tile>& grid, const int channel, uint8_t launch_types = LEAF);
 
@@ -191,8 +194,8 @@ __global__ void MarkRegionOfInterestWithChannelMinAndMax128Kernel(HATileAccessor
 	__shared__ typename BlockReduce::TempStorage temp_storage_min;
 	__shared__ typename BlockReduce::TempStorage temp_storage_max;
 
-	T block_min = BlockReduce(temp_storage_min).Reduce(thread_min, cub::Min());
-	T block_max = BlockReduce(temp_storage_max).Reduce(thread_max, cub::Max());
+	T block_min = BlockReduce(temp_storage_min).Reduce(thread_min, CubMin());
+	T block_max = BlockReduce(temp_storage_max).Reduce(thread_max, CubMax());
 
 	// The first thread writes the results to the tile metadata
 	if (ti == 0) {
