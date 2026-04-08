@@ -173,11 +173,14 @@ public:
 };
 
 using Tile = PoissonTile<float, 15>;
-using VelTile = PoissonTile<float, 3>;//3 velocity channels
+using VelTile = PoissonTile<float, 3>;
+#ifndef SDFACCEL_TYPES_DEFINED
+#define SDFACCEL_TYPES_DEFINED
 using T = Tile::T;
 using Coord = typename Tile::Coord;
 using Vec = Tile::VecType;
-constexpr T NODATA = FLT_MAX;//sometimes we use NODATA to indicate invalid data, so it cannot be nan
+#endif
+constexpr T NODATA = FLT_MAX;
 //constexpr T NODATA = std::numeric_limits<T>::quiet_NaN();
 
 VelTile ExtractVelocityTile(const Tile& src, int u_channel);

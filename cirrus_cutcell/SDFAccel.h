@@ -6,6 +6,13 @@
 #include <igl/fast_winding_number.h>
 
 #include "Common.h"
+#include <nanovdb/util/Coord.h>
+
+#ifndef SDFACCEL_TYPES_DEFINED
+#define SDFACCEL_TYPES_DEFINED
+using T = float;
+using Vec = nanovdb::Vec3<T>;
+#endif
 
 void AssertRigidTransform(const Eigen::Transform<T, 3, Eigen::Affine>& xform);
 
