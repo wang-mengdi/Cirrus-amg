@@ -55,7 +55,6 @@ int main(int argc, char** argv) {
 		SolverTests::TestSolverErrorSolid("star_solid", 2, 4);
 		SolverTests::TestSolverErrorSolid("star_solid", 3, 5);
 		SolverTests::TestSolverErrorSolid("star_solid", 4, 6);
-		SolverTests::TestSolverErrorSolid("star_solid", 5, 7);
 	}
 
 

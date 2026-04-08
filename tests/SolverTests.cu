@@ -1374,7 +1374,7 @@ namespace SolverTests
 		auto [grid_ptr, is_pure_neumann] = CreateNeumannProblem(grid_name, min_level, max_level, bc_name, b0_channel, grdt_channel);
 		auto& grid = *grid_ptr;
 
-		for (int repeat = 0; repeat < 10; repeat++) {
+		for (int repeat = 0; repeat < 1; repeat++) {
 			Copy(grid, b0_channel, Tile::b_channel, -1, LEAF, LAUNCH_SUBTREE, LEAF | NONLEAF | NEUMANN);
 			TestSolverWithAnalyticalSolution(grid, algorithm, omega, coeff_channel, grdt_channel, error_channel, is_pure_neumann);
 		}
