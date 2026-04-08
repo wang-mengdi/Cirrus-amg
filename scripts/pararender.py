@@ -333,7 +333,7 @@ def render_vti_to_png(frame_number, vti_file_path, png_file_path,
             )
 
             if xform_dir is not None:
-                xform_file_path = os.path.join(xform_dir, f"transform_{frame_number}.txt")
+                xform_file_path = os.path.join(xform_dir, f"xform{frame_number}.txt")
                 if not os.path.exists(xform_file_path):
                     raise FileNotFoundError(f"Transform file not found: {xform_file_path}")
                 apply_transform_to_mesh(mesh_xform, xform_file_path)
@@ -406,7 +406,7 @@ def render_all_vti_files(args):
     render_outline = args.outline
 
     mesh_path = args.mesh
-    xform_dir = args.xform_dir
+    xform_dir = args.input_path
 
     # cam_pos = [-1.47342, 1.2625, 1.62391]
     # cam_focal = [0.526026, 0.492487, 1.11681]
@@ -530,12 +530,6 @@ if __name__ == "__main__":
         type=str,
         default=None,
         help="Optional mesh file to overlay."
-    )
-    parser.add_argument(
-        "--xform-dir",
-        type=str,
-        default=None,
-        help="Directory containing per-frame transform files like transform_0000.txt."
     )
 
     args = parser.parse_args()

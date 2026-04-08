@@ -298,7 +298,7 @@ public:
 		{
 			//output stats and xform
 			WriteStatToFile(metadata);
-			ExportSingleFileTransform(mParams, metadata.base_path / fmt::format("xform{:04d}.txt"), metadata.current_time);
+			ExportSingleFileTransform(mParams, metadata.base_path / fmt::format("xform{:04d}.txt", metadata.current_frame), metadata.current_time);
 		}
 
 

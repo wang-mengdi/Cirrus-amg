@@ -10,6 +10,8 @@ Run:
 
     $ python makesln.py
 
+### Run Tests
+
 ### Run Simulations
 
 Use `.json` file in `scenes` folder as the argument. Sphere, tie fighter, delta wing simulations are as follows:
@@ -22,12 +24,11 @@ Modify the `.json` file for parameters like total number of frames. The object t
 
 The simulator will write results under `./output/` folder. 
 
-You can use `Paraview` for visualization. If it's installed, 
+You can use `Paraview` for visualization. If it's installed, render with the following script:
 
-**Visual Studio**
+    $ pvpython --force-offscreen-rendering .\scripts\pararender.py .\output\sphere_circling\ --slice 0:401 --name vorticity --outline --mask-non-finest --mesh .\scenes\sphere0.2r.ply
 
-
-Running args: `.\scenes\smokesphere.json`
+Rendered images will be saved to `output/sphere_circling/render_vorticity`.
 
 **xmake**
 
