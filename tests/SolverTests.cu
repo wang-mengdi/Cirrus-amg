@@ -440,7 +440,6 @@ namespace SolverTests
 			CalculateNeighborTiles(grid);
 			ConservativeFullNegativeLaplacian(grid, grdt_channel, Tile::b_channel);
 
-			_sleep(200);
 			CMGSolver solver(1.0, 1.0);
 			// Copy(grid, Tile::b_channel, Tile::phi_channel, -1, LEAF, LAUNCH_SUBTREE, INTERIOR | DIRICHLET | NEUMANN);
 			CPUTimer<std::chrono::microseconds> timer;
@@ -470,8 +469,6 @@ namespace SolverTests
 			//     {}, -1, FLT_MAX);
 			// polyscope::show();
 
-			_sleep(200);
-
 			CPUTimer<std::chrono::microseconds> timer;
 			timer.start();
 			auto [iters, err] = solver.solve(grid, true, 1000, 1e-6, 2, 10, 1, false);
@@ -482,7 +479,6 @@ namespace SolverTests
 			Info("Total {:.5}M cells, AMGPCG Async speed {:.5} M cells /s", total_cells / (1024.0 * 1024), cells_per_second / (1024.0 * 1024));
 			Info("AMGPCG solved in {} iterations with error {}, average iteration throughput {:.5}M cell/s", iters, err, cells_per_second * iters / (1024.0 * 1024));
 		}
-		_sleep(200);
 
 		// calculate difference from x and grdt in r_channel
 		grid.launchVoxelFuncOnAllTiles(
@@ -596,7 +592,6 @@ namespace SolverTests
 			CalculateNeighborTiles(grid);
 			ConservativeFullNegativeLaplacian(grid, grdt_channel, Tile::b_channel);
 
-			_sleep(200);
 			CMGSolver solver(1.0, 1.0);
 			// Copy(grid, Tile::b_channel, Tile::phi_channel, -1, LEAF, LAUNCH_SUBTREE, INTERIOR | DIRICHLET | NEUMANN);
 			CPUTimer<std::chrono::microseconds> timer;
@@ -617,8 +612,6 @@ namespace SolverTests
 			solver.prepareTypesAndCoeffs(grid);
 			AMGFullNegativeLaplacianOnLeafs(grid, grdt_channel, coeff_channel, Tile::b_channel);
 
-			_sleep(200);
-
 			CPUTimer<std::chrono::microseconds> timer;
 			timer.start();
 			auto [iters, err] = solver.solve(grid, true, 1000, 1e-6, 1, 10, 1, false);
@@ -629,7 +622,6 @@ namespace SolverTests
 			Info("Total {:.5}M cells, AMGPCG Async speed {:.5} M cells /s", total_cells / (1024.0 * 1024), cells_per_second / (1024.0 * 1024));
 			Info("AMGPCG solved in {} iterations with error {}, average iteration throughput {:.5}M cell/s", iters, err, cells_per_second * iters / (1024.0 * 1024));
 		}
-		_sleep(200);
 
 		// calculate difference from x and grdt in r_channel
 		grid.launchVoxelFuncOnAllTiles(
@@ -1150,8 +1142,6 @@ namespace SolverTests
 				solver.mu_cycle_repeat_times = 1;
 				solver.prepareTypesAndCoeffs(grid);
 				// AMGFullNegativeLaplacianOnLeafs(grid, grdt_channel, coeff_channel, Tile::b_channel);
-
-				_sleep(200);
 
 				CPUTimer<std::chrono::microseconds> timer;
 				timer.start();
