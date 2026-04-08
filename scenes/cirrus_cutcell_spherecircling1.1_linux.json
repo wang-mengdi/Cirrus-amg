@@ -5,7 +5,7 @@
         "fps": 200,
         "last_frame": 400,
         "min_step_frame_fraction": 0.0,
-        "output_base_dir": "~/mengdi/",
+        "output_base_dir": "/home/mwang740/mengdi/",
         "queue_size": 5,
         "snapshot_stride": 20
     },
