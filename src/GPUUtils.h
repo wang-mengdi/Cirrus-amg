@@ -1,6 +1,7 @@
 #pragma once
 #include <cuda_runtime.h>
 #include <NanoVDB.h>
+#include "Common.h"
 
 
 #if defined(__CUDACC__) || defined(__HIP__)
