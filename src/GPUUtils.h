@@ -1,7 +1,8 @@
 #pragma once
 #include <cuda_runtime.h>
 #include <NanoVDB.h>
-#include "Common.h"
+#include <cstdio>
+#include <cstdlib>
 
 
 #if defined(__CUDACC__) || defined(__HIP__)
@@ -69,7 +70,7 @@ __global__ void ForEachKernel(Func f, const int N, const int numGroups) {
 template<typename Func>
 void LaunchIndexFunc(Func f, const int N, const int blockSize = 512, const int numGroups = 4) {
 	if (N == 0) return;
-	ASSERT(blockSize % numGroups == 0);
+	CUDA_ASSERT(blockSize % numGroups == 0, "blockSize must be divisible by numGroups");
 	int numBlocks = (N + blockSize - 1) / blockSize;
 	ForEachKernel << <numBlocks, blockSize / numGroups >> > (f, N, numGroups);
 }
