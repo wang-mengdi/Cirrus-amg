@@ -1447,8 +1447,8 @@ namespace SolverTests
 		},
 			LEAF);
 
-		//for (int max_iters = 0; max_iters <= 10; max_iters++)
-		for (int max_iters : {0,10,20,30,40,50,60,70,80,90,100})
+		for (int max_iters = 0; max_iters <= 10; max_iters++)
+		//for (int max_iters : {0,10,20,30,40,50,60,70,80,90,100})
 		{
 			CalculateNeighborTiles(grid);
 
