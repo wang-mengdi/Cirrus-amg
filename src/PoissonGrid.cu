@@ -288,7 +288,7 @@ __global__ void ChannelPowerSumKernel128(const int order, HATileAccessor<Tile> a
 
     if (order == -1) {
         //use max instead of sum
-		block_value_sum = BlockReduce(value_sum_storage).Reduce(thread_value_sum, cub::Max());
+		block_value_sum = BlockReduce(value_sum_storage).Reduce(thread_value_sum, CubMax());
 		if (weights_sum) {
             block_weight_sum = 1;//maximum of count
 		}
