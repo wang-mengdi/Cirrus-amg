@@ -26,6 +26,6 @@ target("src")
 
     add_packages("cuda", {public = true})
     add_packages("eigen", {public = true})
-    add_packages("vtk", {public = true})
+    add_packages("vtk")
     add_packages("polyscope")
     add_deps("common")

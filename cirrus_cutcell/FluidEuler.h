@@ -16,11 +16,6 @@
 #include "PoissonGrid.h"
 #include "ExportXform.h"
 
-#include <polyscope/polyscope.h>
-#include <polyscope/point_cloud.h>
-#include "polyscope/surface_mesh.h"
-
-
 #include <sys/types.h>
 
 #ifdef _WIN32

@@ -7,19 +7,6 @@
 
 #include <fmt/ostream.h>
 
-#include <vtkHexahedron.h>
-#include <vtkNew.h>
-#include <vtkSmartPointer.h>
-#include <vtkXMLUnstructuredGridWriter.h>
-#include <vtkPoints.h>
-#include <vtkCellArray.h>
-#include <vtkCellData.h>
-#include <vtkDoubleArray.h>
-#include <vtkPointData.h>
-#include <vtkUnstructuredGrid.h>
-#include <vtkStructuredGrid.h>
-#include <vtkXMLStructuredGridWriter.h>
-
 namespace IOFunc {
     template <class T>
     static void WritePod(std::ostream& os, const T& v) {
@@ -77,11 +64,11 @@ namespace IOFunc {
             throw std::runtime_error("Failed to open file for reading: " + filepath.string());
         }
 
-        // ¶ÁÈ¡ÏòÁ¿´óÐ¡
+        // ï¿½ï¿½È¡ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ð¡
         size_t size;
         inFile.read(reinterpret_cast<char*>(&size), sizeof(size));
 
-        // ¶ÁÈ¡ÏòÁ¿ÄÚÈÝ
+        // ï¿½ï¿½È¡ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
         thrust::host_vector<T> vec(size);
         inFile.read(reinterpret_cast<char*>(vec.data()), size * sizeof(T));
 

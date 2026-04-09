@@ -1,14 +1,19 @@
 ﻿#include "PoissonIOFunc.h"
 
-
-//#include <vtkNew.h>
-//#include <vtkPoints.h>
-#include <vtkFloatArray.h>
+#include <vtkHexahedron.h>
+#include <vtkNew.h>
+#include <vtkSmartPointer.h>
+#include <vtkXMLUnstructuredGridWriter.h>
+#include <vtkPoints.h>
+#include <vtkCellArray.h>
+#include <vtkCellData.h>
 #include <vtkDoubleArray.h>
+#include <vtkPointData.h>
+#include <vtkUnstructuredGrid.h>
+#include <vtkStructuredGrid.h>
+#include <vtkXMLStructuredGridWriter.h>
+#include <vtkFloatArray.h>
 #include <vtkAMRBox.h>
-//#include <vtkCellData.h>
-//#include <vtkUnstructuredGrid.h>
-
 #include <vtkOverlappingAMR.h>
 #include <vtkNonOverlappingAMR.h>
 #include <vtkUniformGridAMR.h>
@@ -18,9 +23,6 @@
 #include "vtkCompositeDataWriter.h"
 #include "vtkXMLHierarchicalBoxDataWriter.h"
 #include <vtkXMLImageDataWriter.h>
-
-#include <vtkCellData.h>
-#include <vtkNew.h>
 
 
 //#include <zlib.h>
