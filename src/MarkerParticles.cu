@@ -1,5 +1,6 @@
 #include "MarkerParticles.h"
 #include "FlowMap.h"
+#include "FlowMapKernels.cuh"
 #include "PoissonGridKernels.cuh"
 #include <thrust/remove.h>
 

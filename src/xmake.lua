@@ -15,6 +15,7 @@ add_defines("FMT_UNICODE=0")
 
 target("src")
     set_kind("static")
+    set_values("cuda.rdc", false)
     add_headerfiles("*.h","../ext/*.h")
     add_files("*.cpp","*.cu")
     add_includedirs(".", "../ext", {public=true})

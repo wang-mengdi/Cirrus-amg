@@ -36,6 +36,7 @@ add_defines("FMT_UNICODE=0")
 
 target("cirrus_cutcell")
     set_kind("binary")
+    set_values("cuda.rdc", false)
     add_headerfiles("cirrus_cutcell/*.h")
     add_files("cirrus_cutcell/*.cpp", "cirrus_cutcell/*.cu")
     add_includedirs("cirrus_cutcell", {public = true})

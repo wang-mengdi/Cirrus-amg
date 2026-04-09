@@ -1,5 +1,6 @@
 ﻿#include "FluidEuler.h"
 #include "SDFAccel.h"
+#include "FlowMapKernels.cuh"
 #include "Random.h"
 
 #include <tbb/parallel_for.h>

@@ -2,6 +2,7 @@
 #include "Random.h"
 #include "PoissonIOFunc.h"
 #include "PoissonGridKernels.cuh"
+#include "FlowMapKernels.cuh"
 
 #include <cub/cub.cuh>
 #include <thrust/remove.h>
