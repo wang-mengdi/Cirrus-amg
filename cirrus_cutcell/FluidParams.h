@@ -68,43 +68,33 @@ enum TestCase { MESHMOTION = 0, AIRCRAFT, SPHERECIRCLING, JASSM };
 
 class FluidParams {
 public:
-	//parameters read from json
 	TestCase mTestCase;
-	Coord mInitialGridSize;//computational grid size at level 0, like (1,1,1) or (1,1,2)
+	Coord mInitialGridSize;
 
 	int mFlowMapStride;
 	int mCoarseLevel;
 	int mFineLevel;
-	//T mRefineThreshold;
 	T mParticleLife;
 	nanovdb::Vec3R mGravity;
 	T mesh_motion_inflow = 0.0;
 
-	//int mSampleNumPerTile;//number of sampled points per finest tile
 	int mSampleNumPerCell;
-	T mRelativeParticleSampleBandwidth;//for particle generation, k*dx, where dx is the finest level
-	T mRelativeRefineBandwidth;//for grid refinement, k*dx, where dx is the finest level
+	T mRelativeParticleSampleBandwidth;
+	T mRelativeRefineBandwidth;
 
 	int mExtrapolationIters;
 
-	//parameters set by itself
 	bool mIsPureNeumann = false;
 
 	FluidParams() {}
 	FluidParams(json& j);
-
-	//initialization
-	__hostdev__ int initialLevelTarget(const HATileAccessor<Tile>& acc, HATileInfo<Tile>& info) const;
-	//__device__ void addInitialVelocityToFaceCenter(HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const Coord& l_ijk) const;
-	//set type, velocity, smoke
-	//__hostdev__ void setInitialVelocity(HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const Coord& l_ijk)const;
-	//includes the outer walls of the computational field, but not including the movable mesh inside
-	//it will return a cell type in the computational grid only considering wall, fluid, air
-	__hostdev__ uint8_t wallCellType(const T current_time, const HATileAccessor<Tile>& acc, const int level, const Coord& g_ijk)const;
-	__hostdev__ uint8_t wallCellType(const T current_time, const HATileAccessor<Tile>& acc, const HATileInfo<Tile>& info, const nanovdb::Coord& l_ijk) const;
-	__hostdev__ void setWallCellType(const T current_time, const HATileAccessor<Tile>& acc, const HATileInfo<Tile>& info, const nanovdb::Coord& l_ijk) const;
-
-	__hostdev__ Eigen::Transform<T, 3, Eigen::Affine> meshToWorldTransform(const T current_time) const;
-
-	__device__ T solidFaceCenterVelocity(const T current_time, const T dt, const HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const Coord& l_ijk, const int axis)const;
 };
+
+namespace FluidScene {
+	__hostdev__ int initialLevelTarget(const FluidParams& params, const HATileAccessor<Tile>& acc, HATileInfo<Tile>& info);
+	__hostdev__ uint8_t wallCellType(const FluidParams& params, const T current_time, const HATileAccessor<Tile>& acc, const int level, const Coord& g_ijk);
+	__hostdev__ uint8_t wallCellType(const FluidParams& params, const T current_time, const HATileAccessor<Tile>& acc, const HATileInfo<Tile>& info, const nanovdb::Coord& l_ijk);
+	__hostdev__ void setWallCellType(const FluidParams& params, const T current_time, const HATileAccessor<Tile>& acc, const HATileInfo<Tile>& info, const nanovdb::Coord& l_ijk);
+	__hostdev__ Eigen::Transform<T, 3, Eigen::Affine> meshToWorldTransform(const FluidParams& params, const T current_time);
+	__device__ T solidFaceCenterVelocity(const FluidParams& params, const T current_time, const T dt, const HATileAccessor<Tile>& acc, HATileInfo<Tile>& info, const Coord& l_ijk, const int axis);
+}

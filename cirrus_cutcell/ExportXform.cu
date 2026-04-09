@@ -5,7 +5,7 @@
 
 void ExportSingleFileTransform(const FluidParams& mParams, const fs::path& out_file, T time)
 {
-    auto xform = mParams.meshToWorldTransform(time);
+    auto xform = FluidScene::meshToWorldTransform(mParams, time);
     Eigen::Matrix<T, 4, 4> M = xform.matrix();
     std::ofstream ofs(out_file);
     ASSERT(ofs.good(), "ExportSingleFileTransform: failed to open {}", out_file.string());

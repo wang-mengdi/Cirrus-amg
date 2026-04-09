@@ -123,51 +123,7 @@ public:
 
 	void iterativeNodeSDFAndRefineNarrowBand(HADeviceGrid<Tile>& grid, const T current_time, const T solid_relative_bandwidth, const T fluid_relative_bandwidth);
 
-	void buildTypesAndAMGCoeffsFromNodeSDFs(HADeviceGrid<Tile>& grid, const T current_time) {
-		//Info("building types and AMG coeffs at time {}", current_time);
-
-		//prepare the Poisson system along with cell types
-		if (mMeshSDFAccel != nullptr) {
-			
-			//auto xform = params.meshToWorldTransform(current_time);
-
-			//CalculateSDFOnNodes(grid, BufChnls::sdf, *mMeshSDFAccel, LEAF | GHOST, xform);
-
-
-
-			//{
-			//	//show velocity on polyscope before proj
-			//	polyscope::init();
-			//	polyscope::removeAllStructures();
-			//	auto holder = grid.getHostTileHolderForLeafs();
-			//	IOFunc::AddPoissonGridNodesToPolyscope(holder, { {BufChnls::sdf, "sdf"} }, {});
-
-			//	auto xform = mParams.meshToWorldTransform(current_time);
-			//	Eigen::Matrix<T, -1, 3> V_world =
-			//		(xform * mMeshSDFAccel->V_.transpose()).transpose();
-			//	polyscope::registerSurfaceMesh("mesh", V_world, mMeshSDFAccel->F_);
-
-			//	//IOFunc::AddPoissonGridCellCentersToPolyscopePointCloud(holder, { { -1,"type" }, { BufChnls::vor, "vorticity" }, {ProjChnls::x, "pressure"}, { ProjChnls::b, "divergence" } }, { {BufChnls::u, "velocity"} });
-			//	//IOFunc::AddLeveledPoissonGridCellCentersToPolyscopePointCloud(holder, { { -1,"type" }, { BufChnls::vor, "vorticity" } }, { { BufChnls::u, "velocity" } });
-			//	polyscope::show();
-			//}
-
-			//set wall types
-			auto params = mParams;
-			grid.launchVoxelFuncOnAllTiles(
-				[=] __device__(HATileAccessor<Tile>&acc, HATileInfo<Tile>&info, const Coord & l_ijk) {
-				params.setWallCellType(current_time, acc, info, l_ijk);
-			}, LEAF
-			);
-			//set other solid cells and build the whole system
-			CreateAMGLaplacianSystemWithSolidCutOnNodeSDF(grid, BufChnls::sdf, ProjChnls::c0, 0.5);
-
-
-		}
-		else {
-			ASSERT(false, "need a mesh");
-		}
-	}
+	void buildTypesAndAMGCoeffsFromNodeSDFs(HADeviceGrid<Tile>& grid, const T current_time);
 
 	void init(json &j, DriverMetaData &metadata);
 
