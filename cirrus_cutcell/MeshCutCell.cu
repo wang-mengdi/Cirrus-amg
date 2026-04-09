@@ -1,4 +1,5 @@
 #include "MeshCutCell.h"
+#include "SDFAccel.h"
 #include "AMGSolver.h"
 #include <tbb/parallel_for.h>
 #include "CPUTimer.h"

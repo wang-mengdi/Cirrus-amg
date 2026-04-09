@@ -18,6 +18,10 @@
 
 #include <sys/types.h>
 
+class SDFAccelBase;
+class MeshSDFAccel;
+class SphereSDFAccel;
+
 #ifdef _WIN32
 #include <windows.h>
 #else
@@ -165,102 +169,7 @@ public:
 		}
 	}
 
-	void init(json &j, DriverMetaData &metadata) {
-		Info("Initializing FluidEuler Simulator...");
-
-		std::string mesh_file = Json::Value<std::string>(j, "mesh_file", "mesh.obj");
-
-		if (mesh_file == "SPHERE") {
-			T sphere_radius = Json::Value<T>(j, "sphere_radius", (T)0.1);
-			mMeshSDFAccel = std::make_shared<SphereSDFAccel>(sphere_radius);
-		}
-		else if (mesh_file != "") {
-			mMeshSDFAccel = std::make_shared<MeshSDFAccel>(mesh_file);
-		}
-		else {
-			mMeshSDFAccel = nullptr;
-		}
-
-		mParams = FluidParams(j);
-
-		//mParams.meshToWorldTransform(0.0);
-		//mParams.meshToWorldTransform(0.5);
-		//mParams.meshToWorldTransform(1.0);
-		//mParams.meshToWorldTransform(2.0);
-		//exit(0);
-
-
-		//ASSERT(mParams.mFlowMapStride == 1, "SL only supports 1-step advection");
-
-		if (metadata.first_frame != 0) return;
-
-		//level-resolution:
-		//0:8, 1:16, 2:32, 3:64, 4:128, 5:256, 6:512, 7:1024
-		double h = 1.0 / 8;
-		auto grid_ptr = std::make_shared<HADeviceGrid<Tile> >(h, std::initializer_list<uint32_t>({ 16, 16, 16, 16, 16, 16, 20, 16, 16, 16 }));
-		grid_ptrs.clear();
-		grid_ptrs.push_back(grid_ptr);
-		auto& grid = *grid_ptr;
-
-		{
-			//1*1*1
-
-			for(int i=0;i<mParams.mInitialGridSize.x();i++)
-				for (int j = 0; j < mParams.mInitialGridSize.y(); j++)
-					for (int k = 0; k < mParams.mInitialGridSize.z(); k++)
-						grid.setTileHost(0, nanovdb::Coord(i, j, k), Tile(), LEAF);
-
-			//grid.setTileHost(0, nanovdb::Coord(0, 0, 0), Tile(), LEAF);
-			grid.compressHost();
-			grid.syncHostAndDevice();
-			grid.spawnGhostTiles();
-		}
-
-		{
-			//refine to initial level target defined by params
-			auto params = mParams;
-			grid.iterativeRefine([=]__device__(const HATileAccessor<Tile> &acc, HATileInfo<Tile> &info) ->int {
-				return params.initialLevelTarget(acc, info);
-			});
-		}
-
-		//if(mMeshSDFAccel != nullptr)
-		//{
-		//	//refine using mesh vertices
-		//	auto h_acc = grid.deviceAccessor();
-		//	marker_particles_d = SampleMarkerParticlesOutsideMeshBand(*mMeshSDFAccel, mParams.meshToWorldTransform(0.), h_acc.voxelSize(mParams.mFineLevel), mParams.mRelativeSampleBandwidth, mParams.mSampleNumPerTile, 0., mRamdonGenerator);
-		//	RefineWithMarkerParticles(grid, marker_particles_d, mParams.mCoarseLevel, mParams.mFineLevel, BufChnls::counter, false);
-
-		//}
-
-		T current_time = 0.0, dt = 1e-5;
-		FillChannelsInGridWithValue(grid, std::numeric_limits<T>::quiet_NaN(), LEAF | NONLEAF | GHOST, {});
-		iterativeNodeSDFAndRefineNarrowBand(grid, current_time, mParams.mRelativeRefineBandwidth, mParams.mRelativeRefineBandwidth);
-		buildTypesAndAMGCoeffsFromNodeSDFs(grid, current_time);
-
-
-
-
-		//the velocity here is the composed velocity, which is weighted fluid + solid
-		//clear velocity variables to 0
-		//initial velocity: 0
-		FillChannelsInGridWithValue(grid, 0.0, LEAF | NONLEAF | GHOST, { BufChnls::u, BufChnls::u + 1, BufChnls::u + 2 });
-		//add solid velocity to velocity variables
-		//Info("metadata current time: {} dt: {} fps {}", metadata.current_time, metadata.dt, metadata.fps);
-		// addSolidVelocityWithFractionsToFaces(grid, 0.0, 1e-3);//t=0, dt=1e-3
-		//{
-		//	//set initial velocity
-		//	auto params = mParams;
-		//	grid.launchVoxelFuncOnAllTiles(
-		//		[params] __device__(HATileAccessor<Tile>&acc, HATileInfo<Tile>&info, const Coord & l_ijk) {
-		//		params.addInitialVelocityToFaceCenter(acc, info, l_ijk);
-		//	}, LEAF
-		//	);
-		//}
-		project(grid, current_time, dt);
-		CalculateVelocityAndVorticityMagnitudeOnLeafCellCenters(grid, mParams.mFineLevel, mParams.mCoarseLevel, BufChnls::u, BufChnls::u_cell, BufChnls::vor);
-		//extrapolateFluidVelocityForAdvection(grid, mParams.mExtrapolationIters, BufChnls::u, ProjChnls::c0);
-	}
+	void init(json &j, DriverMetaData &metadata);
 
 	virtual double CFL_Time(const double cfl) {
 		//Warn("entering CFL calc");

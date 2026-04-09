@@ -1,8 +1,9 @@
 ﻿#include "FMParticles.h"
 #include "Random.h"
 #include "PoissonIOFunc.h"
+#include "PoissonGridKernels.cuh"
 
-//#include <cub/cub.cuh>
+#include <cub/cub.cuh>
 #include <thrust/remove.h>
 #include <polyscope/polyscope.h>
 //#include "FluidEuler.h"

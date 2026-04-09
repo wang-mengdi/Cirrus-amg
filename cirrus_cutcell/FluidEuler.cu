@@ -1,9 +1,7 @@
 ﻿#include "FluidEuler.h"
+#include "SDFAccel.h"
 #include "Random.h"
 
-#include <cub/cub.cuh>
-#include <cub/block/block_reduce.cuh>
-#include <thrust/execution_policy.h>
 #include <tbb/parallel_for.h>
 
 
@@ -1018,4 +1016,58 @@ void FluidEuler::Advance(DriverMetaData& metadata) {
 	PrintMemoryInfo();
 
 	cudaDeviceSynchronize(); total_advance_time = total_advance_timer.stop("Total advance");
+}
+
+void FluidEuler::init(json &j, DriverMetaData &metadata) {
+	Info("Initializing FluidEuler Simulator...");
+
+	std::string mesh_file = Json::Value<std::string>(j, "mesh_file", "mesh.obj");
+
+	if (mesh_file == "SPHERE") {
+		T sphere_radius = Json::Value<T>(j, "sphere_radius", (T)0.1);
+		mMeshSDFAccel = std::make_shared<SphereSDFAccel>(sphere_radius);
+	}
+	else if (mesh_file != "") {
+		mMeshSDFAccel = std::make_shared<MeshSDFAccel>(mesh_file);
+	}
+	else {
+		mMeshSDFAccel = nullptr;
+	}
+
+	mParams = FluidParams(j);
+
+	if (metadata.first_frame != 0) return;
+
+	double h = 1.0 / 8;
+	auto grid_ptr = std::make_shared<HADeviceGrid<Tile> >(h, std::initializer_list<uint32_t>({ 16, 16, 16, 16, 16, 16, 20, 16, 16, 16 }));
+	grid_ptrs.clear();
+	grid_ptrs.push_back(grid_ptr);
+	auto& grid = *grid_ptr;
+
+	{
+		for(int i=0;i<mParams.mInitialGridSize.x();i++)
+			for (int j = 0; j < mParams.mInitialGridSize.y(); j++)
+				for (int k = 0; k < mParams.mInitialGridSize.z(); k++)
+					grid.setTileHost(0, nanovdb::Coord(i, j, k), Tile(), LEAF);
+
+		grid.compressHost();
+		grid.syncHostAndDevice();
+		grid.spawnGhostTiles();
+	}
+
+	{
+		auto params = mParams;
+		grid.iterativeRefine([=]__device__(const HATileAccessor<Tile> &acc, HATileInfo<Tile> &info) ->int {
+			return params.initialLevelTarget(acc, info);
+		});
+	}
+
+	T current_time = 0.0, dt = 1e-5;
+	FillChannelsInGridWithValue(grid, std::numeric_limits<T>::quiet_NaN(), LEAF | NONLEAF | GHOST, {});
+	iterativeNodeSDFAndRefineNarrowBand(grid, current_time, mParams.mRelativeRefineBandwidth, mParams.mRelativeRefineBandwidth);
+	buildTypesAndAMGCoeffsFromNodeSDFs(grid, current_time);
+
+	FillChannelsInGridWithValue(grid, 0.0, LEAF | NONLEAF | GHOST, { BufChnls::u, BufChnls::u + 1, BufChnls::u + 2 });
+	project(grid, current_time, dt);
+	CalculateVelocityAndVorticityMagnitudeOnLeafCellCenters(grid, mParams.mFineLevel, mParams.mCoarseLevel, BufChnls::u, BufChnls::u_cell, BufChnls::vor);
 }

@@ -1,7 +1,7 @@
 #pragma once
 
 #include "PoissonGrid.h"
-#include <Eigen/Dense>
+#include <Eigen/Core>
 
 
 __hostdev__ T QuadraticKernelFast(const T x);

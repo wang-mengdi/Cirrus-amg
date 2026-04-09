@@ -1,4 +1,5 @@
 ﻿#include "PoissonGrid.h"
+#include "PoissonGridKernels.cuh"
 
 void SanityCheckChannelCellValues(HADeviceGrid<Tile>& grid, const int channel, uint8_t launch_types) {
     Warn("sanity checking channel {} cell values on device tiles...", channel);

@@ -1,7 +1,9 @@
 #pragma once
 
-#include "SDFAccel.h"
+#include <Eigen/Geometry>
 #include "PoissonGrid.h"
+
+class SDFAccelBase;
 
 constexpr T SDF_REL_EPS = 1e-3;
 

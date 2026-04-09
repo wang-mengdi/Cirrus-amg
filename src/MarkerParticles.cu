@@ -1,5 +1,6 @@
 #include "MarkerParticles.h"
 #include "FlowMap.h"
+#include "PoissonGridKernels.cuh"
 #include <thrust/remove.h>
 
 size_t SmartResizeParticlesForInsert(thrust::device_vector<MarkerParticle>& particles, const size_t insert_num) {
