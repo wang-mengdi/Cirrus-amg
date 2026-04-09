@@ -72,6 +72,7 @@ target("cirrus_cutcell")
 
 target("tests")
     set_kind("binary")
+    set_values("cuda.rdc", false)
     add_headerfiles("tests/*.h")
     add_files("tests/*.cpp", "tests/*.cu")
     add_includedirs("tests", {public = true})
