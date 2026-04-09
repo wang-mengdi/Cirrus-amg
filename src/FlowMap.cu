@@ -1,7 +1,6 @@
 #include "FlowMap.h"
 #include "FlowMapKernels.cuh"
 #include "PoissonIOFunc.h"
-#include <polyscope/polyscope.h>
 
 void CalculateVelocityAndVorticityMagnitudeOnLeafCellCenters(HADeviceGrid<Tile>& grid, const int fine_level, const int coarse_level, const int face_u_channel, const int cell_u_channel, const int vor_channel) {
 	AccumulateFacesFromLeafsToAllNonLeafs(grid, face_u_channel, 1. / 4, false, INTERIOR | DIRICHLET | NEUMANN);

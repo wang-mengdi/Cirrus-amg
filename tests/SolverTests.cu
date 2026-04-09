@@ -4,11 +4,10 @@
 #include "CMGSolver.h"
 #include "AMGSolver.h"
 #include "PoissonIOFunc.h"
+#include "PolyscopeViz.h"
 #include "Common.h"
 #include "GPUTimer.h"
 #include "Random.h"
-#include <polyscope/polyscope.h>
-#include <polyscope/point_cloud.h>
 
 // extern int laplacian_total_tile_counts;
 
@@ -343,11 +342,11 @@ namespace SolverTests
 			LEAF);
 
 		auto holder = grid.getHostTileHolderForLeafs();
-		polyscope::init();
+		PolyscopeWrapper::init();
 		IOFunc::AddPoissonGridCellCentersToPolyscopePointCloud(holder,
 			{ {-1, "type"}, {x_channel, "x"}, {lap_channel, "div(grad)"}, {nlap_channel, "nlap"}, {diff_channel, "diff"} },
 			{});
-		polyscope::show();
+		PolyscopeWrapper::show();
 
 		auto linf_norm = NormSync(grid, -1, diff_channel, false);
 		if (linf_norm < 1e-5)
@@ -461,13 +460,13 @@ namespace SolverTests
 			AMGFullNegativeLaplacianOnLeafs(grid, grdt_channel, coeff_channel, Tile::b_channel);
 
 			// auto holder = grid.getHostTileHolder(LEAF | NONLEAF);
-			// polyscope::init();
+			// PolyscopeWrapper::init();
 			// IOFunc::AddLeveledPoissonGridCellCentersToPolyscopePointCloud(holder,
 			//     {
 			//     {solver.coeff_channel,"offd0"}, {solver.coeff_channel + 1,"offd1"} ,{solver.coeff_channel + 2,"offd2"},{solver.coeff_channel + 3,"diag"}, {-1,"type"}
 			//     },
 			//     {}, -1, FLT_MAX);
-			// polyscope::show();
+			// PolyscopeWrapper::show();
 
 			CPUTimer<std::chrono::microseconds> timer;
 			timer.start();
@@ -1020,12 +1019,12 @@ namespace SolverTests
 
 		//     {
 		//         auto holder = grid.getHostTileHolderForLeafs();
-		//         polyscope::init();
+		//         PolyscopeWrapper::init();
 		// IOFunc::AddPoissonGridCellCentersToPolyscopePointCloud(holder,
 		//	{ {-1,"type"}, {rhs_channel, "rhs"}, {grdt_channel,"grdt"} },
 		//	{}
 		//);
-		// polyscope::show();
+		// PolyscopeWrapper::show();
 		//         IOFunc::OutputPoissonGridAsStructuredVTI(
 		//             holder,
 		//             { {-1, "type"}, {rhs_channel, "rhs"}, {grdt_channel, "grdt"} },
@@ -1243,13 +1242,13 @@ namespace SolverTests
 
 		//{
 		//    auto holder = grid.getHostTileHolder(LEAF);
-		//    polyscope::init();
+		//    PolyscopeWrapper::init();
 		//    IOFunc::AddLeveledPoissonGridCellCentersToPolyscopePointCloud(holder,
 		//        {
 		//        {-1, "type"}, {Tile::x_channel,"x"} ,{grdt_channel,"grdt"},{Tile::r_channel, "r"}
 		//        },
 		//        {}, -1, FLT_MAX);
-		//    polyscope::show();
+		//    PolyscopeWrapper::show();
 		//}
 
 		//     {
@@ -1317,11 +1316,11 @@ namespace SolverTests
 			LEAF);
 
 		//auto holder = grid.getHostTileHolder(LEAF);
-		//polyscope::init();
+		//PolyscopeWrapper::init();
 		//IOFunc::AddLeveledPoissonGridCellCentersToPolyscopePointCloud(holder,
 		//	{ {-1, "type"}, {x_channel, "x"}, {analytical_nlap_channel, "analytical"}, {numerical_nlap_channel, "numerical"}, {residual_channel, "residual"} },
 		//	{}, -1, FLT_MAX);
-		//polyscope::show();
+		//PolyscopeWrapper::show();
 
 		//{
 		//	auto holder = grid.getHostTileHolderForLeafs();
@@ -1395,13 +1394,13 @@ namespace SolverTests
 		//        fmt::format("output/analytical_{}_levels{}_{}_{}_{}.vti", grid_name, min_level, max_level, bc_name, algorithm)
 		//    );
 
-		//	//polyscope::init();
+		//	//PolyscopeWrapper::init();
 		//	//IOFunc::AddPoissonGridCellCentersToPolyscopePointCloud(
 		//	//	holder,
 		//	//	{ {-1, "type"}, {rhs_channel, "rhs"}, {grdt_channel, "grdt"}, {Tile::x_channel, "x"}, {error_channel, "error"} },
 		//	//	{}
 		//	//);
-		//	//polyscope::show();
+		//	//PolyscopeWrapper::show();
 
 		//	//Info("test: {}", holder->cellValue(6, Coord(331,371,331), grdt_channel));//0.0670311
 
@@ -1564,7 +1563,7 @@ namespace SolverTests
 					Info("after FAS iter {} residual pointwise L2 norm: {}\n", iter, NormSync(grid, 2, iter_r_channel, false));
 
 					auto holder = grid.getHostTileHolder(LEAF);
-					polyscope::init();
+					PolyscopeWrapper::init();
 					IOFunc::AddLeveledPoissonGridCellCentersToPolyscopePointCloud(
 						holder,
 						{ {-1,"type"}, {b_copy_channel, "iter rhs"}, {x_channel, "iter x"}, {iter_r_channel, "iter r"},
@@ -1572,7 +1571,7 @@ namespace SolverTests
 						},
 						{}
 					);
-					polyscope::show();
+					PolyscopeWrapper::show();
 				}
 
 				//accumulate x to final_x_channel
@@ -2031,13 +2030,13 @@ namespace SolverTests
 
 		//{
 		//	//show velocity on polyscope before proj
-		//	polyscope::init();
+		//	PolyscopeWrapper::init();
 		//	auto holder = grid.getHostTileHolderForLeafs();
 		//	IOFunc::AddPoissonGridCellCentersToPolyscopePointCloud(holder,
 		//		{ { -1,"type" }, {b1_channel, "b1"} },
 		//		{ {u_channel, "velocity"} });
 		//	//IOFunc::AddLeveledPoissonGridCellCentersToPolyscopePointCloud(holder, { { -1,"type" }, { BufChnls::vor, "vorticity" } }, { { BufChnls::u, "velocity" } });
-		//	polyscope::show();
+		//	PolyscopeWrapper::show();
 		//}
 
 		// store solvable rhs in b2 channel
@@ -2141,11 +2140,11 @@ namespace SolverTests
 
 		//{
 		//	auto holder = grid.getHostTileHolder(LEAF);
-		//	polyscope::init();
+		//	PolyscopeWrapper::init();
 		//	IOFunc::AddLeveledPoissonGridCellCentersToPolyscopePointCloud(holder,
 		//		{ {-1, "type"}, {coeff_channel, "x-"} , {coeff_channel + 1, "y-"}, {coeff_channel + 2, "z-"}, {coeff_channel + 3, "diag"}, {Tile::b_channel, "residual"} , {Tile::x_channel, "pressure"}, {error_channel, "div"} },
 		//		{ {u_channel, "vel"} }, -1, FLT_MAX);
-		//	polyscope::show();
+		//	PolyscopeWrapper::show();
 		//}
 
 
@@ -2293,12 +2292,12 @@ namespace SolverTests
 			LEAF);
 
 		//auto holder = grid.getHostTileHolder(LEAF);
-		//polyscope::init();
+		//PolyscopeWrapper::init();
 		//IOFunc::AddLeveledPoissonGridCellCentersToPolyscopePointCloud(holder,
 		//	{ {-1, "type"}, {coeff_channel, "x-"} , {coeff_channel + 1, "y-"}, {coeff_channel + 2, "z-"}, {coeff_channel + 3, "diag"}, {grdt_channel, "grdt"}, {final_x_channel, "pressure"},
 		//	{x_diff_channel, "x_diff"}, {lap_diff_channel, "lap_diff"}, {lap_grdt_channel, "lap(grdt)"}, {lap_x_channel, "lap(x)"}},
 		//	{}, -1, FLT_MAX);
-		//polyscope::show();
+		//PolyscopeWrapper::show();
 
 		Info("tile size: {}", sizeof(Tile));
 		Info("linf: {}", NormSync(grid, -1, x_diff_channel, false));

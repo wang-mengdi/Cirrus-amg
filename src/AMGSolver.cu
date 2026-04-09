@@ -5,7 +5,6 @@
 //#include "PoissonSolverOptimized.h"
 
 #include "PoissonIOFunc.h"
-#include <polyscope/polyscope.h>
 
 std::atomic<int> amg_solver_open_visualization{ 0 };
 
