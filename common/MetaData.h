@@ -5,6 +5,7 @@
 //////////////////////////////////////////////////////////////////////////
 #pragma once
 #include "Common.h"
+#include "Json.h"
 #include "CPUTimer.h"
 #include <queue>
 #include <thread>

@@ -3,6 +3,7 @@
 #include "HAAccessor.h"
 
 #include <vector>
+#include <numeric>
 //to print std::vector
 #include <fmt/ranges.h>
 
