@@ -1,5 +1,6 @@
 #include "FluidEuler.h"
 
+#include "AMGSolver.h"
 #include "Json.h"
 #include "SDFAccel.h"
 #include "FlowMapKernels.cuh"

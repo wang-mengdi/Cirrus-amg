@@ -8,16 +8,12 @@
 #include "Simulator.h"
 #include "JsonFwd.h"
 //#include "Random.h"
-#include "GPUTimer.h"
-#include "AMGSolver.h"
 
 #include "PoissonIOFunc.h"
 #include "FMParticles.h"
 #include "MarkerParticles.h"
 #include "PoissonGrid.h"
 #include "ExportXform.h"
-
-#include <sys/types.h>
 
 class SDFAccelBase;
 class MeshSDFAccel;
