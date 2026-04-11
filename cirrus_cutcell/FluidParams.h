@@ -1,6 +1,6 @@
 ﻿#pragma once
 
-#include "Json.h"
+#include "JsonFwd.h"
 #include "GMGSolver.h"
 //#include "SDFGrid.h"
 #include "MeshCutCell.h"

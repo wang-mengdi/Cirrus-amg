@@ -1,4 +1,6 @@
-﻿#include "FluidEuler.h"
+#include "FluidEuler.h"
+
+#include "Json.h"
 #include "SDFAccel.h"
 #include "FlowMapKernels.cuh"
 #include "Random.h"

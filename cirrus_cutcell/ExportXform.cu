@@ -2,6 +2,7 @@
 #include <iomanip>
 #include <cstdio>
 #include "ExportXform.h"
+#include "Json.h"
 
 void ExportSingleFileTransform(const FluidParams& mParams, const fs::path& out_file, T time)
 {

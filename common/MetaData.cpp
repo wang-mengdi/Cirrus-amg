@@ -1,5 +1,7 @@
 #include "MetaData.h"
 
+#include "Json.h"
+
 DriverMetaData::~DriverMetaData() {
 	while (!output_threads.empty()) {
 		auto join_ptr = output_threads.front();

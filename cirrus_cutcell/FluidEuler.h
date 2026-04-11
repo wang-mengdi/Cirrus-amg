@@ -6,7 +6,7 @@
 #pragma once
 
 #include "Simulator.h"
-#include "Json.h"
+#include "JsonFwd.h"
 //#include "Random.h"
 #include "GPUTimer.h"
 #include "AMGSolver.h"

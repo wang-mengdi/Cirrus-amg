@@ -1,4 +1,6 @@
-﻿#include "FluidParams.h"
+#include "FluidParams.h"
+
+#include "Json.h"
 
 FluidParams::FluidParams(json& j)
 {
