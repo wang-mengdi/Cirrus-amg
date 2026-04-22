@@ -1,6 +1,8 @@
-# Matrix-Free GPU Implementation of Algebraic Multigrid Poisson Solver on Adaptive Octree with Irregular Domains
+# Matrix-Free Multigrid with Algebraically Consistent Coarsening on Adaptive Octrees
 
-This repo hosts the code for our adaptive AMG solver.
+[![arXiv](https://img.shields.io/badge/arXiv-2604.18886-b31b1b.svg)](https://arxiv.org/abs/2604.18886)
+
+This repo hosts the code for our paper *Matrix-Free Multigrid with Algebraically Consistent Coarsening on Adaptive Octrees* that has been submitted to the *Journal of Computational Physics*.
 
 It's developed based on *Cirrus* simulator: 
 [![code](https://img.shields.io/badge/Source_Code-Github-blue)](https://github.com/wang-mengdi/Cirrus)
