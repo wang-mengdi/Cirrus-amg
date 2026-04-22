@@ -1,12 +1,12 @@
-﻿#include "FMParticles.h"
+#include "FMParticles.h"
 #include "Random.h"
-#include "PoissonIOFunc.h"
+//#include "PoissonIOFunc.h"
 #include "PoissonGridKernels.cuh"
 #include "FlowMapKernels.cuh"
 
 #include <cub/cub.cuh>
 #include <thrust/remove.h>
-#include <polyscope/polyscope.h>
+//#include <polyscope/polyscope.h>
 //#include "FluidEuler.h"
 //#include <cub/cub.cuh>
 //#include <cub/device/device_scan.cuh>

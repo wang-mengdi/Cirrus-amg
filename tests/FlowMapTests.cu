@@ -1,13 +1,13 @@
 #include "FlowMapTests.h"
 #include "TestGrids.h"
-#include "PoissonIOFunc.h"
+//#include "PoissonIOFunc.h"
 #include "FMParticles.h"
 #include "Common.h"
 #include "GPUTimer.h"
 #include "Random.h"
-#include <polyscope/polyscope.h>
-#include <polyscope/point_cloud.h>
-#include <polyscope/curve_network.h>
+//#include <polyscope/polyscope.h>
+//#include <polyscope/point_cloud.h>
+//#include <polyscope/curve_network.h>
 
 #include <tbb/parallel_for.h>
 #include <tbb/blocked_range.h>
@@ -90,7 +90,7 @@ namespace FlowMapTests {
 
     class Deformation3D {
     public:
-        //3D deformation test from: Unstructured un-split geometrical Volume-of-Fluid methods ¨C A review
+        //3D deformation test from: Unstructured un-split geometrical Volume-of-Fluid methods ï¿½C A review
         double T0 = 3;
         double pi = CommonConstants::pi;
         __hostdev__ Vec operator()(const Vec& pos, const double t) const {
@@ -244,7 +244,7 @@ namespace FlowMapTests {
   //      );
   //      CalcCellTypesFromLeafs(grid);
 
-  //      //we use the 3D deformation test from: Unstructured un-split geometrical Volume-of-Fluid methods ¨C A review
+  //      //we use the 3D deformation test from: Unstructured un-split geometrical Volume-of-Fluid methods ï¿½C A review
 
   //      Deformation3D vel_func;
   //      auto particles_h = vel_func.sampleParticles(0.0);//time 0

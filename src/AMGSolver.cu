@@ -1,11 +1,11 @@
-﻿#include "AMGSolver.h"
+#include "AMGSolver.h"
 #include "PoissonGrid.h"
 #include "CPUTimer.h"
 #include "GMGSolver.h"
 //#include "PoissonSolverOptimized.h"
 
-#include "PoissonIOFunc.h"
-#include <polyscope/polyscope.h>
+//#include "PoissonIOFunc.h"
+//#include <polyscope/polyscope.h>
 
 std::atomic<int> amg_solver_open_visualization{ 0 };
 
