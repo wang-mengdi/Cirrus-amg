@@ -1,28 +1,6 @@
 ﻿#include "PoissonIOFunc.h"
 
-#include <vtkHexahedron.h>
-#include <vtkNew.h>
-#include <vtkSmartPointer.h>
-#include <vtkXMLUnstructuredGridWriter.h>
-#include <vtkPoints.h>
-#include <vtkCellArray.h>
-#include <vtkCellData.h>
-#include <vtkDoubleArray.h>
-#include <vtkPointData.h>
-#include <vtkUnstructuredGrid.h>
-#include <vtkStructuredGrid.h>
-#include <vtkXMLStructuredGridWriter.h>
-#include <vtkFloatArray.h>
-#include <vtkAMRBox.h>
-#include <vtkOverlappingAMR.h>
-#include <vtkNonOverlappingAMR.h>
-#include <vtkUniformGridAMR.h>
-#include <vtkXMLUniformGridAMRWriter.h>
-#include <vtkXMLUniformGridAMRReader.h>
-#include <vtkUniformGrid.h>
-#include "vtkCompositeDataWriter.h"
-#include "vtkXMLHierarchicalBoxDataWriter.h"
-#include <vtkXMLImageDataWriter.h>
+#include "VTKFileIO.h"
 
 
 //#include <zlib.h>
@@ -146,6 +124,7 @@ namespace IOFunc {
         return holder;
     }
 
+#if 0 // Historical VTK SDK implementation.
     void OutputMarkerParticleSystemAsVTU(std::shared_ptr<thrust::host_vector<MarkerParticle>> particles_ptr, fs::path path) {
         fmt::print("Output Particle System to vtu file: {}\n", path.string());
         auto& particles = *particles_ptr;
@@ -839,6 +818,8 @@ namespace IOFunc {
         Pass("Finished writing Poisson grid to AMR file: {} ({} ms, {} blocks)",
             path.string(), elapsed, total_blocks);
     }
+
+#endif
 
     // visualize
 

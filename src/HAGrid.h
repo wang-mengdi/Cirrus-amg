@@ -897,7 +897,7 @@ public:
 	}
 
 	template<class FuncABC>
-	void launchVoxelFunc(FuncABC f, int level, const uint8_t launch_types, LaunchMode mode = LAUNCH_LEVEL, const LaunchOrder order = COARSE_FIRST, const int num_groups = 1) {
+	void launchVoxelFunc(FuncABC f, int level, const uint8_t launch_types, LaunchMode mode = LAUNCH_LEVEL, const LaunchOrder order = COARSE_FIRST, const int num_groups = 2) {
 		//launch a voxel function f(Accessor, TileInfo, l_ijk) on specified tiles
 
 		//launch_types is a bit mask containing all tile types we want to launch
@@ -952,7 +952,7 @@ public:
 	}
 
 	template<class FuncABC>
-	void launchVoxelFuncOnTiles(FuncABC f, thrust::device_vector<HATileInfo<Tile>> &tiles, const int num_launched_tiles, const uint8_t launch_types, const int num_groups = 1) {
+	void launchVoxelFuncOnTiles(FuncABC f, thrust::device_vector<HATileInfo<Tile>> &tiles, const int num_launched_tiles, const uint8_t launch_types, const int num_groups = 2) {
 		//for (int gi = 0; gi < num_groups; gi++) {
 			//int offset = gi * Tile::DIM / num_groups;
 			if (num_launched_tiles == 0) return;
@@ -967,7 +967,7 @@ public:
 	}
 
 	template<class FuncABC>
-	void launchVoxelFuncOnAllTiles(FuncABC f, const uint8_t launch_types, const int num_groups = 1) {
+	void launchVoxelFuncOnAllTiles(FuncABC f, const uint8_t launch_types, const int num_groups = 2) {
 		launchVoxelFuncOnTiles(f, dAllTiles, dAllTiles.size(), launch_types, num_groups);
 	}
 

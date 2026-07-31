@@ -32,7 +32,6 @@ The project uses [xmake](https://xmake.io) as its build system. All dependencies
 | Package | Windows | Linux |
 |---|---|---|
 | Eigen | 5.0.0 | 5.0.1 |
-| VTK | 9.5.1 | 9.5.1 |
 | fmt | 12.1.0 | 12.1.0 |
 | nlohmann_json | v3.12.0 | v3.12.0 |
 | polyscope | v2.5.0 | v2.5.0 |
@@ -74,6 +73,9 @@ Use `.json` file in `scenes` folder as the argument. Sphere, tie fighter, delta 
 Modify the `.json` file for parameters like total number of frames. The object trajectories are programmed to last for 4s or 400 frames in 100FPS.
 
 The simulator will write results under `./output/` folder. 
+
+The `.vti` and `.vtu` output files are written directly by the simulator and do
+not require the VTK SDK at build or run time.
 
 You can use `Paraview` for visualization. If it's installed, render with the following script:
 
