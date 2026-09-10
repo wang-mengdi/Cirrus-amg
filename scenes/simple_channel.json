@@ -1,0 +1,18 @@
+{
+  "ny": 8,
+  "adaptive": false,
+  "periodic_x": true,
+  "rho": 1.0,
+  "nu": 0.01,
+  "force": [1.0, 0.0, 0.0],
+  "alpha_u": 0.7,
+  "alpha_p": 0.3,
+  "initial_perturbation": 0.0,
+  "convection": true,
+  "max_iterations": 2000,
+  "tolerance": 1e-8,
+  "linear_tolerance": 1e-11,
+  "nonorth_iterations": 8,
+  "dump_iterations": [0, 1, 2, 5, 10],
+  "output": "output/simple_channel"
+}

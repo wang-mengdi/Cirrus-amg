@@ -1,0 +1,29 @@
+{
+  "ny": 8,
+  "adaptive": false,
+  "periodic_x": true,
+  "rho": 1.0,
+  "nu": 0.01,
+  "force": [
+    1.0,
+    0.0,
+    0.0
+  ],
+  "alpha_u": 0.7,
+  "alpha_p": 0.3,
+  "initial_perturbation": 0.01,
+  "convection": false,
+  "max_iterations": 2000,
+  "tolerance": 1E-08,
+  "linear_tolerance": 1E-11,
+  "nonorth_iterations": 8,
+  "dump_iterations": [
+    0,
+    1,
+    2,
+    3,
+    10,
+    100
+  ],
+  "output": "output/simple_perturb8"
+}

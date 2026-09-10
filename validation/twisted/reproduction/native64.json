@@ -1,0 +1,43 @@
+{
+  "adaptive": true,
+  "alpha_p": 0.3,
+  "alpha_u": 0.7,
+  "anderson_depth": 5,
+  "convection": true,
+  "convection_scheme": "bcg",
+  "dump_iterations": [
+    0,
+    1,
+    2
+  ],
+  "embedded_geometry": "output/twisted/geometry_n64_shift.json",
+  "fluid_solver": "proj",
+  "force": [
+    1,
+    0,
+    0
+  ],
+  "gpu_orthogonalization": "cgs2",
+  "gpu_preconditioner": "native_amg",
+  "gpu_pressure_gauge": "mean_zero",
+  "gpu_pressure_operator": "full",
+  "gpu_viscosity_operator": "full",
+  "linear_backend": "native_gpu",
+  "linear_tolerance": 1e-13,
+  "max_iterations": 5000,
+  "momentum_mode": "imp",
+  "nonorth_iterations": 64,
+  "nu": 0.01,
+  "ny": 64,
+  "output": "D:\\CirrusExperiments\\cirrus-amg\\runs\\reproduction_native64_v1",
+  "output_stride": 4,
+  "periodic_x": true,
+  "periodic_z": false,
+  "pressure_solver": "amg",
+  "projection_iteration_tolerance": 1e-11,
+  "rho": 1,
+  "steady_anderson_depth": 5,
+  "time_step": 0.005,
+  "time_steps": 64,
+  "tolerance": 1e-08
+}

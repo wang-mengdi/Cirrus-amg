@@ -13,6 +13,8 @@
 #include <cstdint>
 #include <cstring>
 #include <type_traits>
+#include <ostream>
+#include <stdexcept>
 
 void CheckCudaError(const std::string& message);
 
@@ -684,7 +686,8 @@ public:
 		mDeviceSyncFlag = true;
 	}
 
-	std::vector<uint8_t> dumpBinaryBlob(uint8_t tile_types = (LEAF | GHOST | NONLEAF),
+	template<class Begin, class Write>
+	size_t visitBinaryBlob(Begin begin, Write write, uint8_t tile_types = (LEAF | GHOST | NONLEAF),
 		int max_level = -1) const
 	{
 		ASSERT(mCompressedFlag, "dumpBinaryBlob requires compressed grid (call compressHost first).");
@@ -736,12 +739,12 @@ public:
 
 		const size_t total = bytes_header + bytes_hashes + (size_t)tile_count * bytes_record;
 
-		std::vector<uint8_t> blob(total);
-		uint8_t* p = blob.data();
+		begin(total);
+		size_t written = 0;
 
 		auto write_raw = [&](const void* src, size_t n) {
-			std::memcpy(p, src, n);
-			p += n;
+			write(src, n);
+			written += n;
 			};
 
 		write_raw(&hdr, sizeof(Header));
@@ -772,8 +775,25 @@ public:
 			}
 		}
 
-		ASSERT((size_t)(p - blob.data()) == total, "dumpBinaryBlob size mismatch");
+		ASSERT(written == total, "dumpBinaryBlob size mismatch");
+		return total;
+	}
+
+	std::vector<uint8_t> dumpBinaryBlob(uint8_t tile_types = (LEAF | GHOST | NONLEAF), int max_level = -1) const {
+		std::vector<uint8_t> blob;size_t offset=0;
+		visitBinaryBlob([&](size_t bytes){blob.resize(bytes);},[&](const void* data,size_t bytes){
+			std::memcpy(blob.data()+offset,data,bytes);offset+=bytes;
+		},tile_types,max_level);
 		return blob;
+	}
+
+	// Same native bytes and traversal as dumpBinaryBlob, with one host Tile of
+	// staging instead of an allocation the size of the complete output file.
+	void dumpBinaryStream(std::ostream& output,uint8_t tile_types = (LEAF | GHOST | NONLEAF),int max_level = -1) const {
+		visitBinaryBlob([](size_t){},[&](const void* data,size_t bytes){
+			output.write(reinterpret_cast<const char*>(data),static_cast<std::streamsize>(bytes));
+			if(!output)throw std::runtime_error("Native binary stream write failed");
+		},tile_types,max_level);
 	}
 
 	static std::shared_ptr<HADeviceGrid<Tile>> loadBinaryBlob(const uint8_t* data, size_t size)
@@ -897,7 +917,7 @@ public:
 	}
 
 	template<class FuncABC>
-	void launchVoxelFunc(FuncABC f, int level, const uint8_t launch_types, LaunchMode mode = LAUNCH_LEVEL, const LaunchOrder order = COARSE_FIRST, const int num_groups = 1) {
+	void launchVoxelFunc(FuncABC f, int level, const uint8_t launch_types, LaunchMode mode = LAUNCH_LEVEL, const LaunchOrder order = COARSE_FIRST, const int num_groups = 2) {
 		//launch a voxel function f(Accessor, TileInfo, l_ijk) on specified tiles
 
 		//launch_types is a bit mask containing all tile types we want to launch
@@ -952,7 +972,7 @@ public:
 	}
 
 	template<class FuncABC>
-	void launchVoxelFuncOnTiles(FuncABC f, thrust::device_vector<HATileInfo<Tile>> &tiles, const int num_launched_tiles, const uint8_t launch_types, const int num_groups = 1) {
+	void launchVoxelFuncOnTiles(FuncABC f, thrust::device_vector<HATileInfo<Tile>> &tiles, const int num_launched_tiles, const uint8_t launch_types, const int num_groups = 2) {
 		//for (int gi = 0; gi < num_groups; gi++) {
 			//int offset = gi * Tile::DIM / num_groups;
 			if (num_launched_tiles == 0) return;
@@ -967,7 +987,7 @@ public:
 	}
 
 	template<class FuncABC>
-	void launchVoxelFuncOnAllTiles(FuncABC f, const uint8_t launch_types, const int num_groups = 1) {
+	void launchVoxelFuncOnAllTiles(FuncABC f, const uint8_t launch_types, const int num_groups = 2) {
 		launchVoxelFuncOnTiles(f, dAllTiles, dAllTiles.size(), launch_types, num_groups);
 	}
 

@@ -1,0 +1,15 @@
+{
+  "name": "periodic_twisted_tube",
+  "extent": [0.25, 0.125, 0.125],
+  "period": 0.25,
+  "radius": 0.035,
+  "amplitude": 0.015,
+  "center_y": 0.0625,
+  "center_z": 0.0625,
+  "rho": 1.0,
+  "nu": 0.01,
+  "force": [1.0, 0.0, 0.0],
+  "geometry_definition": "Circular sections in planes of constant x; center_y(x)=center_y+amplitude*sin(2*pi*x/period), center_z(x)=center_z+amplitude*cos(2*pi*x/period). Positive level set is radius minus transverse distance. One periodic unit of a long tube.",
+  "boundary_conditions": "Periodic x; impermeable stationary no-slip curved wall. Pressure is a periodic perturbation; mean pressure drop over a period is rho*force_x*period.",
+  "comparison": "Shared discrete cut geometry at the wall. Compare matching uniform grids before coarsening the native octree interior. Aphros solver equations must remain unmodified."
+}

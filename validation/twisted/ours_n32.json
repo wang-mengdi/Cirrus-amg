@@ -1,0 +1,21 @@
+{
+  "ny": 32,
+  "embedded_geometry": "output/twisted/geometry_n32.json",
+  "adaptive": false,
+  "periodic_x": true,
+  "periodic_z": false,
+  "convection": false,
+  "rho": 1,
+  "nu": 0.01,
+  "force": [1, 0, 0],
+  "alpha_u": 0.7,
+  "alpha_p": 0.3,
+  "anderson_depth": 5,
+  "tolerance": 1e-8,
+  "linear_tolerance": 1e-11,
+  "max_iterations": 1500,
+  "nonorth_iterations": 1,
+  "pressure_solver": "ldlt",
+  "dump_iterations": [0, 1, 2, 3, 10, 100],
+  "output": "output/twisted/reproduce_n32"
+}

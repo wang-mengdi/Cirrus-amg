@@ -5,7 +5,6 @@ includes("../common/xmake.lua")
 
 add_requires("eigen >=3.4.0")
 add_requires("cuda", {system = true})
-add_requires("vtk >=9.5.1", {configs = {cuda = true}})
 add_requires("polyscope", {version = "2.5.0"})
 add_requireconfs("polyscope.glm", {override = true, version = "0.9.9+8"})
 
@@ -26,6 +25,5 @@ target("src")
 
     add_packages("cuda", {public = true})
     add_packages("eigen", {public = true})
-    add_packages("vtk")
     add_packages("polyscope")
     add_deps("common")

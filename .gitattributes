@@ -1,0 +1,9 @@
+# Source patches use a single space as empty-line diff context.
+validation/aphros/*.patch whitespace=-blank-at-eol
+validation/twisted/experiments/*.patch whitespace=-blank-at-eol
+# Preserve source bytes required by the local frozen reference provenance.
+validation/aphros/build_memory_trace_reference.py -text whitespace=cr-at-eol
+validation/aphros/prepare_zero_page_reset_reference.py -text whitespace=cr-at-eol
+validation/aphros/twisted_zero_pages_reset.h -text whitespace=cr-at-eol
+scripts/build_twisted_reproduction.py -text whitespace=cr-at-eol
+scripts/twisted_reproduction_bundle.py -text whitespace=cr-at-eol

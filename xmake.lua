@@ -85,3 +85,61 @@ target("tests")
     add_packages("magic_enum")
     add_packages("tbb", "polyscope")
 
+-- Accuracy-first SIMPLE implementation on the native HA octree leaf topology.
+-- Double precision CPU matrices make operator dumps reproducible before GPU porting.
+option("simple_amgcl_root")
+    set_default("")
+    set_showmenu(true)
+    set_description("Optional AMGCL include root for SIMPLE pressure solves")
+option_end()
+
+target("simple_channel")
+    set_kind("binary")
+    set_values("cuda.rdc", false)
+    add_files("simple/*.cpp", "simple/*.cu")
+    add_headerfiles("simple/*.h")
+    add_includedirs("simple")
+    if get_config("simple_amgcl_root") ~= "" and get_config("simple_amgcl_root") ~= nil then
+        add_includedirs(get_config("simple_amgcl_root"))
+        add_defines("SIMPLE_HAVE_AMGCL")
+        if is_plat("windows") then add_cxxflags("/openmp") end
+    end
+    add_cugencodes("native")
+    add_cuflags("-std=c++17", "--expt-relaxed-constexpr", "--expt-extended-lambda", "--allow-unsupported-compiler", {force = true})
+    if is_plat("windows") then
+        add_cxxflags("/utf-8")
+    end
+    add_deps("src")
+
+target("simple_anderson_test")
+    set_kind("binary")
+    add_files("simple/AndersonAcceleration.cpp", "validation/anderson_test.cpp")
+    add_includedirs("simple")
+    add_packages("eigen", "nlohmann_json")
+
+target("simple_anderson_file_test")
+    set_kind("binary")
+    add_files("simple/AndersonAcceleration.cpp", "validation/anderson_file_test.cpp")
+    add_includedirs("simple")
+    add_packages("eigen", "nlohmann_json")
+
+target("simple_anderson_file_scale_test")
+    set_kind("binary")
+    add_files("simple/AndersonAcceleration.cpp", "validation/anderson_file_scale_test.cpp")
+    add_includedirs("simple")
+    add_packages("eigen", "nlohmann_json")
+
+target("native_compact_gpu_audit")
+    set_kind("binary")
+    set_values("cuda.rdc", false)
+    add_files("simple/NativeCompactGpu.cu", "simple/NativeAmgPreconditioner.cu", "simple/OctreeMesh.cu", "simple/EmbeddedMesh.cpp", "simple/SimpleMesh.cpp", "validation/native_compact_gpu_audit.cpp")
+    add_files("simple/EmbeddedOperators.cpp", "simple/QuadraticReconstruction.cpp")
+    add_files("validation/native_tile_metadata_audit.cu")
+    add_files("validation/native_host_storage_audit.cu")
+    add_files("validation/native_amg_topology_audit.cu")
+    add_includedirs("simple")
+    add_cugencodes("native")
+    add_cuflags("-std=c++17", "--expt-relaxed-constexpr", "--expt-extended-lambda", "--allow-unsupported-compiler", {force = true})
+    if is_plat("windows") then add_cxxflags("/utf-8") end
+    add_deps("src")
+

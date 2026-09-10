@@ -1,0 +1,31 @@
+{
+  "linear_tolerance": 1e-11,
+  "force": [
+    1,
+    0,
+    0
+  ],
+  "nu": 0.01,
+  "embedded_geometry": "C:/Code/Cirrus-amg/output/twisted/geometry_n128.json",
+  "rho": 1.0,
+  "pressure_solver": "amg",
+  "max_iterations": 1500,
+  "adaptive": true,
+  "ny": 128,
+  "alpha_p": 0.03,
+  "periodic_z": false,
+  "dump_iterations": [
+    0,
+    1,
+    2,
+    10,
+    100
+  ],
+  "tolerance": 1e-08,
+  "convection": false,
+  "anderson_depth": 5,
+  "output": "C:/Code/Cirrus-amg/output/twisted/ours_adaptive128_amg98p03_v2",
+  "alpha_u": 0.98,
+  "periodic_x": true,
+  "nonorth_iterations": 8
+}

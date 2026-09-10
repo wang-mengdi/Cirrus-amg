@@ -1,0 +1,33 @@
+{
+  "ny": 32,
+  "embedded_geometry": "output/twisted/geometry_n32.json",
+  "adaptive": false,
+  "periodic_x": true,
+  "periodic_z": false,
+  "convection": true,
+  "rho": 1,
+  "nu": 0.01,
+  "force": [
+    1,
+    0,
+    0
+  ],
+  "alpha_u": 0.7,
+  "alpha_p": 0.3,
+  "anderson_depth": 5,
+  "tolerance": 1E-08,
+  "linear_tolerance": 1E-11,
+  "max_iterations": 2000,
+  "nonorth_iterations": 1,
+  "pressure_solver": "ldlt",
+  "dump_iterations": [
+    0,
+    1,
+    2,
+    10
+  ],
+  "output": "output/twisted/reproduce_ns32_steady",
+  "convection_scheme": "fou",
+  "time_step": 1,
+  "time_steps": 8
+}

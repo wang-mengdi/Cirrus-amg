@@ -1,0 +1,33 @@
+{
+  "adaptive": true,
+  "alpha_p": 0.03,
+  "alpha_u": 0.98,
+  "anderson_depth": 5,
+  "convection": true,
+  "convection_scheme": "fou",
+  "dump_iterations": [
+    0,
+    1,
+    2,
+    10
+  ],
+  "embedded_geometry": "output/twisted/reproduce_packed128/geometry.json",
+  "force": [
+    1,
+    0,
+    0
+  ],
+  "linear_tolerance": 1E-11,
+  "max_iterations": 3000,
+  "nonorth_iterations": 1,
+  "nu": 0.01,
+  "ny": 128,
+  "output": "output/twisted/reproduce_ns128_refinement",
+  "periodic_x": true,
+  "periodic_z": false,
+  "pressure_solver": "amg",
+  "rho": 1,
+  "time_step": 100000000,
+  "time_steps": 2,
+  "tolerance": 1E-08
+}

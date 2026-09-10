@@ -1,0 +1,32 @@
+{
+  "adaptive": true,
+  "alpha_p": 0.3,
+  "alpha_u": 0.85,
+  "anderson_depth": 5,
+  "convection": false,
+  "dump_iterations": [
+    0,
+    1,
+    2,
+    3,
+    10,
+    100
+  ],
+  "embedded_geometry": "C:/Code/Cirrus-amg/output/twisted/geometry_n64_shift.json",
+  "force": [
+    1,
+    0,
+    0
+  ],
+  "linear_tolerance": 1e-11,
+  "max_iterations": 1500,
+  "nonorth_iterations": 8,
+  "nu": 0.01,
+  "ny": 64,
+  "output": "C:/Code/Cirrus-amg/output/twisted/ours_adaptive64_shift_amg85",
+  "periodic_x": true,
+  "periodic_z": false,
+  "pressure_solver": "amg",
+  "rho": 1.0,
+  "tolerance": 1e-08
+}

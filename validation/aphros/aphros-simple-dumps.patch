@@ -1,0 +1,136 @@
+diff --git a/src/func/init_vel.cpp b/src/func/init_vel.cpp
+index 8abe910c..1bc4074b 100644
+--- a/src/func/init_vel.cpp
++++ b/src/func/init_vel.cpp
+@@ -83,6 +83,24 @@ class Couette : public ModuleInitVelocity<M> {
+   }
+ };
+ 
++template <class M>
++class SimplePerturb : public ModuleInitVelocity<M> {
++ public:
++  using Vect = typename M::Vect;
++  SimplePerturb() : ModuleInitVelocity<M>("simple-perturb") {}
++  void operator()(FieldCell<Vect>& fcv, const Vars& var, const M& m) override {
++    const double a = var.Double("simple_perturb_amplitude", 0.01);
++    const double height = var.Double("simple_perturb_height", 0.125);
++    for (auto c : m.AllCells()) {
++      const auto x = m.GetCenter(c);
++      auto& v = fcv[c];
++      v = Vect(0);
++      v[0] = a * std::sin(2*M_PI*x[0]) * std::sin(M_PI*x[1]/height);
++      v[1] = a * std::cos(2*M_PI*x[0]) * std::sin(2*M_PI*x[1]/height);
++    }
++  }
++};
++
+ template <class M>
+ class SingleVortex : public ModuleInitVelocity<M> {
+  public:
+@@ -104,7 +122,7 @@ class SingleVortex : public ModuleInitVelocity<M> {
+ #define XX(M)                                                             \
+   RegisterModule<TaylorGreen<M>>(), RegisterModule<KelvinHelmholtz<M>>(), \
+       RegisterModule<Uniform<M>>(), RegisterModule<Couette<M>>(),         \
+-      RegisterModule<SingleVortex<M>>(),
++      RegisterModule<SingleVortex<M>>(), RegisterModule<SimplePerturb<M>>(),
+ 
+ #define COMMA ,
+ #define X(dim) XX(MeshCartesian<double COMMA dim>)
+diff --git a/src/solver/simple.ipp b/src/solver/simple.ipp
+index dc9e7142..906a32a9 100644
+--- a/src/solver/simple.ipp
++++ b/src/solver/simple.ipp
+@@ -4,6 +4,9 @@
+ #pragma once
+ 
+ #include <cmath>
++#include <cstdlib>
++#include <fstream>
++#include <iomanip>
+ #include <memory>
+ #include <sstream>
+ #include <stdexcept>
+@@ -403,6 +406,47 @@ struct Simple<EB_>::Imp {
+       cd_->CorrectVelocity(Step::iter_curr, fcvel_corr);
+     }
+     if (sem("inc-iter")) {
++      // Optional diagnostic output for independent SIMPLE operator comparison.
++      // Equations use A*delta + constant = 0. Momentum values below are
++      // volume-integrated (GetDiag/GetConst normally divide them by volume).
++      if (const char* prefix = std::getenv("APHROS_SIMPLE_DUMP")) {
++        const auto di = debug_dump_counter_++;
++        if (di < 3 || di == 9 || di == 99 || std::getenv("APHROS_SIMPLE_DUMP_ALL")) {
++          const std::string base = std::string(prefix) + "_" + std::to_string(di)
++              + "_b" + std::to_string(m.GetId());
++          std::vector<FieldCell<Scal>> diag, rhs;
++          for (size_t d = 0; d < M::dim; ++d) {
++            diag.push_back(cd_->GetDiag(d));
++            rhs.push_back(cd_->GetConst(d));
++          }
++          const auto& vel = cd_->GetVelocity(Step::iter_curr);
++          std::ofstream out(base + "_cells.csv");
++          out << std::setprecision(17);
++          out << "x,y,z,volume,u,v,w,p,p_previous,pcorr,pcorr_rhs,pcorr_diag,diag_u,diag_v,diag_w,delta_rhs_u,delta_rhs_v,delta_rhs_w,u_star,v_star,w_star\n";
++          for (auto c : eb.Cells()) {
++            const auto x = m.GetCenter(c);
++            const auto vol = eb.GetVolume(c);
++            for (size_t d = 0; d < 3; ++d) out << (d < M::dim ? x[d] : 0) << ',';
++            out << vol;
++            for (size_t d = 0; d < 3; ++d) out << ',' << (d < M::dim ? vel[c][d] : 0);
++            out << ',' << fcp_curr[c] << ',' << fcp_prev[c] << ',' << fcpc[c]
++                << ',' << -fcpcs[c].back() << ',' << fcpcs[c][0];
++            for (size_t d = 0; d < 3; ++d) out << ',' << (d < M::dim ? diag[d][c] * vol : 0);
++            for (size_t d = 0; d < 3; ++d) out << ',' << (d < M::dim ? -rhs[d][c] * vol : 0);
++            for (size_t d = 0; d < 3; ++d) out << ',' << (d < M::dim ? vel[c][d] - fcvel_corr[c][d] : 0);
++            out << '\n';
++          }
++          std::ofstream faceout(base + "_faces.csv");
++          faceout << std::setprecision(17);
++          faceout << "x,y,z,axis,area,predicted_flux,corrected_flux\n";
++          for (auto f : eb.Faces()) {
++            const auto x = eb.GetFaceCenter(f);
++            for (size_t d = 0; d < 3; ++d) faceout << (d < M::dim ? x[d] : 0) << ',';
++            faceout << m.GetDir(f).raw() << ',' << eb.GetArea(f) << ','
++                << ffvc[f].back() << ',' << fev_.iter_curr[f] << '\n';
++          }
++        }
++      }
+       owner_->IncIter();
+     }
+   }
+@@ -419,6 +463,27 @@ struct Simple<EB_>::Imp {
+     if (sem.Nested("convdiff-finish")) {
+       cd_->FinishStep();
+     }
++    if (sem("debug-final")) {
++      if (const char* prefix = std::getenv("APHROS_SIMPLE_DUMP")) {
++        const auto& vel = cd_->GetVelocity(Step::time_curr);
++        std::ofstream out(std::string(prefix) + "_final_b" + std::to_string(m.GetId()) + "_cells.csv");
++        out << std::setprecision(17) << "x,y,z,volume,u,v,w,p\n";
++        for (auto c : eb.Cells()) {
++          const auto x = m.GetCenter(c);
++          for (size_t d = 0; d < 3; ++d) out << (d < M::dim ? x[d] : 0) << ',';
++          out << eb.GetVolume(c);
++          for (size_t d = 0; d < 3; ++d) out << ',' << (d < M::dim ? vel[c][d] : 0);
++          out << ',' << fcp_.time_curr[c] << '\n';
++        }
++        std::ofstream faceout(std::string(prefix) + "_final_b" + std::to_string(m.GetId()) + "_faces.csv");
++        faceout << std::setprecision(17) << "x,y,z,axis,area,flux\n";
++        for (auto f : eb.Faces()) {
++          const auto x = eb.GetFaceCenter(f);
++          for (size_t d = 0; d < 3; ++d) faceout << (d < M::dim ? x[d] : 0) << ',';
++          faceout << m.GetDir(f).raw() << ',' << eb.GetArea(f) << ',' << fev_.time_curr[f] << '\n';
++        }
++      }
++    }
+   }
+   double GetAutoTimeStep() const {
+     Scal dt = std::numeric_limits<Scal>::max();
+@@ -435,6 +500,7 @@ struct Simple<EB_>::Imp {
+   }
+ 
+   Owner* owner_;
++  size_t debug_dump_counter_ = 0;
+   Par par;
+   M& m;
+   const EB& eb;

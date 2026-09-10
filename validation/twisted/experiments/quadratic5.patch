@@ -1,0 +1,177 @@
+diff --git a/simple/EmbeddedOperators.cpp b/simple/EmbeddedOperators.cpp
+index 2d134b5..94843c5 100644
+--- a/simple/EmbeddedOperators.cpp
++++ b/simple/EmbeddedOperators.cpp
+@@ -28,7 +28,7 @@ EmbeddedOperators::Sparse matrix(const std::vector<Row>& rows,int columns) {
+ 
+ void EmbeddedOperators::check(const Mesh& mesh,const std::string& output) const {
+     double constantInterpolation=0,constantGradient=0,quadraticInterpolation=0,
+-        quadraticGradient=0,wallLinear=0;
++        quadraticGradient=0,wallLinear=0,wallQuadratic=0;
+     int interfaces=0;
+     auto local=[&](int cell,const Face& f,double h) {
+         Vec3 d=mesh.cells[cell].center-f.center;
+@@ -42,6 +42,14 @@ void EmbeddedOperators::check(const Mesh& mesh,const std::string& output) const
+             for(Sparse::InnerIterator it(wallGradient,j);it;++it)
+                 derivative+=it.value()*local(it.col(),f,h)*h;
+             wallLinear=std::max(wallLinear,(derivative-f.embeddedNormal).norm());
++            if(quadraticWall)for(int a=0;a<3;++a)for(int b=a;b<3;++b) {
++                double derivative2=0;
++                for(Sparse::InnerIterator it(wallGradient,j);it;++it) {
++                    const Vec3 x=local(it.col(),f,h);
++                    derivative2+=h*it.value()*x[a]*x[b];
++                }
++                wallQuadratic=std::max(wallQuadratic,std::abs(derivative2));
++            }
+             continue;
+         }
+         double si=0,sg=0;
+@@ -81,20 +89,23 @@ void EmbeddedOperators::check(const Mesh& mesh,const std::string& output) const
+         advectionBalance=std::abs(net.sum())/std::max(net.cwiseAbs().sum(),1e-30);
+     }
+     const bool passed=constantInterpolation<1e-10 && constantGradient<1e-10 &&
+-        quadraticInterpolation<1e-10 && quadraticGradient<1e-10 && wallLinear<1e-10 && balance<1e-10 && advectionBalance<1e-10;
++        quadraticInterpolation<1e-10 && quadraticGradient<1e-10 && wallLinear<1e-10 && wallQuadratic<1e-10 && balance<1e-10 && advectionBalance<1e-10;
+     nlohmann::json report{{"passed",passed},{"scope","Assembled cut operators: constant preservation, interface monomials, wall affine derivative, global viscous flux balance"},
+         {"coarse_fine_faces_tested",interfaces},{"constant_interpolation_max",constantInterpolation},
+         {"constant_gradient_max_scaled",constantGradient},{"interface_quadratic_interpolation_max",quadraticInterpolation},
+         {"interface_quadratic_gradient_max_scaled",quadraticGradient},{"wall_affine_gradient_max",wallLinear},
+         {"global_viscous_flux_balance",balance},{"maximum_zero_extension_weight",interpolationBoundaryWeight.maxCoeff()},
+         {"advection_checked",bool(cartesianFaceInterpolation.rows())},{"global_advective_flux_balance",advectionBalance},
++        {"wall_reconstruction",quadraticWall?"quadratic5":"linear"},{"wall_quadratic_gradient_max_scaled",wallQuadratic},
++        {"quadratic_wall_max_pivot_ratio",quadraticWallMaxPivotRatio},
+         {"zero_extension_face_count",(interpolationBoundaryWeight.array()>0).count()},
+         {"interpolation_constant_policy","Includes coefficient of fixed zero data on excluded Cartesian stencil faces, as in Aphros"}};
+     std::ofstream(output)<<report.dump(2)<<'\n';
+     if(!passed)throw std::runtime_error("Embedded operator consistency checks failed; see "+output);
+ }
+ 
+-EmbeddedOperators::EmbeddedOperators(const Mesh& mesh,const QuadraticReconstruction* quadratic,bool convection) {
++EmbeddedOperators::EmbeddedOperators(const Mesh& mesh,const QuadraticReconstruction* quadratic,bool convection,bool useQuadraticWall)
++    : quadraticWall(useQuadraticWall) {
+     if(!mesh.embedded) throw std::runtime_error("Embedded operators require cut geometry");
+     if(mesh.coarseFineFaces && !quadratic) throw std::runtime_error("Embedded coarse/fine faces require quadratic reconstruction");
+     const int nc=int(mesh.cells.size()),nf=int(mesh.faces.size());
+@@ -217,7 +228,45 @@ EmbeddedOperators::EmbeddedOperators(const Mesh& mesh,const QuadraticReconstruct
+             compact[f.neighbor][f.neighbor]+=d;compact[f.neighbor][f.owner]-=d;
+             add(full[f.owner],frows[j],-f.area);add(full[f.neighbor],frows[j],f.area);
+         } else {
+-            const int p=f.owner,ns=int(stencil[p].size());
++            const int p=f.owner;
++            if(quadraticWall) {
++                std::vector<std::pair<int,Vec3>> points;
++                const auto k=keyOf(mesh.cells[p].center);
++                const Vec3 wallOffset=(f.center-mesh.cells[p].center)/h;
++                for(int a=-2;a<=2;++a)for(int b=-2;b<=2;++b)for(int c=-2;c<=2;++c) {
++                    auto q=wrap(Key{k[0]+a,k[1]+b,k[2]+c});
++                    auto it=lookup.find(q);
++                    if(it!=lookup.end())points.push_back({it->second,Vec3(a,b,c)-wallOffset});
++                    else {
++                        for(auto& v:q)v=int(std::floor(v*.5));
++                        if(coarseLookup.count(q))throw std::runtime_error("Quadratic wall stencil reaches a coarse cell: increase wall padding");
++                    }
++                }
++                const int ns=int(points.size());Eigen::MatrixXd design(ns,9);
++                for(int r=0;r<ns;++r) {
++                    const auto& x=points[r].second;
++                    design.row(r)<<x[0],x[1],x[2],x[0]*x[0],x[1]*x[1],x[2]*x[2],x[0]*x[1],x[0]*x[2],x[1]*x[2];
++                }
++                // Value at the wall is fixed to zero by omitting the constant
++                // coefficient. Fit all three spatial directions on a 5^3
++                // included-cell stencil; no 2D tangent assumption is used.
++                Eigen::ColPivHouseholderQR<Eigen::MatrixXd> qr(design);qr.setThreshold(1e-12);
++                if(qr.rank()!=9)throw std::runtime_error("Rank-deficient quadratic embedded-wall fit");
++                const auto pivots=qr.matrixR().topLeftCorner(9,9).diagonal().cwiseAbs().eval();
++                const double ratio=pivots.maxCoeff()/pivots.minCoeff();
++                quadraticWallMaxPivotRatio=std::max(quadraticWallMaxPivotRatio,ratio);
++                if(ratio>1e4)throw std::runtime_error("Ill-conditioned quadratic embedded-wall fit");
++                Eigen::VectorXd evaluation=Eigen::VectorXd::Zero(9);evaluation.head<3>()=f.embeddedNormal/h;
++                // D P = Q R. The minimum-norm row satisfying D^T w = eval is
++                // Q [R^{-T} P^T eval; 0], without an ns-by-ns identity solve.
++                Eigen::VectorXd right=qr.colsPermutation().transpose()*evaluation;
++                Eigen::MatrixXd triangular=qr.matrixR().topLeftCorner(9,9);
++                Eigen::VectorXd z=triangular.transpose().triangularView<Eigen::Lower>().solve(right);
++                Eigen::VectorXd padded=Eigen::VectorXd::Zero(ns);padded.head(9)=z;
++                Eigen::VectorXd weights=qr.householderQ()*padded;
++                for(int r=0;r<ns;++r)wrows[j][points[r].first]+=weights[r];
++            } else {
++            const int ns=int(stencil[p].size());
+             Eigen::MatrixXd design(ns,4);
+             for(int r=0;r<ns;++r)design.row(r)<<stencil[p][r].second.transpose(),1.;
+             Eigen::ColPivHouseholderQR<Eigen::MatrixXd> qr(design);
+@@ -226,6 +275,7 @@ EmbeddedOperators::EmbeddedOperators(const Mesh& mesh,const QuadraticReconstruct
+             Eigen::Vector4d evaluation;evaluation<<((f.center-f.embeddedNormal*h-mesh.cells[p].center)/h),1.;
+             Eigen::RowVectorXd coeff=evaluation.transpose()*qr.solve(Eigen::MatrixXd::Identity(ns,ns));
+             for(int r=0;r<ns;++r)wrows[j][stencil[p][r].first]-=coeff[r]/h;
++            }
+             compact[p][p]+=2*f.area/h;
+             add(full[p],wrows[j],-f.area);
+         }
+diff --git a/simple/EmbeddedOperators.h b/simple/EmbeddedOperators.h
+index a1c07a5..4ee434b 100644
+--- a/simple/EmbeddedOperators.h
++++ b/simple/EmbeddedOperators.h
+@@ -13,8 +13,10 @@ struct EmbeddedOperators {
+     Sparse compactDiffusion, deferredDiffusion;
+     Sparse cartesianFaceInterpolation, redistribution;
+     Eigen::VectorXd interpolationBoundaryWeight;
++    bool quadraticWall = false;
++    double quadraticWallMaxPivotRatio = 0.;
+     std::array<Sparse,3> cellGradient;
+-    explicit EmbeddedOperators(const Mesh& mesh,const QuadraticReconstruction* quadratic=nullptr,bool convection=false);
++    explicit EmbeddedOperators(const Mesh& mesh,const QuadraticReconstruction* quadratic=nullptr,bool convection=false,bool quadraticWall=false);
+     std::pair<Sparse,Sparse> upwindAdvection(const Mesh& mesh,const Eigen::VectorXd& flux,double rho) const;
+     void check(const Mesh& mesh,const std::string& output) const;
+ };
+diff --git a/simple/SimpleSolver.cpp b/simple/SimpleSolver.cpp
+index db13e92..0ec478e 100644
+--- a/simple/SimpleSolver.cpp
++++ b/simple/SimpleSolver.cpp
+@@ -74,6 +74,7 @@ Options Options::fromJson(const nlohmann::json& j) {
+     o.andersonDepth = j.value("anderson_depth", o.andersonDepth);
+     o.pressureSolver = j.value("pressure_solver", o.pressureSolver);
+     o.embeddedGeometry = j.value("embedded_geometry", o.embeddedGeometry);
++    o.wallReconstruction = j.value("wall_reconstruction", o.wallReconstruction);
+     o.adaptive = j.value("adaptive", o.adaptive);
+     o.periodicX = j.value("periodic_x", o.periodicX);
+     o.periodicZ = j.value("periodic_z", o.periodicZ);
+@@ -110,6 +111,10 @@ Options Options::fromJson(const nlohmann::json& j) {
+         throw std::runtime_error("Time stepping currently requires embedded convection and positive time_step");
+     if(o.convection && j.value("convection_scheme",std::string("fou"))!="fou")
+         throw std::runtime_error("Only the validated FOU convection scheme is implemented");
++    if(o.wallReconstruction!="linear" && o.wallReconstruction!="quadratic5")
++        throw std::runtime_error("wall_reconstruction must be linear or experimental quadratic5");
++    if(o.wallReconstruction!="linear" && o.embeddedGeometry.empty())
++        throw std::runtime_error("Quadratic wall reconstruction requires embedded geometry");
+     return o;
+ }
+ 
+@@ -119,7 +124,7 @@ Solver::Solver(Mesh mesh, Options options) : mesh_(std::move(mesh)), options_(st
+     if (options_.quadraticInterfaces && mesh_.coarseFineFaces)
+         quadratic_ = std::make_unique<QuadraticReconstruction>(mesh_);
+     if (mesh_.embedded) {
+-        embedded_=std::make_unique<EmbeddedOperators>(mesh_,quadratic_.get(),options_.convection);
++        embedded_=std::make_unique<EmbeddedOperators>(mesh_,quadratic_.get(),options_.convection,options_.wallReconstruction=="quadratic5");
+         embedded_->check(mesh_,(options_.output/"embedded_operator_checks.json").string());
+         if(options_.convection && std::getenv("SIMPLE_ADV_DUMP"))
+             writeMatrix(options_.output/"advection_face_interpolation.csv",Sparse(embedded_->cartesianFaceInterpolation));
+@@ -810,6 +815,7 @@ nlohmann::json Solver::runStep() {
+             {"cells",nc},{"faces",nf},{"cut_cells",cutCells},{"coarse_fine_faces",mesh_.coarseFineFaces},
+             {"rho",options_.rho},{"nu",options_.nu},{"convection",options_.convection},
+             {"convection_scheme",options_.convection?"fou":"none"},{"time_step",options_.timeStep},
++            {"wall_reconstruction",options_.wallReconstruction},
+             {"temporal_acceleration_relative_l2",temporal},{"steady_momentum_relative_l2",steadyResidual},
+             {"momentum_relative_l2",momResidual},{"continuity_relative_linf",continuity},
+             {"velocity_change_relative_linf",change},{"pressure_change_relative_linf",pressureChange},
+diff --git a/simple/SimpleSolver.h b/simple/SimpleSolver.h
+index c7b82b6..84ccb25 100644
+--- a/simple/SimpleSolver.h
++++ b/simple/SimpleSolver.h
+@@ -14,6 +14,7 @@ struct Options {
+     int andersonDepth = 0;
+     std::string pressureSolver = "auto";
+     std::string embeddedGeometry;
++    std::string wallReconstruction = "linear";
+     bool adaptive = false, periodicX = true, convection = true;
+     bool periodicZ = true, quadraticInterfaces = true;
+     bool fluxRelaxationMemory = false;

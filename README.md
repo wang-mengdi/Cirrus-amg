@@ -32,7 +32,6 @@ The project uses [xmake](https://xmake.io) as its build system. All dependencies
 | Package | Windows | Linux |
 |---|---|---|
 | Eigen | 5.0.0 | 5.0.1 |
-| VTK | 9.5.1 | 9.5.1 |
 | fmt | 12.1.0 | 12.1.0 |
 | nlohmann_json | v3.12.0 | v3.12.0 |
 | polyscope | v2.5.0 | v2.5.0 |
@@ -75,8 +74,13 @@ Modify the `.json` file for parameters like total number of frames. The object t
 
 The simulator will write results under `./output/` folder. 
 
+The `.vti` and `.vtu` output files are written directly by the simulator and do
+not require the VTK SDK at build or run time.
+
 You can use `Paraview` for visualization. If it's installed, render with the following script:
 
     $ pvpython --force-offscreen-rendering .\scripts\pararender.py .\output\sphere_circling\ --slice 0:401 --name vorticity --outline --mask-non-finest --mesh .\scenes\sphere0.2r.ply
 
 Rendered images will be saved to `output/sphere_circling/render_vorticity`.
+
+    $ ffmpeg -framerate 25 -i output/sphere_circling/render_vorticity/frame.%04d.png -c:v libx264 -pix_fmt yuv420p output.mp4
