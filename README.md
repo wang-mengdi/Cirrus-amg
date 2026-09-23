@@ -10,7 +10,7 @@ It's developed based on *Cirrus* simulator:
 
 ### 定常管流实验交接（中文）
 
-实验分支：`feature/simple-octree-pipe`；截至 2026-09-09（本机时间）。目前等待大内存机器，精度验证尚未全部完成。
+实验分支：`feature/simple-octree-pipe`；精度验证尚未全部完成。迁移到新电脑请先阅读 **[中文交接文档（2026-09-22）](HANDOFF_CN.md)**，其中包含下载分支、U 盘数据清单、恢复校验、构建和下一步命令。
 
 **目标与方法。** 保留 Cirrus 自适应八叉树和原生 GPU matrix-free AMG，不使用 flow map，准确求解细管中的黏性流动，重点检查近壁速度和壁面剪切应力（WSS）。目前独立基线是 **Aphros**，尚未与 CFX 实测对比。分支包含 SIMPLE 实现，但当前扭曲管道验证采用 **投影法（projection）+ BCG 对流 + 隐式黏性**，并用 Anderson 加速收敛到定常；压力和黏性求解仍使用原生 GPU 算子及 AMG。
 
@@ -30,7 +30,7 @@ It's developed based on *Cirrus* simulator:
 
 **现有问题。** 标准投影法与现有八叉树/GPU AMG 的结合已经可行，但粗网格基线对齐和残差收敛不能证明近壁结果已达到网格无关精度。目前仍需解决或确认近壁空间误差、极小切割面引起的 WSS 采样敏感性，以及大算例的内存和计算开销。面积加权壁面拟合仅是诊断候选，尚未替换正式验证器；不能据此宣称整体通过，也不能宣称已达到 CFX 等效精度。
 
-**接手顺序。** 在大内存机器上先构建并通过小算例检查，再完成独立 Aphros 128 和 Cirrus 256，保持原门槛重新检查 128→256 的流量、速度、压力、近壁速度和 WSS，并复查采样/时间步敏感性。旧机器上的暂停进程不是可迁移检查点，256 需从头启动。完整命令、资源建议、输入恢复和 ParaView 查看方法见 [大机器重现实验说明](validation/twisted/REPRODUCE_ON_LARGE_MACHINE.md)；当前重现流程已验证的平台为 Windows x64。
+**接手顺序。** 在大内存机器上先构建并通过小算例检查，再完成独立 Aphros 128 和 Cirrus 256，保持原门槛重新检查 128→256 的流量、速度、压力、近壁速度和 WSS，并复查采样/时间步敏感性。旧 256 进程已在清理时结束，没有可迁移检查点，256 需从头启动。完整命令、资源建议、输入恢复和 ParaView 查看方法见 [大机器重现实验说明](validation/twisted/REPRODUCE_ON_LARGE_MACHINE.md)；当前重现流程已验证的平台为 Windows x64。
 
 **交付约定。** Git 仅保存代码、脚本、小型算例配置和文档；输入、结果、dump、日志、图及压缩包保存在本地 `D:/CirrusExperiments/cirrus-amg`，通过 U 盘等介质单独转移。只拉取 Git 仓库不会获得全部重现数据。
 

@@ -1,9 +1,9 @@
 # 扭曲细管：当前结论与大内存机器重现
 
-更新时间：2026-09-10 UTC（本机时区 2026-09-09）。分支：`feature/simple-octree-pipe`。
-用户决定等待新机器，本阶段停止新增流动计算；总体精度目标仍未完成。
-这份文档是接续入口。旧实验文档中的“正在运行”是当时的记录，当前状态以本文和
-`D:/CirrusExperiments/cirrus-amg/handoff/reproduction_metadata_20260910/status/summary.json` 为准。
+迁移状态更新：2026-09-22；数值结论沿用 2026-09-10 的检查点。分支：`feature/simple-octree-pipe`。
+新电脑先读 [中文交接文档](../../HANDOFF_CN.md)，再使用本文的详细命令。本文整理期间没有启动求解，总体精度目标仍未完成。
+旧 256 进程已在用户授权清理时结束；旧实验目录已大量删除，仅保留两组关键 64 结果，其他关键输入须从包中恢复。
+旧日志、旧 PID 和 `reproduction_metadata_20260910/status/summary.json` 记录的是清理前状态，不能作为当前活进程依据。
 
 ## 1. 已完成什么，仍缺什么
 
@@ -53,10 +53,10 @@
 
 ## 3. 最后一次运行的事实
 
-原生 256 的 PID 为 71580，创建时间 `1788991861.8417583`，最后一次控制器于
-`2026-09-10 00:07:01 UTC` 将它暂停。93 次已完成线性求解均通过原门槛；
+原生 256 的历史 PID 为 71580，创建时间 `1788991861.8417583`，控制器曾于
+`2026-09-10 00:07:01 UTC` 将它暂停。该求解器及其运行器已在随后用户授权清理时结束。93 次已完成线性求解均通过原门槛；
 `steady_history.csv` 为零字节，尚无可用的 256 定常场。进程保留的内存、Tile backing 和
-Anderson 历史**不是可迁移的完整检查点**。重启电脑会失去进程状态，新机器需从头启动 256。
+Anderson 历史**不是可迁移的完整检查点**。现在已无该活进程状态，新机器需从头启动 256。
 重现包不恢复 PID，不运行暂停/恢复控制器，不使用这些部分输出初始化新求解。
 
 Aphros 128 的 PID 42880 已退出：`2026-09-09 23:53:11 UTC`、退出码 15。
@@ -118,22 +118,24 @@ Set-Location C:\Code
 git -c core.autocrlf=false clone --branch feature/simple-octree-pipe git@github.com:wang-mengdi/Cirrus-amg.git Cirrus-amg
 ```
 
-远端分支需要先推送成功。原来的 1.50 GB Git bundle 含有误提交的历史实验数据，已废弃为迁移入口。
-本次将未推送的实验分支整理成基于原 `origin/main` 的一个干净开发提交，不改写共享 main 或已有标签。
+2026-09-22 已核实远端存在 `feature/simple-octree-pipe`，代码检查点为 `08e78a58a21cad0bfe8da1f1525b578f336e34ce`。
+原来的 1.50 GB Git bundle 含有误提交的历史实验数据，已清理且不再作为迁移入口。
+此前已将实验开发历史整理成基于原 `origin/main` 的干净开发提交，随后另有 README 文档提交；共享 main 和已有标签未改写。
 当前版本不再跟踪场数据、实验报告、压缩档或原有场景模型。原 main 历史中的旧模型仍属于既有共享历史，
 新分支提交和下面的增量包不增加这些数据。
 
 离线转移代码时，可使用仅含本分支新增代码和文档的增量 Git bundle：
 
 ```text
-D:\CirrusExperiments\cirrus-amg\handoff\cirrus_code_docs_20260910.bundle
+D:\CirrusExperiments\cirrus-amg\handoff\cirrus_code_docs_20260922.bundle
 ```
 
-它需要原仓库 main 作为基础，不能单独 clone 成完整仓库。在已有仓库中导入：
+2026-09-22 增量包包含本次交接文档，需要原仓库 main 作为基础，不能单独 clone 成完整仓库。
+旧的 20260910 增量包只到 `20529ff`；不要用它代替最新交付。在已有仓库且尚无该本地实验分支时导入：
 
 ```powershell
 git fetch origin main
-git fetch D:/CirrusExperiments/cirrus-amg/handoff/cirrus_code_docs_20260910.bundle feature/simple-octree-pipe:feature/simple-octree-pipe
+git fetch D:/CirrusExperiments/cirrus-amg/handoff/cirrus_code_docs_20260922.bundle feature/simple-octree-pipe:feature/simple-octree-pipe
 git switch feature/simple-octree-pipe
 ```
 
@@ -145,7 +147,8 @@ U 盘重现所需的数据文件是 `twisted_reproduction_20260910.zip` 和同�
 `reproduction_metadata_20260910` 是可选的本地校验说明。
 另有 `local_validation_artifacts_20260910.zip` 保存从 Git 移出的旧实验材料，按需转移以审阅历史诊断。
 这个归档可解压到仓库根目录恢复原有文档里的本地 `validation/.../results` 链接；恢复后的文件由 Git 忽略。
-备份目录 `D:/CirrusExperiments/cirrus-amg/local_git_cleanup_backups/20260910` 仅用于本机恢复旧历史，不是日常迁移包。
+原 `local_git_cleanup_backups` 目录已在用户授权清理中删除，不再是可用恢复入口。
+清理后校验记录位于 `handoff/cleanup_final_verification_20260910.json`；主重现包及可选旧验证材料包均保留。
 
 安装 Python 3.11 或更新版本，以及依赖：
 
