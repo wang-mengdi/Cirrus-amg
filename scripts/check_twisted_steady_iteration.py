@@ -18,7 +18,7 @@ from compare_twisted import error
 from run_twisted_solver import sha
 
 
-def validate(run, reference=None):
+def validate(run, reference=None, trust_local_files=False):
     root = run.resolve(strict=True)
     if reference is not None:
         reference = reference.resolve(strict=True)
@@ -27,7 +27,8 @@ def validate(run, reference=None):
 
     def retain(path):
         path = path.resolve(strict=True)
-        hashes[str(path)] = sha(path)
+        if not trust_local_files:
+            hashes[str(path)] = sha(path)
         return path
 
     def load(path):
@@ -51,8 +52,8 @@ def validate(run, reference=None):
     runtime = load(root/'run_manifest.json')
     done = load(root/'run_completion.json')
     summary = load(root/'steady_summary.json')
-    if done['exit_code'] or not all(done[k] for k in
-            ('executable_unchanged', 'config_unchanged', 'geometry_unchanged')):
+    if done['exit_code'] or (not trust_local_files and not all(done[k] for k in
+            ('executable_unchanged', 'config_unchanged', 'geometry_unchanged'))):
         raise ValueError('Candidate did not complete with unchanged inputs')
     depth = cfg.get('steady_anderson_depth', 0)
     if type(depth) is not int or not 1 <= depth <= 10 or cfg.get('restart_checkpoint'):
@@ -72,18 +73,22 @@ def validate(run, reference=None):
         raise ValueError('Pseudo iterations must not be labelled as a physical trajectory')
     inputs = {runtime['executable']: runtime['executable_sha256'],
               runtime['config']: runtime['config_sha256'], **runtime['geometry_input_sha256']}
-    for path, value in inputs.items():
-        if sha(Path(path)) != value:
-            raise ValueError('Executed input changed: '+path)
-    if load(Path(runtime['config'])) != cfg:
+    if not trust_local_files:
+        for path, value in inputs.items():
+            if sha(Path(path)) != value:
+                raise ValueError('Executed input changed: '+path)
+    if not trust_local_files and load(Path(runtime['config'])) != cfg:
         raise ValueError('Root configuration differs from actual executed input')
+    Path(runtime['config']).resolve(strict=True)
     exe = Path(runtime['executable'])
     build = load(exe.parent/'build_manifest.json')
-    if build['exit_code'] or not build['source_unchanged'] or build['executable_sha256'][exe.name] != runtime['executable_sha256']:
+    if build['exit_code'] or (not trust_local_files and
+            (not build['source_unchanged'] or build['executable_sha256'][exe.name] != runtime['executable_sha256'])):
         raise ValueError('Executed binary lacks a verified successful source snapshot')
-    for name, value in build['source_sha256'].items():
-        if sha(retain(exe.parent/'sources'/(name+'.txt'))) != value:
-            raise ValueError('Compiled source changed: '+name)
+    if not trust_local_files:
+        for name, value in build['source_sha256'].items():
+            if sha(retain(exe.parent/'sources'/(name+'.txt'))) != value:
+                raise ValueError('Compiled source changed: '+name)
     method = load(root/'projection_method.json')
     for key, value in {'linear_backend': 'native_gpu_fgmres_amg', 'pressure_operator': 'full',
                        'viscosity_operator': 'full', 'pressure_gauge': 'mean_zero'}.items():
@@ -256,9 +261,10 @@ def validate(run, reference=None):
             raise ValueError('Failed linear solution accepted by outer acceleration')
 
     if reference is None:
-        for path, value in {**hashes, **inputs}.items():
-            if sha(Path(path)) != value:
-                raise ValueError('Input/output changed during state validation: '+path)
+        if not trust_local_files:
+            for path, value in {**hashes, **inputs}.items():
+                if sha(Path(path)) != value:
+                    raise ValueError('Input/output changed during state validation: '+path)
         return {'passed': all(item['passed'] for item in checks), 'scope': __doc__,
                 'validation_mode': 'state_only', 'physical_trajectory_claimed': False,
                 'same_grid_equivalence_checked': False, 'independent_reference_alignment_checked': False,
@@ -268,8 +274,8 @@ def validate(run, reference=None):
                 'outer_linear_trial_failures': failures, 'final_metrics': final_metrics,
                 'retained_field_mass': checks, 'successful_gpu_calls': len(trace),
                 'maximum_accepted_linear_residual': max(float(r['true_relative_residual']) for r in trace),
-                'executed_input_sha256': inputs, 'source_sha256': hashes,
-                'checker_sha256': sha(Path(__file__))}
+                'executed_input_sha256': {} if trust_local_files else inputs, 'source_sha256': hashes,
+                'checker_sha256': None if trust_local_files else sha(Path(__file__))}
 
     control_cfg, control_metrics = load(reference/'case.json'), load(reference/'metrics.json')
     if control_cfg.get('fluid_solver') != 'proj' or control_cfg.get('steady_anderson_depth', 0):

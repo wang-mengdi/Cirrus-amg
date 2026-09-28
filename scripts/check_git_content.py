@@ -9,6 +9,7 @@ CODE = {'.c', '.cpp', '.h', '.cu', '.cuh', '.ipp', '.inc', '.py', '.ps1', '.sh',
 EXACT = {'.gitignore', '.gitattributes', '.editorconfig', 'CMakeLists.txt', 'pyproject.toml', 'requirements.txt'}
 GENERATED = ('validation/twisted/results/', 'validation/results/', 'validation/figures/')
 CASES = {f'validation/twisted/reproduction/native{n}.json' for n in (16, 64, 128, 256)}
+APHROS_CONFIGS = {'validation/aphros/sim_base.conf'}
 
 
 def git(*args):
@@ -21,6 +22,8 @@ def allowed(name):
         return False
     if name.startswith('validation/twisted/reproduction/'):
         return name in CASES
+    if name in APHROS_CONFIGS:
+        return True
     if p.name in EXACT or p.name.startswith('LICENSE') or p.suffix in CODE | {'.md'}:
         return True
     return p.suffix == '.json' and p.parent.as_posix() in {'scenes', 'validation/twisted'}
@@ -33,7 +36,7 @@ def check(rows):
             errors.append(name + ': data or unsupported file type')
             continue
         size = int(git('cat-file', '-s', oid))
-        limit = 64*1024 if name.endswith('.json') else 2*1024**2
+        limit = 64*1024 if name.endswith(('.json', '.conf')) else 2*1024**2
         if size > limit:
             errors.append(name + ': exceeds source/configuration size limit')
             continue

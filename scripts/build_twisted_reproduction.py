@@ -25,7 +25,7 @@ def main():
         shutil.copyfile(repo/name,target)
     shutil.copyfile(__file__,out/'build_script.py.txt')
     xmake=str(Path(a.xmake).resolve(strict=True));targets=('simple_channel','native_compact_gpu_audit')
-    commands=[[xmake,'f','-o',str(cache)],*[[xmake,'build','-j','1',target] for target in targets]]
+    commands=[[xmake,'f','--vs=2022','-o',str(cache)],*[[xmake,'build','-j','1',target] for target in targets]]
     now=lambda:datetime.now(timezone.utc).isoformat()
     report={'scope':__doc__,'source_sha256':before,'build_started_utc':now(),'commands':commands,
         'build_cache':str(cache),'source_inventory_sha256':sha(a.source_inventory),

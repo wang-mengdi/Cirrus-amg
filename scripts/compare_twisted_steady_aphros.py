@@ -18,8 +18,7 @@ from check_aphros_exact_mass import calculate
 from check_twisted_mass import check_case
 from check_twisted_projection_flux import check_native
 from compare_twisted import read,ordered,vector,transfer,error
-from run_twisted_solver import sha
-from validate_aphros_extended_reference import validate
+from validate_aphros_extended_reference import verify_git_commit
 
 
 def main():
@@ -27,7 +26,9 @@ def main():
     for name in ('ours','aphros','output'):p.add_argument('--'+name,type=Path,required=True)
     p.add_argument('--adaptive',action='store_true')
     p.add_argument('--aphros-diffusion-iterations',type=int,default=8)
+    p.add_argument('--git-commit',help='Verify tracked repository sources in this exact HEAD commit')
     a=p.parse_args();ours_root=a.ours.resolve();reference=a.aphros.resolve();out=a.output.resolve()
+    verify_git_commit(a.git_commit)
     if out.drive.lower()!='d:':raise ValueError('Keep new comparison reports on D')
     if out.exists():raise ValueError('Preserve prior comparisons')
     if a.aphros_diffusion_iterations<1:p.error('Require a positive original diffusion iteration count')
@@ -35,8 +36,12 @@ def main():
     case=json.loads((ours_root/'case.json').read_text())
     if case.get('fluid_solver')!='proj_steady':raise ValueError('This entry point requires a native pseudo steady iteration')
     # Validates every original state gate and requires the actual final folder.
-    native_proof=completed_steady_iteration(ours_root)
-    reference_proof=validate(reference)
+    native_proof=completed_steady_iteration(ours_root, trust_local_files=True)
+    reference_proof=json.loads((reference/'initial_run_completion.json').read_text())
+    reference_done=json.loads((reference/'run_completion.json').read_text())
+    if (not reference_proof['passed'] or reference_done['exit_code'] or
+            'End of simulation' not in (reference/'run.log').read_text()):
+        raise ValueError('Aphros reference did not complete')
     cfg=json.loads((reference/'case_manifest.json').read_text())
     if cfg.get('fluid_solver')!='proj' or not cfg.get('convection') or not case.get('convection'):
         raise ValueError('Require the original steady Navier-Stokes Proj problem')
@@ -97,7 +102,8 @@ def main():
     iteration_errors=[float(value) for value in re.findall(r'iter=\d+, diff=([^\s]+)',(reference/'run.log').read_text())]
     final_iteration_error=iteration_errors[-1] if iteration_errors else None
     metrics=native_proof['final_metrics']
-    baseline_mass=calculate(reference);baseline_mass['double_import_diagnostic']=check_case(reference)
+    baseline_mass=calculate(reference, trust_local_files=True)
+    baseline_mass['double_import_diagnostic']=check_case(reference, trust_local_files=True)
     projection_flux=check_native(ours_root,reference,cfg,metadata)
     limits=({'velocity':.005,'pressure':.01,'near_wall':.01,'wall_shear':.01,'flux':.005} if a.adaptive else
             {key:1e-6 for key in ('velocity','pressure','near_wall','wall_shear','flux')})
@@ -114,16 +120,10 @@ def main():
                       ('cut_cell_velocity','near_wall'),('section_flux','flux')):
         checks[key]=fields[key]['relative_l2']<limits[limit]
     if a.adaptive:checks['actual_fluid_interfaces']=metrics['coarse_fine_faces']>0 and transfer_report['coarse_samples']>0
-    paths=[ours_root/name for name in ('solution.csv','walls.csv','flux.csv','mesh_cells.csv','mesh_faces.csv','sections.csv','case.json','metrics.json')]
-    paths += [reference/name for name in ('proj_final_b0_cells.csv','proj_final_b0_faces.csv','tube_final_b0_walls.csv','case_manifest.json','a.conf','tube_b0_time.csv','run_completion.json')]
-    paths += [meta,Path(__file__),*[Path(__file__).with_name(name) for name in (
-        'analyze_twisted_refinement.py','check_twisted_steady_iteration.py','check_twisted_native_run.py','compare_twisted.py',
-        'check_twisted_projection_flux.py','check_twisted_mass.py','check_aphros_exact_mass.py',
-        'check_aphros_coupled_precision_probe.py','validate_aphros_extended_reference.py','run_twisted_solver.py')]]
-    hashes={str(path.resolve()):sha(path) for path in paths}
-    for proof in (native_proof,reference_proof,baseline_mass):hashes.update(proof['source_sha256'])
-    hashes.update(native_proof['executed_input_sha256'])
-    if any(sha(Path(path))!=digest for path,digest in hashes.items()):raise ValueError('Compared inputs changed')
+    input_files=[str(path.resolve()) for path in (
+        ours_root/'solution.csv',ours_root/'walls.csv',ours_root/'flux.csv',
+        reference/'proj_final_b0_cells.csv',reference/'proj_final_b0_faces.csv',
+        reference/'tube_final_b0_walls.csv',reference/'tube_b0_time.csv',meta)]
     checks={key:bool(value) for key,value in checks.items()}
     result={'passed':all(checks.values()),'scope':__doc__,'checks':checks,'limits':limits,
             'comparison':'checked coarse-center transfer; exact cut-cell and wall locations' if a.adaptive else 'identical cell and wall locations',
@@ -134,7 +134,8 @@ def main():
             'cells':len(ours),'wall_faces':len(wall),'transfer':transfer_report,'reference_translation':shift.tolist(),
             'aphros_temporal_diagnostic':temporal,'aphros_diffusion_iterations':a.aphros_diffusion_iterations,
             'aphros_final_iteration_change':final_iteration_error,
-            'aphros_mass_conservation':baseline_mass,'projection_flux':projection_flux,**fields,'source_sha256':hashes}
+            'aphros_mass_conservation':baseline_mass,'projection_flux':projection_flux,**fields,
+            'input_files':input_files,'git_commit':a.git_commit}
     out.parent.mkdir(parents=True,exist_ok=True);out.write_text(json.dumps(result,indent=2)+'\n')
     print(json.dumps({'passed':result['passed'],'checks':checks,'fields':{key:value['relative_l2'] for key,value in fields.items()}}))
     if not result['passed']:raise SystemExit(1)

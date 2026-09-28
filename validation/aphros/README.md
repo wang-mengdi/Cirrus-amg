@@ -2,6 +2,8 @@
 
 实际构建和运行日期：2026-09-06。基线为开源 Aphros，原仓库 `C:\Code\aphros`，提交 **b60ce3da52c19935fa24c778f62f02141eaf7f80**。原仓库干净且未修改；实验放在本目录的 `aphros` detached worktree。`aphros-simple-dumps.patch` 只新增 SIMPLE 调试输出和一个可控的初始扰动模块，未改变数值算法。
 
+跨电脑的 Proj 对照使用本目录的 `sim_base.conf` 作为永久配置。它从只读历史存档复制而来；新运行目录的 `a.conf` 由运行脚本生成在 `D:\CirrusExperiments\cirrus-amg`，其中的 `sim_base.conf` 引用指向本目录。历史存档仅供读取，不作为运行输出目录。
+
 ## 复现
 
 依赖为 Windows MSVC 2022 Community、Git for Windows 的 sh/awk、Python 3；不需要 WSL、MPI、HDF5 或 Hypre。MSVC 实测版本 19.44.35221。纯 Windows NMake build。

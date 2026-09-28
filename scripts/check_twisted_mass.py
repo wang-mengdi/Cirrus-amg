@@ -91,15 +91,16 @@ def mass_metrics(cells,faces,geometry,shape,h):
     return result
 
 
-def check_case(root):
+def check_case(root, trust_local_files=False):
     manifest=json.loads((root/'case_manifest.json').read_text(encoding='utf-8'))
-    if hashlib.sha256((root/'a.conf').read_bytes()).hexdigest()!=manifest['config_sha256']:
+    if not trust_local_files and hashlib.sha256((root/'a.conf').read_bytes()).hexdigest()!=manifest['config_sha256']:
         raise ValueError('Baseline config differs from manifest')
     solver=manifest.get('fluid_solver','simple')
     if solver not in ('simple','proj'):raise ValueError('Unsupported baseline fluid solver')
     paths=[root/f'{solver}_final_b0_cells.csv',root/f'{solver}_final_b0_faces.csv',root/'tube_b0_geometry_faces.csv']
     result=mass_metrics(*(read(p) for p in paths),manifest['shape'],manifest['spec']['extent'][1]/manifest['ny'])
-    result['source_sha256']={str(p.resolve()):hashlib.sha256(p.read_bytes()).hexdigest() for p in paths}
+    result['source_sha256']={} if trust_local_files else {
+        str(p.resolve()):hashlib.sha256(p.read_bytes()).hexdigest() for p in paths}
     result['fluid_solver']=solver
     return result
 

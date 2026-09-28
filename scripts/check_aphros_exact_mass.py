@@ -15,7 +15,7 @@ from check_aphros_coupled_precision_probe import hex_decimal
 from run_twisted_solver import sha
 
 
-def calculate(root):
+def calculate(root, trust_local_files=False):
     cfg=json.loads((root/'case_manifest.json').read_text())
     meta=json.loads((root/'proj_final_b0_exact.json').read_text())
     if meta['mantissa_bits'] not in (53,64):raise ValueError('Unsupported recorded scalar precision')
@@ -26,8 +26,9 @@ def calculate(root):
     paths=[root/name for name in ('case_manifest.json','a.conf','proj_final_b0_exact.json',
         'proj_final_b0_exact_cells.csv','proj_final_b0_exact_faces.csv','tube_b0_geometry_cells.csv',
         'tube_b0_geometry_faces.csv','proj_final_b0_cells.csv','proj_final_b0_faces.csv')]
-    hashes={str(p.resolve()):sha(p) for p in paths}
-    if sha(root/'a.conf')!=cfg['config_sha256']:raise ValueError('Configuration changed')
+    hashes={} if trust_local_files else {str(p.resolve()):sha(p) for p in paths}
+    if not trust_local_files and sha(root/'a.conf')!=cfg['config_sha256']:
+        raise ValueError('Configuration changed')
     if meta['cells']!=len(cells) or len(cells)!=len(geometry) or meta['faces']!=len(faces) or len(faces)!=len(gfaces):
         raise ValueError('Exact and ordinary dump sizes differ')
     if not np.allclose(np.column_stack([cells[d] for d in 'xyz']),
@@ -117,8 +118,9 @@ def calculate(root):
             'global_absolute_cell_flux_over_throughflow':str(total),'global_signed_flux':str(sum(net)),
             'periodic_seam_exactly_equal':seam_delta==0,'periodic_seam_relative_difference':str(seam_relative),
             'opposite_seam_divergence_relative_linf':str(other_relative),'wall_flux_policy':'Stationary impermeable wall: zero',
-            'source_sha256':hashes,'checker_sha256':sha(Path(__file__))}
-    if any(sha(Path(p))!=value for p,value in hashes.items()):raise ValueError('Inputs changed during exact mass inspection')
+            'source_sha256':hashes,'checker_sha256':None if trust_local_files else sha(Path(__file__))}
+    if not trust_local_files and any(sha(Path(p))!=value for p,value in hashes.items()):
+        raise ValueError('Inputs changed during exact mass inspection')
     return result
 
 

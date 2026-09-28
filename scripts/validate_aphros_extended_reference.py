@@ -1,19 +1,49 @@
 """Validate an isolated extended-scalar build and its completed flow provenance."""
+import hashlib
 import json
 from pathlib import Path
+import re
+import subprocess
 import numpy as np
 from check_twisted_mass import read
 from run_twisted_solver import sha
 
+REPO = Path(__file__).resolve().parents[1]
 
-def validate(root):
+
+def verify_git_commit(commit):
+    if commit is None:
+        return
+    if not re.fullmatch(r'[0-9a-f]{40}', commit):
+        raise ValueError('Expected a full 40-character Git commit SHA')
+    result = subprocess.run(['git', '-C', str(REPO), 'rev-parse', 'HEAD'],
+                            capture_output=True, text=True, check=True)
+    if result.stdout.strip() != commit:
+        raise ValueError('Current Git HEAD differs from the requested commit')
+
+
+def source_sha(path, git_commit=None):
+    path = Path(path).resolve()
+    if git_commit and path.is_relative_to(REPO):
+        relative = path.relative_to(REPO).as_posix()
+        tracked = subprocess.run(['git', '-C', str(REPO), 'ls-files', '--error-unmatch',
+                                  '--', relative], capture_output=True)
+        if tracked.returncode == 0:
+            blob = subprocess.run(['git', '-C', str(REPO), 'show',
+                                   f'{git_commit}:{relative}'], capture_output=True, check=True)
+            return hashlib.sha256(blob.stdout).hexdigest()
+    return sha(path)
+
+
+def validate(root, git_commit=None):
+    verify_git_commit(git_commit)
     root=root.resolve();hashes={}
     def load(path):
         hashes[str(path.resolve())]=sha(path)
         return json.loads(path.read_text(encoding='utf-8-sig'))
     def checked(path,value):
         path=Path(path)
-        if sha(path)!=value:raise ValueError('Extended reference input changed: '+str(path))
+        if source_sha(path,git_commit)!=value:raise ValueError('Extended reference input changed: '+str(path))
         hashes[str(path.resolve())]=value
     runtime=load(root/'run_manifest.json');completion=load(root/'run_completion.json')
     cfg=load(root/'case_manifest.json');exe=Path(runtime['executable'])
@@ -77,7 +107,9 @@ def validate(root):
     if len(times)!=cfg['time_steps'] or not np.allclose(times['time'],np.arange(1,len(times)+1)*cfg['time_step'],rtol=1e-12,atol=0):
         raise ValueError('Incomplete physical time sequence')
     for name in ('run.log','tube_b0_time.csv'):hashes[str((root/name).resolve())]=sha(root/name)
-    if any(sha(Path(name))!=value for name,value in hashes.items()):raise ValueError('Reference changed during validation')
+    if any(source_sha(Path(name),git_commit)!=value for name,value in hashes.items()):
+        raise ValueError('Reference changed during validation')
     return {'passed':True,'scope':__doc__+' This validates provenance, not field agreement or physical accuracy.',
             'core_equation_bodies':core,'compiled_objects':len(build['results']),
-            'complete_physical_steps':len(times),'source_sha256':hashes,'checker_sha256':sha(Path(__file__))}
+            'complete_physical_steps':len(times),'source_sha256':hashes,
+            'git_commit':git_commit,'checker_sha256':sha(Path(__file__))}

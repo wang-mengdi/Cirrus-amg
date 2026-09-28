@@ -123,12 +123,12 @@ def load(root,steady_iteration=False):
     return config,metadata,metrics,cells,walls
 
 
-def completed_steady_iteration(folder):
+def completed_steady_iteration(folder, trust_local_files=False):
     # Import lazily: the state checker also uses completed_trajectory above.
     # Revalidate actual outputs and all original gates, rather than trusting a
     # supplied summary or relabeling pseudo iterations as physical time steps.
     from check_twisted_steady_iteration import validate
-    proof=validate(folder.resolve().parent)
+    proof=validate(folder.resolve().parent, trust_local_files=trust_local_files)
     if not proof['passed']:raise ValueError('Steady state validation failed')
     summary=json.loads((folder.parent/'steady_summary.json').read_text())
     if Path(summary['final_output']).resolve()!=folder.resolve():
