@@ -1,7 +1,28 @@
 # Cirrus-amg 新电脑交接说明
 
-更新：2026-09-22。适用于继续“保留八叉树，用标准黏性流算法对齐 Aphros”的任务。
-本文整理迁移步骤和接续目标，没有在旧电脑重新启动求解。旧文档中的 PID、正在运行状态和输出路径是历史记录，以本文的清理后状态为准。
+## 2026-11-14 单相管流对齐结项记录
+
+按项目决定，Cirrus 与 Aphros 的 SIMPLE 对齐、单相 Proj 对齐两条工作均已结束。下表记录结项时达到的验证范围。Aphros PLIC-VOF 两相界面对齐由其他机器上的独立任务负责。
+
+11 月 6 日的比较图展示 **Cirrus Proj 对 Aphros Proj**。64 档验收文件中，Cirrus 的最终指标标记为 `proj_steady`，Aphros 的参考场标记为 `proj`。`simple_channel.exe` 同时包含多种求解算法，运行配置中的 `fluid_solver=proj` 在 [main.cpp](simple/main.cpp) 中选择投影法。
+
+| 最细横向分辨率 | Cirrus Proj | Aphros Proj 与定常对齐结论 |
+|---|---|---|
+| 64 | 136,632 个流体单元，第 16 轮达到定常 | Aphros 完成 128 个物理步，双方均满足定常和守恒条件。五项相对 L2 差通过验收：速度 0.02364%、去均值压力 0.12790%、切割单元速度 0.01941%、壁面剪切 0.01846%、截面流量 0.00757%。 |
+| 128 | 790,216 个流体单元，第 23 轮达到定常，单独的 Cirrus 状态检查通过 | Aphros 从 Cirrus 速度场初始化，完成 5/128 步后停止，物理时间 0.025 s。结项时仅有瞬态快照，未建立独立定常对齐。 |
+| 256 | 3,995,168 个流体单元，第 43 轮达到定常。动量相对残差、速度映射缺陷、完整固定点残差分别为 `7.40e-9`、`5.96e-13`、`2.32e-10`，均低于 `1e-8` | 尚无 Aphros 256 定常对照。这次直接启动的试跑有求解器收敛摘要，缺少正式运行器的哈希清单。 |
+
+**早期 SIMPLE 也有独立对齐结果。** 扭曲细管 64 档的 SIMPLE 定常 Navier–Stokes 八步算例通过。128 档的 Cirrus 自适应 SIMPLE 对 Aphros SIMPLE/FOU 也通过了五项门槛，速度、压力、切割单元速度、壁面剪切和截面流量差分别为 0.01446%、0.19636%、0.01399%、0.01409%、0.01988%。见[早期 SIMPLE 实验记录](validation/twisted/IMPLEMENTATION.md)。
+
+**空间收敛仍有缺口。** Cirrus Proj 从 64 加密到 128，截面流量差 0.6063%（门槛 0.5%），最近壁探针速度差 2.6509%、壁面剪切差 1.9673%（门槛均为 1%）。[固定探针与网格收敛检查](validation/twisted/SPATIAL_CONVERGENCE_64_128.md)
+
+原始证据以 `D:/CirrusExperiments/cirrus-amg/` 为根。64 档验收记录为 `checks/handoff64_pair_v1.json`，128 档诊断为 `checks/aphros128_partial24h_vs_cirrus128_20260924.json`。256 档数值取自 `runs/reproduction_native256_v2/steady_summary.json` 及 `iterate_0043/metrics.json`。11 月 6 日生成的静态图和报告在 `visualizations/aphros_alignment_20261106/`，其中 `native256_metadata.json` 另存了末轮指标。
+
+Git 保存本页结论和[渲染脚本](scripts/render_twisted_alignment_report.py)。原始运行数据的清理范围是本机上述实验根下的 `runs/`（15 组运行目录，含历史几何、逐轮场、最终场和 256 的 ParaView 导出）。清理后，如需从原始场重画或重新做逐单元复验，须另行取得对应数据。
+
+## 2026-09-22 迁移记录（历史）
+
+以下各节保留迁移当日的运行状态、文件清单和接续步骤。当前定常和对齐结论见上方 11 月 14 日记录。
 
 ## 1. 先确认要继续哪条路线
 
