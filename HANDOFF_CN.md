@@ -16,9 +16,13 @@
 
 **空间收敛仍有缺口。** Cirrus Proj 从 64 加密到 128，截面流量差 0.6063%（门槛 0.5%），最近壁探针速度差 2.6509%、壁面剪切差 1.9673%（门槛均为 1%）。[固定探针与网格收敛检查](validation/twisted/SPATIAL_CONVERGENCE_64_128.md)
 
-原始证据以 `D:/CirrusExperiments/cirrus-amg/` 为根。64 档验收记录为 `checks/handoff64_pair_v1.json`，128 档诊断为 `checks/aphros128_partial24h_vs_cirrus128_20260924.json`。256 档数值取自 `runs/reproduction_native256_v2/steady_summary.json` 及 `iterate_0043/metrics.json`。11 月 6 日生成的静态图和报告在 `visualizations/aphros_alignment_20261106/`，其中 `native256_metadata.json` 另存了末轮指标。
+原始证据曾位于 `D:/CirrusExperiments/cirrus-amg/`。64 档验收记录为 `checks/handoff64_pair_v1.json`，128 档诊断为 `checks/aphros128_partial24h_vs_cirrus128_20260924.json`。256 档数值取自 `runs/reproduction_native256_v2/steady_summary.json` 及 `iterate_0043/metrics.json`。256 于 2026-09-25 20:28:28 UTC 正常退出，退出码 0，定常连续性相对 L∞ 为 `7.028856756582587e-14`。独立场、逐轮数据和可视化都是可重新生成的产物；这些历史路径仅用于标识来源。
 
-Git 保存本页结论和[渲染脚本](scripts/render_twisted_alignment_report.py)。原始运行数据的清理范围是本机上述实验根下的 `runs/`（15 组运行目录，含历史几何、逐轮场、最终场和 256 的 ParaView 导出）。清理后，如需从原始场重画或重新做逐单元复验，须另行取得对应数据。
+### 2026-11-19 复现入口
+
+- [大内存机器重现指南](validation/twisted/REPRODUCE_ON_LARGE_MACHINE.md)记录物理问题、编译、运行、校验及后处理。解包前使用 `448284e22a54a506b68d2d90c37b67eea091e1c0` 验证冻结输入，重跑和报告使用结项分支。Git 提供源码、参数和步骤；恢复所需的几何、Aphros 参考构建、速度初值及其来源证据随 `D:/CirrusExperiments/cirrus-amg/handoff/` 的 ZIP 和清单单独保存。
+- 64 档先查[独立参考完成记录](validation/twisted/APHROS64_FULL_COMPLETION.md)与[直接定常比较](validation/twisted/STEADY_APHROS_COMPARISON.md)。128 档的旧 Aphros 数据只到第 5 步，重跑时按指南独立推进、检查结束状态；不把五步诊断当成定常验收。
+- 256 档的实际启动条件、重跑命令和判据见重现指南顶部。重跑记录新的退出状态及误差，历史 43 轮是观测值。需要重新绘图时，由新生成的场运行仓库的导出脚本，并按新输出路径配置[对比图渲染脚本](scripts/render_twisted_alignment_report.py)。
 
 ## 2026-09-22 迁移记录（历史）
 

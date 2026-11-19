@@ -1,5 +1,38 @@
 # 扭曲细管：当前结论与大内存机器重现
 
+## 2026-11-19 封存后重跑入口
+
+[结项表](../../HANDOFF_CN.md)记录实际通过的比较和未完成的验收。下文的旧 PID、迁移状态和旧运行目录是历史记录。重跑从恢复依赖和新建输出目录开始。
+
+### 恢复经过校验的输入
+
+使用 `D:/CirrusExperiments/cirrus-amg/handoff/` 下同批的 `twisted_reproduction_20260910.zip` 和 `inputs.json`。ZIP 的 SHA-256 为 `03f615d2c770f82bebe62d011c6f6bc8fe0060c59cb65e1cfa6c1d82290f2541`，清单为 `cd7807138ceb462f23bb9595958ce48d821f4e9d69f15e660dda598f8f1df880`。2026-11-19 逐一复核了 1,001 个 ZIP 对象和 27 个 Git 源码项。当前分支已有 6 个源码项与历史清单不同，校验时使用下面固定的旧提交：
+
+```powershell
+Set-Location C:/Code/Cirrus-amg
+$frozen = '448284e22a54a506b68d2d90c37b67eea091e1c0'
+$zip = 'D:/CirrusExperiments/cirrus-amg/handoff/twisted_reproduction_20260910.zip'
+git switch --detach $frozen
+python scripts/twisted_reproduction_bundle.py verify --bundle $zip
+python scripts/twisted_reproduction_bundle.py restore --bundle $zip
+python scripts/twisted_reproduction_bundle.py verify-local
+git switch feature/simple-octree-pipe
+```
+
+逐条检查退出码。旧版校验器读取检出的文件字节。按下文第 4 节使用三个历史绝对路径，在新机器以 `core.autocrlf=false` 克隆。遇到换行不匹配时核对检出文件，恢复器会拒绝覆盖已有但不同的文件。ZIP 含几何、材料和参考构建，以及速度初值来源检查需要的历史场和记录。复现时生成的新结果另外存放。Git 单独克隆后仍需此输入包。历史 64 运行的部分外部启动凭证未纳入包，因此数值重跑应生成新凭证，不能要求旧启动清单逐条复核通过。
+
+### 从头求解与比较
+
+用下文第 5 节的 Windows/CUDA 构建与最小算例检查准备 `$native`，保留其构建清单。设置 `SIMPLE_NATIVE_HOST_TILES_FILE=1`、`SIMPLE_ANDERSON_FILE_HISTORY=1`、`OPENBLAS_NUM_THREADS=1`、`MKL_NUM_THREADS=1`，并给运行器传 `--threads 2`（同时设置 `OMP_WAIT_POLICY=PASSIVE`）。每次运行的输出目录必须尚不存在。
+
+- **64 档**。用 `run_twisted_solver.py` 和 `validation/twisted/reproduction/native64.json` 求解。在定常摘要中读取 Cirrus 的 `final_output`，做状态检查。用 `prepare_aphros_initial_velocity.py --kind native --native-steady-iteration` 将新定常速度转换为初值，`--source` 为该 `final_output`，`--target-case` 和 `--geometry-run` 都用恢复出的 `runs/aphros64_initial_native_v1`，`--output` 取新的初值目录。用 `run_aphros_seeded_reference.py`，`--reference-case` 仍用上述 64 参考目录，`--executable` 用恢复出的 `builds/aphros_initial_v1/twisted_extended.exe`，`--seed` 用新初值目录中的 `velocity.bin`，指定 `--steps 128 --factor-cache-entries 3` 和新输出目录。Aphros 完成并满足定常条件后，用 `compare_twisted_steady_aphros.py --adaptive --aphros-diffusion-iterations 8` 比较两个新结果。门槛及已观测误差见[直接比较记录](STEADY_APHROS_COMPARISON.md)。
+- **128 档**。用 `native128.json` 重跑 Cirrus，并用实际最后一轮做状态检查。Aphros 按第 6 节以保留的参考配置、初值和几何从零时刻推进。旧运行止于第 5 步，新的完整参考应根据实际收敛和守恒重新验收。
+- **256 档**。使用 Git 中的 `native256.json`。与 2026-09-25 实际启动的 `native256_pagefile_v2.json` 逐项比较，唯一差异是输出目录。旧运行在 64 GiB Windows 页面文件和上述环境变量下直接启动，约 18 小时 43 分钟后退出码 0。保留的 `builds/reproduction_native_v2/simple_channel.exe` 的 SHA-256 为 `cc5c46df314fd9564ec4aa16deec0f1dd053472b7e4250ca19bbbfc2f97e29b8`。构建清单所列 95 份源码与 Git 提交 `71f1586` 比较时，统一换行后全部匹配。若从源构建，用兼容的 VS 2022、CUDA 和 xmake。该次试跑的输出文件逻辑大小约 156 GB，重跑应留约 200 GiB 空间。用第 7 节的运行器生成新的输入与退出证明，再检查 `steady_converged`、连续性、动量、速度映射缺陷和完整固定点残差。历史动量、映射缺陷和固定点残差均小于 `1e-8`。该结果是 Cirrus 定常试跑，未建立 Aphros 256 对齐。
+
+重跑以本次新输出的验收门槛为准，历史外迭代次数和逐位场值会受构建及计算环境影响。可按第 8 节从最终输出重新生成 ParaView 文件；对比渲染脚本里的目录和末轮名称应按实际重跑结果调整。封存检查验证了输入和命令入口，未启动整套求解。
+
+## 2026-09-22 迁移说明（历史）
+
 迁移状态更新：2026-09-22；数值结论沿用 2026-09-10 的检查点。分支：`feature/simple-octree-pipe`。
 新电脑先读 [中文交接文档](../../HANDOFF_CN.md)，再使用本文的详细命令。本文整理期间没有启动求解，总体精度目标仍未完成。
 旧 256 进程已在用户授权清理时结束；旧实验目录已大量删除，仅保留两组关键 64 结果，其他关键输入须从包中恢复。
